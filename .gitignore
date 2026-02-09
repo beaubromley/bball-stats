@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# React Native / Expo
+mobile/.expo/
+mobile/android/
+mobile/ios/
+*.apk
+*.ipa
+
+# Garmin Connect IQ
+garmin/bin/
+garmin/developer_key
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Turbo
+.turbo/
+
+# Local database
+*.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Python venv (if needed)
+.venv/
+
+# Claude session files
+.claude/

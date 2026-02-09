@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Bball Stats</title>
+    <script>
+      // SPA redirect for GitHub Pages
+      // Converts /players/abc123 → /?p=/players/abc123
+      // Then index.html picks up the route and navigates client-side
+      var pathSegmentsToKeep = 1; // Set to 0 for user.github.io, 1 for project pages
+      var l = window.location;
+      l.replace(
+        l.protocol +
+          "//" +
+          l.hostname +
+          (l.port ? ":" + l.port : "") +
+          l.pathname
+            .split("/")
+            .slice(0, 1 + pathSegmentsToKeep)
+            .join("/") +
+          "/?p=" +
+          encodeURIComponent(
+            l.pathname
+              .slice(1)
+              .split("/")
+              .slice(pathSegmentsToKeep)
+              .join("/") +
+              (l.search || "") +
+              (l.hash || "")
+          )
+      );
+    </script>
+  </head>
+  <body></body>
+</html>
