@@ -57,6 +57,12 @@ export default function RootLayout({
                 Games
               </Link>
               <Link
+                href="/stats"
+                className="hover:text-white transition-colors"
+              >
+                Stats
+              </Link>
+              <Link
                 href="/record"
                 className="hover:text-white transition-colors"
               >

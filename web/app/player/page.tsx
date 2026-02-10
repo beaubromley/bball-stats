@@ -2,6 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
 const API_BASE = "/api";
 
@@ -16,6 +17,10 @@ interface PlayerStats {
   ppg: number;
   ones_made: number;
   twos_made: number;
+  assists: number;
+  steals: number;
+  blocks: number;
+  fantasy_points: number;
 }
 
 interface RecentGame {
@@ -23,6 +28,17 @@ interface RecentGame {
   start_time: string;
   result: string;
   points_scored: number;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm">
+      <p className="text-gray-300">{label}</p>
+      <p className="text-blue-400 font-medium">{payload[0].value} pts</p>
+    </div>
+  );
 }
 
 function PlayerDetailInner() {
@@ -61,6 +77,14 @@ function PlayerDetailInner() {
     );
   }
 
+  const chartData = games
+    .slice()
+    .reverse()
+    .map((g) => ({
+      date: new Date(g.start_time).toLocaleDateString(),
+      pts: Number(g.points_scored),
+    }));
+
   return (
     <div>
       <h1 className="text-3xl font-bold mb-6">{stats.name}</h1>
@@ -71,6 +95,10 @@ function PlayerDetailInner() {
           { label: "PPG", value: String(stats.ppg) },
           { label: "Record", value: `${stats.wins}-${stats.losses}` },
           { label: "Total Pts", value: String(stats.total_points) },
+          { label: "AST", value: String(stats.assists) },
+          { label: "STL", value: String(stats.steals) },
+          { label: "BLK", value: String(stats.blocks) },
+          { label: "Fantasy Pts", value: String(stats.fantasy_points) },
         ].map(({ label, value }) => (
           <div
             key={label}
@@ -99,6 +127,19 @@ function PlayerDetailInner() {
           </div>
         </div>
       </div>
+
+      {chartData.length > 1 && (
+        <div className="border border-gray-800 rounded-lg p-4 mb-8">
+          <h2 className="text-sm text-gray-400 mb-3">Scoring Trend</h2>
+          <ResponsiveContainer width="100%" height={140}>
+            <AreaChart data={chartData}>
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#6B7280" }} tickLine={false} axisLine={false} />
+              <Tooltip content={<ChartTooltip />} />
+              <Area type="monotone" dataKey="pts" stroke="#3B82F6" fill="rgba(59,130,246,0.2)" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       <h2 className="text-xl font-bold mb-4">Recent Games</h2>
       {games.length === 0 ? (

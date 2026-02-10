@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseTranscript, type ParsedCommand } from "@/lib/parser";
+import BoxScore from "@/app/components/BoxScore";
 
 const API_BASE = "/api";
 
@@ -908,6 +909,11 @@ export default function RecordPage() {
           <div className="text-2xl font-bold text-yellow-400">
             Team {game.winningTeam} wins!
           </div>
+          {game.gameId && (
+            <div className="my-4 text-left">
+              <BoxScore gameId={game.gameId} />
+            </div>
+          )}
           {saved !== "saved" && (
             <button
               onClick={saveGame}

@@ -2,6 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
+import BoxScore from "@/app/components/BoxScore";
 
 const API_BASE = "/api";
 
@@ -90,6 +91,13 @@ function GameDetailInner() {
           </ul>
         </div>
       </div>
+
+      {game.status === "finished" && id && (
+        <div className="mb-8">
+          <h2 className="text-xl font-bold mb-4">Box Score</h2>
+          <BoxScore gameId={id} />
+        </div>
+      )}
 
       <h2 className="text-xl font-bold mb-4">Play-by-Play</h2>
       {events.length === 0 ? (

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { groupBySeason } from "@/lib/seasons";
 
 const API_BASE = "/api";
 
@@ -63,123 +64,132 @@ export default function GamesPage() {
           <p className="text-lg">No games yet.</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {games.map((game) => (
-            <div
-              key={game.id}
-              className="border border-gray-800 rounded-lg p-4 hover:border-gray-600 transition-colors"
-            >
-              <Link
-                href={`/game?id=${game.id}`}
-                className="block"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-8">
-                    <div className="text-center">
-                      <div className="text-xs text-gray-500 mb-1">Team A</div>
-                      <div className="text-2xl font-bold tabular-nums">
-                        {game.team_a_score}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {game.team_a_players.join(", ")}
-                      </div>
-                    </div>
+        <div className="space-y-8">
+          {groupBySeason(games).map(({ season, games: seasonGames }) => (
+            <div key={season.key}>
+              <h2 className="text-lg font-bold text-gray-300 mb-3 border-b border-gray-800 pb-2">
+                {season.label}
+              </h2>
+              <div className="space-y-4">
+                {seasonGames.map((game) => (
+                  <div
+                    key={game.id}
+                    className="border border-gray-800 rounded-lg p-4 hover:border-gray-600 transition-colors"
+                  >
+                    <Link
+                      href={`/game?id=${game.id}`}
+                      className="block"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-8">
+                          <div className="text-center">
+                            <div className="text-xs text-gray-500 mb-1">Team A</div>
+                            <div className="text-2xl font-bold tabular-nums">
+                              {game.team_a_score}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {game.team_a_players.join(", ")}
+                            </div>
+                          </div>
 
-                    <div className="text-gray-600 text-sm">vs</div>
+                          <div className="text-gray-600 text-sm">vs</div>
 
-                    <div className="text-center">
-                      <div className="text-xs text-gray-500 mb-1">Team B</div>
-                      <div className="text-2xl font-bold tabular-nums">
-                        {game.team_b_score}
+                          <div className="text-center">
+                            <div className="text-xs text-gray-500 mb-1">Team B</div>
+                            <div className="text-2xl font-bold tabular-nums">
+                              {game.team_b_score}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {game.team_b_players.join(", ")}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <div
+                            className={`text-xs font-medium ${
+                              game.status === "active"
+                                ? "text-red-400"
+                                : "text-gray-500"
+                            }`}
+                          >
+                            {game.status === "active" ? "LIVE" : "FINAL"}
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            {new Date(game.start_time).toLocaleDateString()}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {game.team_b_players.join(", ")}
+                    </Link>
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-800">
+                      {/* End Game (only for active games) */}
+                      {game.status === "active" && (
+                        <>
+                          {endingGame === game.id ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">Winner:</span>
+                              <button
+                                onClick={() => handleEndGame(game.id, "A")}
+                                className="px-3 py-1 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white"
+                              >
+                                Team A
+                              </button>
+                              <button
+                                onClick={() => handleEndGame(game.id, "B")}
+                                className="px-3 py-1 text-xs rounded bg-orange-600 hover:bg-orange-500 text-white"
+                              >
+                                Team B
+                              </button>
+                              <button
+                                onClick={() => setEndingGame(null)}
+                                className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setEndingGame(game.id)}
+                              className="px-3 py-1 text-xs rounded border border-yellow-700 text-yellow-500 hover:bg-yellow-900/30"
+                            >
+                              End Game
+                            </button>
+                          )}
+                        </>
+                      )}
+
+                      {/* Delete */}
+                      <div className="ml-auto">
+                        {confirmDelete === game.id ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-red-400">Delete?</span>
+                            <button
+                              onClick={() => handleDelete(game.id)}
+                              className="px-3 py-1 text-xs rounded bg-red-600 hover:bg-red-500 text-white"
+                            >
+                              Yes
+                            </button>
+                            <button
+                              onClick={() => setConfirmDelete(null)}
+                              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDelete(game.id)}
+                            className="px-3 py-1 text-xs rounded border border-red-900 text-red-500 hover:bg-red-900/30"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
-
-                  <div className="text-right">
-                    <div
-                      className={`text-xs font-medium ${
-                        game.status === "active"
-                          ? "text-red-400"
-                          : "text-gray-500"
-                      }`}
-                    >
-                      {game.status === "active" ? "LIVE" : "FINAL"}
-                    </div>
-                    <div className="text-xs text-gray-600 mt-1">
-                      {new Date(game.start_time).toLocaleDateString()}
-                    </div>
-                  </div>
-                </div>
-              </Link>
-
-              {/* Action buttons */}
-              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-800">
-                {/* End Game (only for active games) */}
-                {game.status === "active" && (
-                  <>
-                    {endingGame === game.id ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400">Winner:</span>
-                        <button
-                          onClick={() => handleEndGame(game.id, "A")}
-                          className="px-3 py-1 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white"
-                        >
-                          Team A
-                        </button>
-                        <button
-                          onClick={() => handleEndGame(game.id, "B")}
-                          className="px-3 py-1 text-xs rounded bg-orange-600 hover:bg-orange-500 text-white"
-                        >
-                          Team B
-                        </button>
-                        <button
-                          onClick={() => setEndingGame(null)}
-                          className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setEndingGame(game.id)}
-                        className="px-3 py-1 text-xs rounded border border-yellow-700 text-yellow-500 hover:bg-yellow-900/30"
-                      >
-                        End Game
-                      </button>
-                    )}
-                  </>
-                )}
-
-                {/* Delete */}
-                <div className="ml-auto">
-                  {confirmDelete === game.id ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-red-400">Delete?</span>
-                      <button
-                        onClick={() => handleDelete(game.id)}
-                        className="px-3 py-1 text-xs rounded bg-red-600 hover:bg-red-500 text-white"
-                      >
-                        Yes
-                      </button>
-                      <button
-                        onClick={() => setConfirmDelete(null)}
-                        className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300"
-                      >
-                        No
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setConfirmDelete(game.id)}
-                      className="px-3 py-1 text-xs rounded border border-red-900 text-red-500 hover:bg-red-900/30"
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
+                ))}
               </div>
             </div>
           ))}

@@ -1,4 +1,5 @@
 import { getDb } from "./turso";
+import { calculateFantasyPoints } from "./fantasy";
 
 export interface PlayerStats {
   id: string;
@@ -11,8 +12,10 @@ export interface PlayerStats {
   ppg: number;
   ones_made: number;
   twos_made: number;
+  assists: number;
   steals: number;
   blocks: number;
+  fantasy_points: number;
 }
 
 export async function getLeaderboard(): Promise<PlayerStats[]> {
@@ -34,6 +37,7 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
       COALESCE(scoring.total_points, 0) as total_points,
       COALESCE(scoring.ones_made, 0) as ones_made,
       COALESCE(scoring.twos_made, 0) as twos_made,
+      COALESCE(scoring.assists, 0) as assists,
       COALESCE(scoring.steals, 0) as steals,
       COALESCE(scoring.blocks, 0) as blocks
     FROM players p
@@ -49,6 +53,7 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
         SUM(CASE WHEN event_type = 'score' AND point_value = 2
           AND id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL)
           THEN 1 ELSE 0 END) as twos_made,
+        SUM(CASE WHEN event_type = 'assist' THEN 1 ELSE 0 END) as assists,
         SUM(CASE WHEN event_type = 'steal' THEN 1 ELSE 0 END) as steals,
         SUM(CASE WHEN event_type = 'block' THEN 1 ELSE 0 END) as blocks
       FROM game_events
@@ -61,6 +66,9 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
   return result.rows.map((row) => {
     const gamesPlayed = Number(row.games_played) || 1;
     const totalPoints = Number(row.total_points);
+    const assists = Number(row.assists);
+    const steals = Number(row.steals);
+    const blocks = Number(row.blocks);
     return {
       id: row.id as string,
       name: row.name as string,
@@ -72,8 +80,10 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
       ppg: Math.round((totalPoints / gamesPlayed) * 10) / 10,
       ones_made: Number(row.ones_made),
       twos_made: Number(row.twos_made),
-      steals: Number(row.steals),
-      blocks: Number(row.blocks),
+      assists,
+      steals,
+      blocks,
+      fantasy_points: calculateFantasyPoints({ points: totalPoints, assists, steals, blocks }),
     };
   });
 }
@@ -81,6 +91,115 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
 export async function getPlayerStats(playerId: string): Promise<PlayerStats | null> {
   const leaderboard = await getLeaderboard();
   return leaderboard.find((p) => p.id === playerId) ?? null;
+}
+
+export interface BoxScorePlayer {
+  player_id: string;
+  player_name: string;
+  team: "A" | "B";
+  points: number;
+  ones_made: number;
+  twos_made: number;
+  assists: number;
+  steals: number;
+  blocks: number;
+  fantasy_points: number;
+  is_mvp: boolean;
+}
+
+export interface BoxScoreResult {
+  game_id: string;
+  status: string;
+  winning_team: string | null;
+  team_a_score: number;
+  team_b_score: number;
+  players: BoxScorePlayer[];
+  mvp: BoxScorePlayer | null;
+}
+
+export async function getBoxScore(gameId: string): Promise<BoxScoreResult | null> {
+  const db = getDb();
+
+  const gameResult = await db.execute({
+    sql: "SELECT id, status, winning_team FROM games WHERE id = ?",
+    args: [gameId],
+  });
+  if (gameResult.rows.length === 0) return null;
+  const game = gameResult.rows[0];
+
+  const result = await db.execute({
+    sql: `
+      SELECT
+        r.player_id,
+        p.name as player_name,
+        r.team,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'score' THEN ge.point_value ELSE 0 END), 0) as points,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 1
+          AND ge.id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL AND game_id = ?)
+          THEN 1 ELSE 0 END), 0) as ones_made,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 2
+          AND ge.id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL AND game_id = ?)
+          THEN 1 ELSE 0 END), 0) as twos_made,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0) as assists,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'steal' THEN 1 ELSE 0 END), 0) as steals,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'block' THEN 1 ELSE 0 END), 0) as blocks
+      FROM rosters r
+      JOIN players p ON r.player_id = p.id
+      LEFT JOIN game_events ge ON ge.game_id = r.game_id AND ge.player_id = r.player_id
+      WHERE r.game_id = ?
+      GROUP BY r.player_id, p.name, r.team
+      ORDER BY r.team, points DESC
+    `,
+    args: [gameId, gameId, gameId],
+  });
+
+  const players: BoxScorePlayer[] = result.rows.map((row) => {
+    const points = Number(row.points);
+    const assists = Number(row.assists);
+    const steals = Number(row.steals);
+    const blocks = Number(row.blocks);
+    return {
+      player_id: row.player_id as string,
+      player_name: row.player_name as string,
+      team: row.team as "A" | "B",
+      points,
+      ones_made: Number(row.ones_made),
+      twos_made: Number(row.twos_made),
+      assists,
+      steals,
+      blocks,
+      fantasy_points: calculateFantasyPoints({ points, assists, steals, blocks }),
+      is_mvp: false,
+    };
+  });
+
+  const teamAScore = players.filter((p) => p.team === "A").reduce((s, p) => s + p.points, 0);
+  const teamBScore = players.filter((p) => p.team === "B").reduce((s, p) => s + p.points, 0);
+
+  // MVP: highest fantasy points on the winning team
+  let mvp: BoxScorePlayer | null = null;
+  const winningTeam = game.winning_team as string | null;
+  if (winningTeam) {
+    const winningPlayers = players.filter((p) => p.team === winningTeam);
+    mvp = winningPlayers.reduce<BoxScorePlayer | null>(
+      (best, p) => (p.fantasy_points > (best?.fantasy_points ?? -1) ? p : best),
+      null
+    );
+    if (mvp) {
+      const idx = players.findIndex((p) => p.player_id === mvp!.player_id);
+      if (idx >= 0) players[idx].is_mvp = true;
+    }
+  }
+
+  return {
+    game_id: gameId,
+    status: game.status as string,
+    winning_team: winningTeam,
+    team_a_score: teamAScore,
+    team_b_score: teamBScore,
+    players,
+    mvp,
+  };
 }
 
 export async function getGameHistory(limit = 20) {
