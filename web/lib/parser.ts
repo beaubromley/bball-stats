@@ -20,8 +20,6 @@ export interface ParsedCommand {
   confidence: number;
 }
 
-const HERO = "Beau";
-
 // Speech recognition mishears words — map common variants to what we mean
 // Add entries here as you discover new mishearings during games
 const ALIASES: Record<string, string> = {
@@ -221,22 +219,8 @@ export function parseTranscript(
     };
   }
 
-  // "assist to [name]" without naming assister
-  const assistShortMatch = text.match(/assists?\s+to\s+(\w+)/);
-  if (assistShortMatch) {
-    const scorer = resolvePlayer(assistShortMatch[1], knownPlayers);
-    return {
-      ...result,
-      type: "score",
-      assistBy: HERO,
-      playerName: scorer,
-      points: detectPoints(text),
-      confidence: 0.85,
-    };
-  }
-
-  // --- "[name] assist [name]" without "to" ---
-  const assistNoTo = text.match(/(\w+)\s+assists?\s+(?!to\s)(\w+)/);
+  // --- "[name] assist to [name]" or "[name] assist [name]" ---
+  const assistNoTo = text.match(/(\w+)\s+assists?\s+(?:to\s+)?(\w+)/);
   if (assistNoTo && !SCORING_WORDS.has(assistNoTo[1]) && !SCORING_WORDS.has(assistNoTo[2])) {
     const assister = resolvePlayer(assistNoTo[1], knownPlayers);
     const scorer = resolvePlayer(assistNoTo[2], knownPlayers);
@@ -244,20 +228,6 @@ export function parseTranscript(
       ...result,
       type: "score",
       assistBy: assister,
-      playerName: scorer,
-      points: detectPoints(text),
-      confidence: 0.8,
-    };
-  }
-
-  // "assist [name]" without "to" and without a scoring word (standalone assist)
-  const assistShortNoTo = text.match(/\bassists?\s+(?!to\s)(\w+)/);
-  if (assistShortNoTo && !SCORING_WORDS.has(assistShortNoTo[1]) && !(TWO_RE.test(text) || ONE_RE.test(text))) {
-    const scorer = resolvePlayer(assistShortNoTo[1], knownPlayers);
-    return {
-      ...result,
-      type: "score",
-      assistBy: HERO,
       playerName: scorer,
       points: detectPoints(text),
       confidence: 0.8,
@@ -278,21 +248,12 @@ export function parseTranscript(
     };
   }
 
-  // "steal and [shot]" without naming stealer
-  if (/\bsteals?\s+and\s+/.test(text) && (TWO_RE.test(text) || ONE_RE.test(text))) {
-    return {
-      ...result,
-      type: "score",
-      stealBy: HERO,
-      playerName: HERO,
-      points: detectPoints(text),
-      confidence: 0.85,
-    };
-  }
+  // "steal and [shot]" without naming stealer — require a name
+  // (handled by compound patterns above when a name is present)
 
   // --- Standalone steal ---
   const stealMatch = text.match(/(\w+)\s+steals?(?:\s|$)/);
-  if (stealMatch) {
+  if (stealMatch && !SCORING_WORDS.has(stealMatch[1])) {
     return {
       ...result,
       type: "steal",
@@ -300,22 +261,16 @@ export function parseTranscript(
       confidence: 0.8,
     };
   }
-  if (/\bsteals?\b/.test(text)) {
-    return { ...result, type: "steal", playerName: HERO, confidence: 0.8 };
-  }
 
   // --- Standalone block ---
   const blockMatch = text.match(/(\w+)\s+blocks?(?:\s|$)/);
-  if (blockMatch) {
+  if (blockMatch && !SCORING_WORDS.has(blockMatch[1])) {
     return {
       ...result,
       type: "block",
       playerName: resolvePlayer(blockMatch[1], knownPlayers),
       confidence: 0.8,
     };
-  }
-  if (/\bblocks?\b/.test(text)) {
-    return { ...result, type: "block", playerName: HERO, confidence: 0.8 };
   }
 
   // --- Simple scoring ---
@@ -333,7 +288,6 @@ export function parseTranscript(
     if (assistInScore && !SCORING_WORDS.has(assistInScore[1])) {
       assistBy = resolvePlayer(assistInScore[1], knownPlayers);
       playerName = findPlayerName(text, knownPlayers, [assistBy]);
-      if (!playerName) playerName = HERO;
     } else {
       playerName = findPlayerName(text, knownPlayers);
     }
