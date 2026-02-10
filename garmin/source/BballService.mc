@@ -3,9 +3,8 @@ using Toybox.System;
 using Toybox.Lang;
 
 module BballService {
-    // API server address — the phone proxies HTTP through Garmin Connect app
-    // Change this to match your LAN IP when on a different network
-    const API_BASE = "http://192.168.0.133:3001";
+    // API server address — phone proxies HTTPS through Garmin Connect app
+    const API_BASE = "https://bball-stats-vert.vercel.app/api";
 
     function fetchGameState(callback as Lang.Method) as Void {
         var url = API_BASE + "/games/active";
