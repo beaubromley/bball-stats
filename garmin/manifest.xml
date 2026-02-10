@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
-    <iq:application entry="BballApp" id="a3421b42-bba1-4242-abcd-bba115a50001" launcherIcon="@Drawables.LauncherIcon" minSdkVersion="3.2.0" name="@Strings.AppName" type="watch-app" version="1.0.0">
+    <iq:application entry="BballApp" id="a3421b42-bba1-4242-abcd-bba115a50001" launcherIcon="@Drawables.LauncherIcon" minSdkVersion="3.2.0" name="@Strings.AppName" type="watch-app" version="1.1.0">
         <iq:products>
             <iq:product id="vivoactive4"/>
         </iq:products>

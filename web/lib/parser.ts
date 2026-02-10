@@ -5,6 +5,7 @@ export type CommandType =
   | "end_game"
   | "set_teams"
   | "steal"
+  | "block"
   | "unknown";
 
 export interface ParsedCommand {
@@ -35,6 +36,12 @@ const ALIASES: Record<string, string> = {
   steels: "steals",
   "a cyst": "assist",
   "a sister": "assist",
+  // Blocks
+  blok: "block",
+  blocked: "block",
+  blocks: "block",
+  bloc: "block",
+  lock: "block",
   buckets: "bucket",
   buggy: "bucket",
   "lay up": "layup",
@@ -61,7 +68,7 @@ const SCORING_WORDS = new Set([
   "with", "the", "a", "an", "and", "got", "mid", "range", "floater",
   "one", "hook", "shot", "put", "back", "tip", "in", "finger", "roll",
   "bank", "off", "glass", "long", "pull", "up", "bomb", "outside",
-  "steal", "steals", "assist", "assists", "to", "his", "her",
+  "steal", "steals", "assist", "assists", "block", "blocks", "to", "his", "her",
 ]);
 
 function normalize(text: string): string {
@@ -265,6 +272,20 @@ export function parseTranscript(
   }
   if (/\bsteals?\b/.test(text)) {
     return { ...result, type: "steal", playerName: HERO, confidence: 0.8 };
+  }
+
+  // --- Standalone block ---
+  const blockMatch = text.match(/(\w+)\s+blocks?(?:\s|$)/);
+  if (blockMatch) {
+    return {
+      ...result,
+      type: "block",
+      playerName: resolvePlayer(blockMatch[1], knownPlayers),
+      confidence: 0.8,
+    };
+  }
+  if (/\bblocks?\b/.test(text)) {
+    return { ...result, type: "block", playerName: HERO, confidence: 0.8 };
   }
 
   // --- Simple scoring ---

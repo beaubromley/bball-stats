@@ -10,21 +10,23 @@ type PlayerAssignment = "A" | "B" | null;
 
 interface KnownPlayer {
   id: string;
-  name: string;
+  name: string;        // displayName (e.g., "Beau B.")
+  voiceName: string;   // what voice recognition matches (e.g., "beau")
+  fullName?: string;   // original full name from GroupMe
 }
 
-// Hardcoded player list — eventually fetched from GroupMe active members
+// Fallback player list if GroupMe API is unavailable
 const DEFAULT_PLAYERS: KnownPlayer[] = [
   "Beau", "Joe", "Tyler", "Addison", "Brandon", "Brent", "Gage",
   "AJ", "Austin", "Jackson", "James", "Jacob", "Garett",
   "Jon", "Matt", "Ty", "JC",
-].map((name) => ({ id: name, name }));
+].map((name) => ({ id: name, name, voiceName: name.toLowerCase() }));
 
 interface ScoringEvent {
   id: number;
   playerName: string;
   points: number;
-  type: "score" | "correction" | "steal";
+  type: "score" | "correction" | "steal" | "block";
   transcript: string;
   time: number;
   assistBy?: string;
@@ -86,10 +88,38 @@ export default function RecordPage() {
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
 
-  // Known players from API
+  // Known players from GroupMe API (falls back to hardcoded list)
   const [knownPlayers, setKnownPlayers] = useState<KnownPlayer[]>(DEFAULT_PLAYERS);
+  const [playersSource, setPlayersSource] = useState<"loading" | "groupme" | "fallback">("loading");
   // Player assignments during setup: name -> "A" | "B" | null
   const [assignments, setAssignments] = useState<Record<string, PlayerAssignment>>({});
+
+  // Fetch players from GroupMe on mount
+  useEffect(() => {
+    fetch(`${API_BASE}/groupme/members`)
+      .then((res) => {
+        if (!res.ok) throw new Error("GroupMe API error");
+        return res.json();
+      })
+      .then((players: { fullName: string; displayName: string; voiceName: string }[]) => {
+        if (players.length > 0) {
+          setKnownPlayers(
+            players.map((p) => ({
+              id: p.displayName,
+              name: p.displayName,
+              voiceName: p.voiceName,
+              fullName: p.fullName,
+            }))
+          );
+          setPlayersSource("groupme");
+        } else {
+          setPlayersSource("fallback");
+        }
+      })
+      .catch(() => {
+        setPlayersSource("fallback");
+      });
+  }, []);
   // For adding new player names not in the list
   const [newPlayerName, setNewPlayerName] = useState("");
 
@@ -268,6 +298,19 @@ export default function RecordPage() {
     }).catch(() => {});
   }
 
+  function postBlockToApi(gameId: string, playerName: string, raw: string) {
+    fetch(`${API_BASE}/games/${gameId}/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        player_name: playerName,
+        event_type: "block",
+        point_value: 0,
+        raw_transcript: raw,
+      }),
+    }).catch(() => {});
+  }
+
   // Alert state for unrecognized commands
   const [retryAlert, setRetryAlert] = useState<string | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -295,14 +338,14 @@ export default function RecordPage() {
           newAssignments[name] = "A";
           setKnownPlayers((kp) => {
             if (kp.some((p) => p.name.toLowerCase() === name.toLowerCase())) return kp;
-            return [...kp, { id: name, name }];
+            return [...kp, { id: name, name, voiceName: name.toLowerCase() }];
           });
         }
         for (const name of cmd.teams.b) {
           newAssignments[name] = "B";
           setKnownPlayers((kp) => {
             if (kp.some((p) => p.name.toLowerCase() === name.toLowerCase())) return kp;
-            return [...kp, { id: name, name }];
+            return [...kp, { id: name, name, voiceName: name.toLowerCase() }];
           });
         }
         setAssignments(newAssignments);
@@ -312,11 +355,30 @@ export default function RecordPage() {
 
     if (currentGame.status !== "active") return;
 
-    const allPlayers = [...currentGame.teamA, ...currentGame.teamB];
-    const cmd = parseTranscript(text, allPlayers);
+    // Build voice-to-display mapping for the parser
+    const allDisplayNames = [...currentGame.teamA, ...currentGame.teamB];
+    const voiceToDisplay = new Map<string, string>();
+    for (const displayName of allDisplayNames) {
+      const player = knownPlayers.find((p) => p.name === displayName);
+      const voice = player?.voiceName || displayName.toLowerCase();
+      voiceToDisplay.set(voice, displayName);
+    }
+    const voiceNames = Array.from(voiceToDisplay.keys());
+    const cmd = parseTranscript(text, voiceNames);
 
-    // Reject score/steal without a recognized player name
-    if ((cmd.type === "score" || cmd.type === "steal") && !cmd.playerName) {
+    // Map voice names back to display names
+    if (cmd.playerName) {
+      cmd.playerName = voiceToDisplay.get(cmd.playerName.toLowerCase()) || cmd.playerName;
+    }
+    if (cmd.assistBy) {
+      cmd.assistBy = voiceToDisplay.get(cmd.assistBy.toLowerCase()) || cmd.assistBy;
+    }
+    if (cmd.stealBy) {
+      cmd.stealBy = voiceToDisplay.get(cmd.stealBy.toLowerCase()) || cmd.stealBy;
+    }
+
+    // Reject score/steal/block without a recognized player name
+    if ((cmd.type === "score" || cmd.type === "steal" || cmd.type === "block") && !cmd.playerName) {
       showRetryAlert(`Didn't catch a name — say again`);
       return;
     }
@@ -342,6 +404,8 @@ export default function RecordPage() {
         }
       } else if (cmd.type === "steal" && cmd.playerName) {
         postStealToApi(currentGame.gameId, cmd.playerName, text);
+      } else if (cmd.type === "block" && cmd.playerName) {
+        postBlockToApi(currentGame.gameId, cmd.playerName, text);
       }
     }
 
@@ -352,6 +416,8 @@ export default function RecordPage() {
           return addScore(prev, cmd, text);
         case "steal":
           return addSteal(prev, cmd, text);
+        case "block":
+          return addBlock(prev, cmd, text);
         case "correction":
           return undoLast(prev, text);
         case "end_game":
@@ -412,6 +478,25 @@ export default function RecordPage() {
     return { ...state, events };
   }
 
+  function addBlock(
+    state: GameState,
+    cmd: ParsedCommand,
+    raw: string
+  ): GameState {
+    if (!cmd.playerName) return state;
+    const evt: ScoringEvent = {
+      id: nextId.current++,
+      playerName: cmd.playerName,
+      points: 0,
+      type: "block",
+      transcript: raw,
+      time: Date.now(),
+    };
+    const events = [...state.events, evt];
+
+    return { ...state, events };
+  }
+
   function undoLast(state: GameState, raw: string): GameState {
     const lastScore = [...state.events]
       .reverse()
@@ -463,7 +548,7 @@ export default function RecordPage() {
       setError("Player already in list");
       return;
     }
-    setKnownPlayers((prev) => [...prev, { id: name, name }]);
+    setKnownPlayers((prev) => [...prev, { id: name, name, voiceName: name.toLowerCase() }]);
     setAssignments((prev) => ({ ...prev, [name]: "A" }));
     setNewPlayerName("");
     setError("");
@@ -707,6 +792,12 @@ export default function RecordPage() {
             Tap to assign: <span className="text-blue-400">Team A</span> →{" "}
             <span className="text-orange-400">Team B</span> → unassigned
           </p>
+          {playersSource === "groupme" && (
+            <p className="text-xs text-green-600 text-center">Players from GroupMe (last 2 days)</p>
+          )}
+          {playersSource === "loading" && (
+            <p className="text-xs text-gray-600 text-center">Loading players from GroupMe...</p>
+          )}
 
           {/* Player grid */}
           <div className="flex flex-wrap gap-2">
@@ -946,14 +1037,18 @@ export default function RecordPage() {
                       ? "text-red-400"
                       : evt.type === "steal"
                         ? "text-yellow-400"
-                        : "text-green-400"
+                        : evt.type === "block"
+                          ? "text-purple-400"
+                          : "text-green-400"
                   }`}
                 >
                   {evt.type === "correction"
                     ? "UNDO"
                     : evt.type === "steal"
                       ? "STL"
-                      : `+${evt.points}`}
+                      : evt.type === "block"
+                        ? "BLK"
+                        : `+${evt.points}`}
                 </span>
                 <span className="text-xs text-gray-600 w-12 text-right">
                   {new Date(evt.time).toLocaleTimeString([], {

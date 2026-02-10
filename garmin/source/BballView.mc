@@ -35,7 +35,7 @@ class BballView extends WatchUi.View {
     function onShow() as Void {
         // Start polling every 5 seconds
         pollTimer = new Timer.Timer();
-        pollTimer.start(method(:onPoll), 3000, true);
+        pollTimer.start(method(:onPoll), 1000, true);
         // Immediate first fetch
         BballService.fetchGameState(method(:onDataReceived));
     }
@@ -197,7 +197,7 @@ class BballView extends WatchUi.View {
         dc.drawText(cx, h / 2 + 10, Graphics.FONT_SMALL, "No active game",
                     Graphics.TEXT_JUSTIFY_CENTER);
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, h / 2 + 40, Graphics.FONT_XTINY, "Polling...",
+        dc.drawText(cx, h / 2 + 40, Graphics.FONT_XTINY, "Polling...  v1.1",
                     Graphics.TEXT_JUSTIFY_CENTER);
         if (!lastError.equals("")) {
             dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);

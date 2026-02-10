@@ -11,6 +11,8 @@ export interface PlayerStats {
   ppg: number;
   ones_made: number;
   twos_made: number;
+  steals: number;
+  blocks: number;
 }
 
 export async function getLeaderboard(): Promise<PlayerStats[]> {
@@ -31,7 +33,9 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
       END), 0) as losses,
       COALESCE(scoring.total_points, 0) as total_points,
       COALESCE(scoring.ones_made, 0) as ones_made,
-      COALESCE(scoring.twos_made, 0) as twos_made
+      COALESCE(scoring.twos_made, 0) as twos_made,
+      COALESCE(scoring.steals, 0) as steals,
+      COALESCE(scoring.blocks, 0) as blocks
     FROM players p
     JOIN rosters r ON p.id = r.player_id
     JOIN games g ON r.game_id = g.id
@@ -44,7 +48,9 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
           THEN 1 ELSE 0 END) as ones_made,
         SUM(CASE WHEN event_type = 'score' AND point_value = 2
           AND id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL)
-          THEN 1 ELSE 0 END) as twos_made
+          THEN 1 ELSE 0 END) as twos_made,
+        SUM(CASE WHEN event_type = 'steal' THEN 1 ELSE 0 END) as steals,
+        SUM(CASE WHEN event_type = 'block' THEN 1 ELSE 0 END) as blocks
       FROM game_events
       GROUP BY player_id
     ) scoring ON p.id = scoring.player_id
@@ -66,6 +72,8 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
       ppg: Math.round((totalPoints / gamesPlayed) * 10) / 10,
       ones_made: Number(row.ones_made),
       twos_made: Number(row.twos_made),
+      steals: Number(row.steals),
+      blocks: Number(row.blocks),
     };
   });
 }

@@ -13,6 +13,8 @@ interface PlayerRow {
   win_pct: number;
   total_points: number;
   ppg: number;
+  steals: number;
+  blocks: number;
 }
 
 export default function Home() {
@@ -53,7 +55,9 @@ export default function Home() {
                 <th className="py-3 pr-4 text-right">W</th>
                 <th className="py-3 pr-4 text-right">Win%</th>
                 <th className="py-3 pr-4 text-right">PTS</th>
-                <th className="py-3 text-right">PPG</th>
+                <th className="py-3 pr-4 text-right">PPG</th>
+                <th className="py-3 pr-4 text-right">STL</th>
+                <th className="py-3 text-right">BLK</th>
               </tr>
             </thead>
             <tbody>
@@ -83,8 +87,14 @@ export default function Home() {
                   <td className="py-3 pr-4 text-right tabular-nums">
                     {player.total_points}
                   </td>
-                  <td className="py-3 text-right tabular-nums">
+                  <td className="py-3 pr-4 text-right tabular-nums">
                     {player.ppg}
+                  </td>
+                  <td className="py-3 pr-4 text-right tabular-nums">
+                    {player.steals}
+                  </td>
+                  <td className="py-3 text-right tabular-nums">
+                    {player.blocks}
                   </td>
                 </tr>
               ))}
