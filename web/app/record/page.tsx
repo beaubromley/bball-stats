@@ -64,7 +64,7 @@ const initial: GameState = {
 
 function getTeam(state: GameState, name: string): "A" | "B" | null {
   const n = name.toLowerCase();
-  if (state.teamA.some((p) => p.toLowerCase() === n) || n === "beau") return "A";
+  if (state.teamA.some((p) => p.toLowerCase() === n)) return "A";
   if (state.teamB.some((p) => p.toLowerCase() === n)) return "B";
   return null;
 }
@@ -340,30 +340,6 @@ export default function RecordPage() {
   const handleVoiceResult = useCallback((text: string) => {
     const currentGame = gameRef.current;
 
-    // During setup, handle "set_teams" voice command
-    if (currentGame.status === "setup") {
-      const cmd = parseTranscript(text, []);
-      if (cmd.type === "set_teams" && cmd.teams) {
-        const newAssignments: Record<string, PlayerAssignment> = {};
-        for (const name of cmd.teams.a) {
-          newAssignments[name] = "A";
-          setKnownPlayers((kp) => {
-            if (kp.some((p) => p.name.toLowerCase() === name.toLowerCase())) return kp;
-            return [...kp, { id: name, name, voiceName: name.toLowerCase() }];
-          });
-        }
-        for (const name of cmd.teams.b) {
-          newAssignments[name] = "B";
-          setKnownPlayers((kp) => {
-            if (kp.some((p) => p.name.toLowerCase() === name.toLowerCase())) return kp;
-            return [...kp, { id: name, name, voiceName: name.toLowerCase() }];
-          });
-        }
-        setAssignments(newAssignments);
-      }
-      return;
-    }
-
     if (currentGame.status !== "active") return;
 
     // Build voice-to-display mapping for the parser
@@ -539,13 +515,6 @@ export default function RecordPage() {
     return { ...newState, ...scores };
   }
 
-  // --- Manual score ---
-  function manualScore(playerName: string, points: number) {
-    handleVoiceResult(
-      points === 2 ? `${playerName} two` : `${playerName} bucket`
-    );
-  }
-
   function manualUndo() {
     handleVoiceResult("undo");
   }
@@ -575,7 +544,7 @@ export default function RecordPage() {
 
   // --- Game lifecycle ---
   function startGame(target: TargetScore) {
-    setAssignments({ Beau: "A" });
+    setAssignments({});
     setGame((prev) => ({ ...prev, status: "setup", targetScore: target }));
   }
 
@@ -755,7 +724,7 @@ export default function RecordPage() {
       </div>
 
       {/* Listening indicator */}
-      {(game.status === "active" || game.status === "setup") && (
+      {game.status === "active" && (
         <div className="flex items-center justify-center gap-2 py-2">
           <div
             className={`w-2.5 h-2.5 rounded-full ${listening ? "bg-green-400 animate-pulse" : "bg-gray-600"}`}
@@ -820,28 +789,7 @@ export default function RecordPage() {
 
           {/* Player grid */}
           <div className="flex flex-wrap gap-2">
-            {/* "Me" always first */}
-            <button
-              onClick={() => cyclePlayer("Beau")}
-              className={`min-w-[5rem] px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${
-                assignments["Beau"] === "A"
-                  ? "bg-blue-600/20 border-blue-500 text-blue-300"
-                  : assignments["Beau"] === "B"
-                    ? "bg-orange-600/20 border-orange-500 text-orange-300"
-                    : "bg-gray-900 border-gray-700 text-gray-400"
-              }`}
-            >
-              Me
-              {assignments["Beau"] === "A"
-                ? " (A)"
-                : assignments["Beau"] === "B"
-                  ? " (B)"
-                  : ""}
-            </button>
-
-            {knownPlayers
-              .filter((p) => p.name !== "Beau")
-              .map((player) => (
+            {knownPlayers.map((player) => (
                 <button
                   key={player.name}
                   onClick={() => cyclePlayer(player.name)}
@@ -880,20 +828,6 @@ export default function RecordPage() {
               Add
             </button>
           </div>
-
-          {/* Voice input for teams */}
-          <button
-            onClick={listening ? stopListening : startListening}
-            className={`w-full py-2.5 font-semibold rounded-lg transition-colors text-sm ${
-              listening
-                ? "bg-red-600 hover:bg-red-700 text-white"
-                : "bg-gray-800 hover:bg-gray-700 text-gray-300"
-            }`}
-          >
-            {listening
-              ? "Stop Mic"
-              : 'Use Mic (say "teams: Me, John vs Mike, Gary")'}
-          </button>
 
           {/* Team preview */}
           <div className="flex gap-4 text-sm">
@@ -947,27 +881,13 @@ export default function RecordPage() {
             {listening ? "Stop Listening" : "Start Listening"}
           </button>
 
-          {/* Manual buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={() => manualScore("Beau", 1)}
-              className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-semibold rounded-lg transition-colors"
-            >
-              +1
-            </button>
-            <button
-              onClick={() => manualScore("Beau", 2)}
-              className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-semibold rounded-lg transition-colors"
-            >
-              +2
-            </button>
-            <button
-              onClick={manualUndo}
-              className="flex-1 py-2.5 bg-red-900/50 hover:bg-red-900 text-white font-semibold rounded-lg transition-colors"
-            >
-              Undo
-            </button>
-          </div>
+          {/* Manual undo */}
+          <button
+            onClick={manualUndo}
+            className="w-full py-2.5 bg-red-900/50 hover:bg-red-900 text-white font-semibold rounded-lg transition-colors"
+          >
+            Undo
+          </button>
 
           <button
             onClick={() => {
