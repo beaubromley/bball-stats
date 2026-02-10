@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseTranscript, type ParsedCommand } from "@/lib/parser";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_BASE = "/api";
 
 type TargetScore = 11 | 15 | 21;
 type PlayerAssignment = "A" | "B" | null;
