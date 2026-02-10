@@ -78,7 +78,8 @@ function normalize(text: string): string {
     (a, b) => b[0].length - a[0].length
   );
   for (const [mishear, correct] of sorted) {
-    t = t.replaceAll(mishear, correct);
+    const escaped = mishear.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    t = t.replace(new RegExp(`\\b${escaped}\\b`, "g"), correct);
   }
   return t;
 }
