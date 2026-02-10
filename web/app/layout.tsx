@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import SpaRedirect from "./spa-redirect";
+import RegisterSW from "./register-sw";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,6 +18,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Bball Stats",
   description: "Pickup basketball stats tracker",
+  manifest: "/manifest.json",
+  themeColor: "#030712",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Bball Stats",
+  },
 };
 
 export default function RootLayout({
@@ -26,6 +34,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
+      <head>
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-950 text-gray-100 min-h-screen`}
       >
@@ -54,6 +65,7 @@ export default function RootLayout({
           </div>
         </nav>
         <SpaRedirect />
+        <RegisterSW />
         <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
       </body>
     </html>

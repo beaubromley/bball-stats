@@ -241,12 +241,15 @@ export default function RecordPage() {
   // --- Notify API when game auto-ends (target score reached or voice "game over") ---
   const prevStatusRef = useRef(game.status);
   useEffect(() => {
-    if (prevStatusRef.current !== "finished" && game.status === "finished" && game.gameId && game.winningTeam) {
-      fetch(`${API_BASE}/games/${game.gameId}/end`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ winning_team: game.winningTeam }),
-      }).catch(() => {});
+    if (prevStatusRef.current !== "finished" && game.status === "finished") {
+      stopListening();
+      if (game.gameId && game.winningTeam) {
+        fetch(`${API_BASE}/games/${game.gameId}/end`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ winning_team: game.winningTeam }),
+        }).catch(() => {});
+      }
     }
     prevStatusRef.current = game.status;
   }, [game.status, game.gameId, game.winningTeam]);
