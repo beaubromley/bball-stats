@@ -235,6 +235,35 @@ export function parseTranscript(
     };
   }
 
+  // --- "[name] assist [name]" without "to" ---
+  const assistNoTo = text.match(/(\w+)\s+assists?\s+(?!to\s)(\w+)/);
+  if (assistNoTo && !SCORING_WORDS.has(assistNoTo[1]) && !SCORING_WORDS.has(assistNoTo[2])) {
+    const assister = resolvePlayer(assistNoTo[1], knownPlayers);
+    const scorer = resolvePlayer(assistNoTo[2], knownPlayers);
+    return {
+      ...result,
+      type: "score",
+      assistBy: assister,
+      playerName: scorer,
+      points: detectPoints(text),
+      confidence: 0.8,
+    };
+  }
+
+  // "assist [name]" without "to" and without a scoring word (standalone assist)
+  const assistShortNoTo = text.match(/\bassists?\s+(?!to\s)(\w+)/);
+  if (assistShortNoTo && !SCORING_WORDS.has(assistShortNoTo[1]) && !(TWO_RE.test(text) || ONE_RE.test(text))) {
+    const scorer = resolvePlayer(assistShortNoTo[1], knownPlayers);
+    return {
+      ...result,
+      type: "score",
+      assistBy: HERO,
+      playerName: scorer,
+      points: detectPoints(text),
+      confidence: 0.8,
+    };
+  }
+
   // --- Compound: [name] steal and [shot] ---
   const stealScoreMatch = text.match(/(\w+)\s+steals?\s+and\s+/);
   if (stealScoreMatch && (TWO_RE.test(text) || ONE_RE.test(text))) {
@@ -295,12 +324,26 @@ export function parseTranscript(
 
   if (isTwo || isOne) {
     const points = isTwo ? 2 : 1;
-    const playerName = findPlayerName(text, knownPlayers);
+
+    // Check for assist mentioned alongside the score (e.g., "Tyler bucket assist Joe")
+    let assistBy: string | undefined;
+    let playerName: string | undefined;
+
+    const assistInScore = text.match(/\bassists?\s+(?:to\s+|by\s+)?(\w+)/);
+    if (assistInScore && !SCORING_WORDS.has(assistInScore[1])) {
+      assistBy = resolvePlayer(assistInScore[1], knownPlayers);
+      playerName = findPlayerName(text, knownPlayers, [assistBy]);
+      if (!playerName) playerName = HERO;
+    } else {
+      playerName = findPlayerName(text, knownPlayers);
+    }
+
     return {
       ...result,
       type: "score",
-      playerName: playerName,
+      playerName,
       points,
+      assistBy,
       confidence: playerName ? 0.85 : 0.3,
     };
   }
