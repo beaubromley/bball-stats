@@ -329,6 +329,10 @@ export default function RecordPage() {
   const gameRef = useRef<GameState>(game);
   gameRef.current = game;
 
+  // Ref so handleVoiceResult always sees current knownPlayers (not stale closure)
+  const knownPlayersRef = useRef<KnownPlayer[]>(DEFAULT_PLAYERS);
+  knownPlayersRef.current = knownPlayers;
+
   // --- Voice command handler ---
   const handleVoiceResult = useCallback((text: string) => {
     const currentGame = gameRef.current;
@@ -363,7 +367,7 @@ export default function RecordPage() {
     const allDisplayNames = [...currentGame.teamA, ...currentGame.teamB];
     const voiceToDisplay = new Map<string, string>();
     for (const displayName of allDisplayNames) {
-      const player = knownPlayers.find((p) => p.name === displayName);
+      const player = knownPlayersRef.current.find((p) => p.name === displayName);
       const voice = player?.voiceName || displayName.toLowerCase();
       voiceToDisplay.set(voice, displayName);
     }
@@ -385,6 +389,14 @@ export default function RecordPage() {
     if ((cmd.type === "score" || cmd.type === "steal" || cmd.type === "block") && !cmd.playerName) {
       showRetryAlert(`Didn't catch a name — say again`);
       return;
+    }
+
+    // Reject events where the player isn't on either team
+    if ((cmd.type === "score" || cmd.type === "steal" || cmd.type === "block") && cmd.playerName) {
+      if (!allDisplayNames.some((p) => p.toLowerCase() === cmd.playerName!.toLowerCase())) {
+        showRetryAlert(`"${cmd.playerName}" isn't in this game`);
+        return;
+      }
     }
 
     // Fire API calls ONCE, outside the state updater
