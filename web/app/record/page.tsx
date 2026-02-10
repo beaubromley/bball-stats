@@ -15,6 +15,11 @@ interface KnownPlayer {
   fullName?: string;   // original full name from GroupMe
 }
 
+// Players not in GroupMe who should always appear
+const EXTRA_PLAYERS: KnownPlayer[] = [
+  { id: "Ed G.", name: "Ed G.", voiceName: "ed", fullName: "Ed G." },
+];
+
 // Fallback player list if GroupMe API is unavailable
 const DEFAULT_PLAYERS: KnownPlayer[] = [
   "Beau", "Joe", "Tyler", "Addison", "Brandon", "Brent", "Gage",
@@ -103,14 +108,13 @@ export default function RecordPage() {
       })
       .then((players: { fullName: string; displayName: string; voiceName: string }[]) => {
         if (players.length > 0) {
-          setKnownPlayers(
-            players.map((p) => ({
-              id: p.displayName,
-              name: p.displayName,
-              voiceName: p.voiceName,
-              fullName: p.fullName,
-            }))
-          );
+          const gmPlayers = players.map((p) => ({
+            id: p.displayName,
+            name: p.displayName,
+            voiceName: p.voiceName,
+            fullName: p.fullName,
+          }));
+          setKnownPlayers([...gmPlayers, ...EXTRA_PLAYERS]);
           setPlayersSource("groupme");
         } else {
           setPlayersSource("fallback");
