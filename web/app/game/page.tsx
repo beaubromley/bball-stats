@@ -2,6 +2,16 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Legend,
+} from "recharts";
 import BoxScore from "@/app/components/BoxScore";
 
 const API_BASE = "/api";
@@ -99,6 +109,102 @@ function GameDetailInner() {
         </div>
       )}
 
+      {/* Game Flow Chart */}
+      {(() => {
+        const teamASet = new Set(game.team_a.map((n) => n.toLowerCase()));
+        let a = 0;
+        let b = 0;
+        const flowData: { play: number; "Team A": number; "Team B": number }[] = [
+          { play: 0, "Team A": 0, "Team B": 0 },
+        ];
+        let playNum = 0;
+        let leadChanges = 0;
+        let prevLeader: "A" | "B" | "tie" = "tie";
+
+        for (const event of events) {
+          if (
+            (event.event_type === "score" || event.event_type === "correction") &&
+            event.point_value !== 0
+          ) {
+            const isTeamA = teamASet.has(event.player_name.toLowerCase());
+            if (isTeamA) a += event.point_value;
+            else b += event.point_value;
+            playNum++;
+
+            const leader = a > b ? "A" : b > a ? "B" : "tie";
+            if (
+              leader !== "tie" &&
+              prevLeader !== "tie" &&
+              leader !== prevLeader
+            ) {
+              leadChanges++;
+            }
+            if (leader !== "tie") prevLeader = leader;
+
+            flowData.push({ play: playNum, "Team A": a, "Team B": b });
+          }
+        }
+
+        if (flowData.length <= 1) return null;
+
+        return (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">Game Flow</h2>
+              <span className="text-sm text-gray-500">
+                {leadChanges} Lead Change{leadChanges !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="border border-gray-800 rounded-lg p-4">
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={flowData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
+                  <XAxis
+                    dataKey="play"
+                    tick={{ fontSize: 11, fill: "#6B7280" }}
+                    axisLine={false}
+                    tickLine={false}
+                    label={{ value: "Scoring Plays", position: "insideBottom", offset: -2, fontSize: 11, fill: "#6B7280" }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "#6B7280" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#111827",
+                      border: "1px solid #374151",
+                      borderRadius: "8px",
+                      fontSize: "13px",
+                    }}
+                    labelFormatter={(v) => `Play ${v}`}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: "12px", color: "#9CA3AF" }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Team A"
+                    stroke="#3B82F6"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Team B"
+                    stroke="#F97316"
+                    strokeWidth={2}
+                    strokeDasharray="6 3"
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        );
+      })()}
+
       <h2 className="text-xl font-bold mb-4">Play-by-Play</h2>
       {events.length === 0 ? (
         <p className="text-gray-500">No events recorded.</p>
@@ -109,7 +215,23 @@ function GameDetailInner() {
             let scoreA = 0;
             let scoreB = 0;
 
-            return events.map((event) => {
+            // Build a map: for each score event index, find the assist that follows it
+            const assistForScore = new Map<number, string>();
+            const consumedAssists = new Set<number>();
+            for (let i = 0; i < events.length - 1; i++) {
+              if (events[i].event_type === "score") {
+                const next = events[i + 1];
+                if (next.event_type === "assist") {
+                  assistForScore.set(i, next.player_name);
+                  consumedAssists.add(i + 1);
+                }
+              }
+            }
+
+            return events.map((event, idx) => {
+              // Skip assist events that are merged into a score line
+              if (consumedAssists.has(idx)) return null;
+
               const isCorrection = event.event_type === "correction";
               const isScore = event.event_type === "score" || isCorrection;
 
@@ -121,6 +243,8 @@ function GameDetailInner() {
                   scoreB += event.point_value;
                 }
               }
+
+              const assist = assistForScore.get(idx);
 
               return (
                 <div
@@ -135,7 +259,14 @@ function GameDetailInner() {
                       minute: "2-digit",
                     })}
                   </span>
-                  <span className="flex-1">{event.player_name}</span>
+                  <span className="flex-1">
+                    {event.player_name}
+                    {assist && (
+                      <span className="text-blue-400 text-sm ml-2">
+                        (ast: {assist})
+                      </span>
+                    )}
+                  </span>
                   <span
                     className={`font-bold tabular-nums ${
                       isCorrection ? "text-red-400" : "text-green-400"
