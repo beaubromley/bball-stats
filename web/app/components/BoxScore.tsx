@@ -82,12 +82,12 @@ export default function BoxScore({ gameId }: { gameId: string }) {
                 {players.map((p) => (
                   <tr
                     key={p.player_id}
-                    className={`border-b border-gray-900 ${p.is_mvp ? "bg-yellow-900/20" : ""}`}
+                    className={`border-b border-gray-900 ${p.is_mvp ? "bg-yellow-50 dark:bg-yellow-900/20" : ""}`}
                   >
                     <td className="py-2 pr-3">
                       {p.player_name}
                       {p.is_mvp && (
-                        <span className="ml-2 text-xs text-yellow-400 font-bold">MVP</span>
+                        <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-400 font-bold">MVP</span>
                       )}
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">{p.points}</td>
