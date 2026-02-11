@@ -104,32 +104,54 @@ function GameDetailInner() {
         <p className="text-gray-500">No events recorded.</p>
       ) : (
         <div className="space-y-2">
-          {events.map((event) => {
-            const isCorrection = event.event_type === "correction";
-            return (
-              <div
-                key={event.id}
-                className={`flex items-center gap-4 py-2 border-b border-gray-900 ${
-                  isCorrection ? "opacity-50" : ""
-                }`}
-              >
-                <span className="text-sm text-gray-500 w-16">
-                  {new Date(event.created_at).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-                <span className="flex-1">{event.player_name}</span>
-                <span
-                  className={`font-bold tabular-nums ${
-                    isCorrection ? "text-red-400" : "text-green-400"
+          {(() => {
+            const teamASet = new Set(game.team_a.map((n) => n.toLowerCase()));
+            let scoreA = 0;
+            let scoreB = 0;
+
+            return events.map((event) => {
+              const isCorrection = event.event_type === "correction";
+              const isScore = event.event_type === "score" || isCorrection;
+
+              if (isScore && event.point_value !== 0) {
+                const isTeamA = teamASet.has(event.player_name.toLowerCase());
+                if (isTeamA) {
+                  scoreA += event.point_value;
+                } else {
+                  scoreB += event.point_value;
+                }
+              }
+
+              return (
+                <div
+                  key={event.id}
+                  className={`flex items-center gap-4 py-2 border-b border-gray-900 ${
+                    isCorrection ? "opacity-50" : ""
                   }`}
                 >
-                  {isCorrection ? "UNDO" : `+${event.point_value}`}
-                </span>
-              </div>
-            );
-          })}
+                  <span className="text-sm text-gray-500 w-16">
+                    {new Date(event.created_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  <span className="flex-1">{event.player_name}</span>
+                  <span
+                    className={`font-bold tabular-nums ${
+                      isCorrection ? "text-red-400" : "text-green-400"
+                    }`}
+                  >
+                    {isCorrection ? "UNDO" : event.event_type === "score" ? `+${event.point_value}` : event.event_type.toUpperCase()}
+                  </span>
+                  {isScore && (
+                    <span className="text-sm text-gray-400 tabular-nums w-14 text-right">
+                      {scoreA}-{scoreB}
+                    </span>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
       )}
     </div>
