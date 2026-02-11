@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/lib/turso";
 import { getActiveGameWatchData, recordEvent } from "@/lib/events";
+import { requireAuth } from "@/lib/auth";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const denied = await requireAuth(req);
+  if (denied) return denied;
   await initDb();
   const data = await getActiveGameWatchData();
 

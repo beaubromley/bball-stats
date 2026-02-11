@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initDb, getDb } from "@/lib/turso";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await initDb();
@@ -24,7 +25,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ ...game.rows[0], team_a: teamA, team_b: teamB });
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAuth(req);
+  if (denied) return denied;
   await initDb();
   const { id } = await params;
   const db = getDb();

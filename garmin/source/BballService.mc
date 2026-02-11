@@ -15,12 +15,15 @@ module BballService {
         Communications.makeWebRequest(url, null, options, callback);
     }
 
+    const API_KEY = "bball-garmin-Nhl2Rzqqjeyg5rAb";
+
     function sendUndo(callback as Lang.Method) as Void {
         var url = API_BASE + "/games/active/undo";
         var options = {
             :method => Communications.HTTP_REQUEST_METHOD_POST,
             :headers => {
-                "Content-Type" => Communications.REQUEST_CONTENT_TYPE_JSON
+                "Content-Type" => Communications.REQUEST_CONTENT_TYPE_JSON,
+                "x-api-key" => API_KEY
             },
             :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
         };

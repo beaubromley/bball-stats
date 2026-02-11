@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { groupBySeason } from "@/lib/seasons";
+import { useAuth } from "@/app/components/AuthProvider";
 
 const API_BASE = "/api";
 
@@ -18,6 +19,7 @@ interface GameRow {
 }
 
 export default function GamesPage() {
+  const { isAdmin } = useAuth();
   const [games, setGames] = useState<GameRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -122,7 +124,8 @@ export default function GamesPage() {
                       </div>
                     </Link>
 
-                    {/* Action buttons */}
+                    {/* Action buttons (admin only) */}
+                    {isAdmin && (
                     <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-800">
                       {/* End Game (only for active games) */}
                       {game.status === "active" && (
@@ -188,6 +191,7 @@ export default function GamesPage() {
                         )}
                       </div>
                     </div>
+                    )}
                   </div>
                 ))}
               </div>

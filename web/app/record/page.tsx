@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { parseTranscript, type ParsedCommand } from "@/lib/parser";
 import BoxScore from "@/app/components/BoxScore";
+import { useAuth } from "@/app/components/AuthProvider";
 
 const API_BASE = "/api";
 
@@ -83,6 +85,15 @@ function calcScores(events: ScoringEvent[], state: GameState) {
 }
 
 export default function RecordPage() {
+  const { isAdmin, loading: authLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authLoading && !isAdmin) {
+      router.replace("/login");
+    }
+  }, [authLoading, isAdmin, router]);
+
   const [game, setGame] = useState<GameState>(initial);
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -683,6 +694,10 @@ export default function RecordPage() {
     .map(([name]) => name);
 
   // --- Render ---
+  if (authLoading || !isAdmin) {
+    return <div className="text-gray-500 text-center py-16">Loading...</div>;
+  }
+
   return (
     <div className="max-w-lg mx-auto">
       {/* Scoreboard */}

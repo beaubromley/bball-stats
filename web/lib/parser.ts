@@ -26,6 +26,8 @@ const ALIASES: Record<string, string> = {
   // Names
   gauge: "gage",
   bow: "beau",
+  add: "ed",
+  john: "jon",
   // Basketball terms
   still: "steal",
   steel: "steal",
