@@ -177,11 +177,15 @@ function GameDetailInner() {
                       border: "1px solid #374151",
                       borderRadius: "8px",
                       fontSize: "13px",
+                      color: "#E5E7EB",
                     }}
+                    labelStyle={{ color: "#9CA3AF" }}
+                    itemStyle={{ color: "#E5E7EB" }}
                     labelFormatter={(v) => `Play ${v}`}
                   />
                   <Legend
-                    wrapperStyle={{ fontSize: "12px", color: "#9CA3AF" }}
+                    wrapperStyle={{ fontSize: "12px" }}
+                    formatter={(value) => <span style={{ color: "#D1D5DB" }}>{value}</span>}
                   />
                   <Line
                     type="monotone"
