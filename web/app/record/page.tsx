@@ -167,6 +167,15 @@ export default function RecordPage() {
       if (finalText) {
         setTranscript(finalText);
         setInterim("");
+        // Save raw transcript to DB before parsing (captures even failed parses)
+        const gid = gameRef.current.gameId;
+        if (gid && gameRef.current.status === "active") {
+          fetch(`${API_BASE}/games/${gid}/transcripts`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ raw_text: finalText }),
+          }).catch(() => {});
+        }
         handleVoiceResult(finalText);
       }
     };
@@ -330,6 +339,14 @@ export default function RecordPage() {
     }).catch(() => {});
   }
 
+  function postFailedTranscript(gameId: string, text: string | null) {
+    fetch(`${API_BASE}/games/${gameId}/failed-transcript`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    }).catch(() => {});
+  }
+
   // Alert state for unrecognized commands
   const [retryAlert, setRetryAlert] = useState<string | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -379,6 +396,7 @@ export default function RecordPage() {
     // Reject score/steal/block without a recognized player name
     if ((cmd.type === "score" || cmd.type === "steal" || cmd.type === "block") && !cmd.playerName) {
       showRetryAlert(`Didn't catch a name — say again`);
+      if (currentGame.gameId) postFailedTranscript(currentGame.gameId, text);
       return;
     }
 
@@ -386,6 +404,7 @@ export default function RecordPage() {
     if ((cmd.type === "score" || cmd.type === "steal" || cmd.type === "block") && cmd.playerName) {
       if (!allDisplayNames.some((p) => p.toLowerCase() === cmd.playerName!.toLowerCase())) {
         showRetryAlert(`"${cmd.playerName}" isn't in this game`);
+        if (currentGame.gameId) postFailedTranscript(currentGame.gameId, text);
         return;
       }
     }
@@ -394,6 +413,7 @@ export default function RecordPage() {
     if (currentGame.gameId) {
       if (cmd.type === "score" && cmd.playerName && cmd.points) {
         postScoreToApi(currentGame.gameId, cmd, text);
+        postFailedTranscript(currentGame.gameId, null); // clear on success
 
         // Check if this score triggers auto-end
         const isTeamA = currentGame.teamA.some(
@@ -411,8 +431,12 @@ export default function RecordPage() {
         }
       } else if (cmd.type === "steal" && cmd.playerName) {
         postStealToApi(currentGame.gameId, cmd.playerName, text);
+        postFailedTranscript(currentGame.gameId, null); // clear on success
       } else if (cmd.type === "block" && cmd.playerName) {
         postBlockToApi(currentGame.gameId, cmd.playerName, text);
+        postFailedTranscript(currentGame.gameId, null); // clear on success
+      } else if (cmd.type === "unknown") {
+        postFailedTranscript(currentGame.gameId, text);
       }
     }
 

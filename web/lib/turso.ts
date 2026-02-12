@@ -58,5 +58,19 @@ export async function initDb() {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_events_player ON game_events(player_id, event_type)`,
     `CREATE INDEX IF NOT EXISTS idx_events_game ON game_events(game_id, created_at)`,
+    `CREATE TABLE IF NOT EXISTS game_transcripts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      game_id TEXT NOT NULL,
+      raw_text TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (game_id) REFERENCES games(id)
+    )`,
   ]);
+
+  // Migration: add column for failed transcript display on watch
+  try {
+    await db.execute("ALTER TABLE games ADD COLUMN last_failed_transcript TEXT");
+  } catch {
+    // Column already exists
+  }
 }

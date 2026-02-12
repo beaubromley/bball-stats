@@ -17,6 +17,7 @@ class BballView extends WatchUi.View {
     var teamANames as Lang.String = "";
     var teamBNames as Lang.String = "";
     var targetScore as Lang.Number = 0;
+    var failedTranscript as Lang.String = "";
 
     // Polling
     var pollTimer as Timer.Timer?;
@@ -66,6 +67,17 @@ class BballView extends WatchUi.View {
             lastEventPlayer = data["last_event_player"] as Lang.String?;
             lastEventPoints = data["last_event_points"] as Lang.Number?;
             targetScore = (data["target_score"] != null) ? (data["target_score"] as Lang.Number) : 0;
+            var ft = data["last_failed_transcript"];
+            if (ft != null) {
+                var ftStr = ft as Lang.String;
+                // Truncate to 30 chars for watch display
+                if (ftStr.length() > 30) {
+                    ftStr = ftStr.substring(0, 30) + "...";
+                }
+                failedTranscript = ftStr;
+            } else {
+                failedTranscript = "";
+            }
 
             // Build name strings from arrays
             var aN = data["team_a_names"];
@@ -146,6 +158,13 @@ class BballView extends WatchUi.View {
         if (!lastEvent.equals("")) {
             dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
             dc.drawText(cx, 120, Graphics.FONT_SMALL, lastEvent,
+                        Graphics.TEXT_JUSTIFY_CENTER);
+        }
+
+        // --- Failed transcript (shown below last event) ---
+        if (!failedTranscript.equals("")) {
+            dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, 140, Graphics.FONT_XTINY, failedTranscript,
                         Graphics.TEXT_JUSTIFY_CENTER);
         }
 

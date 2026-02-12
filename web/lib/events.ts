@@ -68,6 +68,22 @@ export async function recordEvent(
   return Number(result.lastInsertRowid);
 }
 
+export async function setFailedTranscript(gameId: string, text: string | null) {
+  const db = getDb();
+  await db.execute({
+    sql: "UPDATE games SET last_failed_transcript = ? WHERE id = ?",
+    args: [text, gameId],
+  });
+}
+
+export async function saveTranscript(gameId: string, rawText: string) {
+  const db = getDb();
+  await db.execute({
+    sql: "INSERT INTO game_transcripts (game_id, raw_text) VALUES (?, ?)",
+    args: [gameId, rawText],
+  });
+}
+
 export async function endGame(gameId: string, winningTeam: "A" | "B") {
   const db = getDb();
   await db.execute({
@@ -111,6 +127,7 @@ export async function getActiveGameWatchData() {
       last_event_points: null,
       game_status: "idle" as const,
       target_score: null,
+      last_failed_transcript: null,
     };
   }
 
@@ -180,5 +197,6 @@ export async function getActiveGameWatchData() {
     last_event_points: lastEventPoints,
     game_status: (game.status as string) === "finished" ? ("finished" as const) : ("active" as const),
     target_score: game.target_score != null ? Number(game.target_score) : null,
+    last_failed_transcript: (game.last_failed_transcript as string) || null,
   };
 }
