@@ -173,16 +173,27 @@ export default function RecordPage() {
       return;
     }
 
-    // Activate selected audio device via getUserMedia (Chrome workaround)
-    // This nudges the browser to use this device for SpeechRecognition
+    // Activate selected audio device via getUserMedia before starting recognition.
+    // On Chrome this nudges the browser to use the selected device.
+    // On iOS Safari, disabling processing + setting audioSession forces
+    // the hardware handshake with external mics (e.g. DJI Mic RX).
     try {
-      const constraints: MediaStreamConstraints = {
-        audio: selectedDeviceIdRef.current
-          ? { deviceId: { exact: selectedDeviceIdRef.current } }
-          : true,
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
       };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (selectedDeviceIdRef.current) {
+        audioConstraints.deviceId = { exact: selectedDeviceIdRef.current };
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       audioStreamRef.current = stream;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nav = navigator as any;
+      if (nav.audioSession) {
+        nav.audioSession.type = "play-and-record";
+      }
     } catch {
       // Fall back to default mic if device activation fails
     }
