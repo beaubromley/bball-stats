@@ -107,6 +107,13 @@ export default function RecordPage() {
   // Audio input device selection
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+
+  // Speech engine selection
+  const [speechEngine, setSpeechEngine] = useState<"browser" | "deepgram">("browser");
+  const deepgramWsRef = useRef<WebSocket | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const dgAccumulatorRef = useRef("");
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
 
@@ -166,7 +173,7 @@ export default function RecordPage() {
   selectedDeviceIdRef.current = selectedDeviceId;
 
   // --- Web Speech API ---
-  const startListening = useCallback(async () => {
+  const startWebSpeech = useCallback(async () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
       setError("Web Speech API not supported in this browser");
@@ -253,7 +260,7 @@ export default function RecordPage() {
     setError("");
   }, []);
 
-  const stopListening = useCallback(() => {
+  const stopWebSpeech = useCallback(() => {
     if (recognitionRef.current) {
       const ref = recognitionRef.current;
       recognitionRef.current = null;
@@ -265,6 +272,153 @@ export default function RecordPage() {
     }
     setListening(false);
   }, []);
+
+  // --- Deepgram streaming ---
+  const startDeepgram = useCallback(async () => {
+    try {
+      const tokenRes = await fetch(`${API_BASE}/deepgram/token`);
+      if (!tokenRes.ok) {
+        setError("Failed to get Deepgram token");
+        return;
+      }
+      const { token } = await tokenRes.json();
+
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      };
+      if (selectedDeviceIdRef.current) {
+        audioConstraints.deviceId = { exact: selectedDeviceIdRef.current };
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      audioStreamRef.current = stream;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nav = navigator as any;
+      if (nav.audioSession) {
+        nav.audioSession.type = "play-and-record";
+      }
+
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      audioContextRef.current = audioContext;
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+
+      const dgUrl = `wss://api.deepgram.com/v1/listen?token=${encodeURIComponent(token)}&model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`;
+      const ws = new WebSocket(dgUrl);
+      deepgramWsRef.current = ws;
+
+      ws.onopen = () => {
+        processor.onaudioprocess = (e) => {
+          if (ws.readyState !== WebSocket.OPEN) return;
+          const float32 = e.inputBuffer.getChannelData(0);
+          const int16 = new Int16Array(float32.length);
+          for (let i = 0; i < float32.length; i++) {
+            const s = Math.max(-1, Math.min(1, float32[i]));
+            int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+          }
+          ws.send(int16.buffer);
+        };
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const alt = data.channel?.alternatives?.[0];
+          if (!alt) return;
+          const text = alt.transcript || "";
+          if (!text) return;
+
+          if (data.is_final) {
+            dgAccumulatorRef.current += (dgAccumulatorRef.current ? " " : "") + text;
+            if (data.speech_final) {
+              const fullText = dgAccumulatorRef.current;
+              dgAccumulatorRef.current = "";
+              setTranscript(fullText);
+              setInterim("");
+              const gid = gameRef.current.gameId;
+              if (gid && gameRef.current.status === "active") {
+                fetch(`${API_BASE}/games/${gid}/transcripts`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ raw_text: fullText }),
+                }).catch(() => {});
+              }
+              handleVoiceResult(fullText);
+            } else {
+              setInterim(dgAccumulatorRef.current);
+            }
+          } else {
+            setInterim(
+              dgAccumulatorRef.current + (dgAccumulatorRef.current ? " " : "") + text
+            );
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      };
+
+      ws.onerror = () => {
+        setError("Deepgram connection error");
+      };
+
+      ws.onclose = () => {
+        if (deepgramWsRef.current === ws) {
+          deepgramWsRef.current = null;
+        }
+      };
+
+      setListening(true);
+      setError("");
+    } catch (err) {
+      setError(`Deepgram error: ${err instanceof Error ? err.message : "unknown"}`);
+    }
+  }, []);
+
+  const stopDeepgram = useCallback(() => {
+    if (deepgramWsRef.current) {
+      try {
+        deepgramWsRef.current.send(new Uint8Array(0));
+      } catch { /* ignore */ }
+      deepgramWsRef.current.close();
+      deepgramWsRef.current = null;
+    }
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      audioStreamRef.current = null;
+    }
+    dgAccumulatorRef.current = "";
+    setListening(false);
+  }, []);
+
+  // --- Dispatchers ---
+  const speechEngineRef = useRef(speechEngine);
+  speechEngineRef.current = speechEngine;
+
+  const startListening = useCallback(async () => {
+    if (speechEngineRef.current === "deepgram") {
+      await startDeepgram();
+    } else {
+      await startWebSpeech();
+    }
+  }, [startDeepgram, startWebSpeech]);
+
+  const stopListening = useCallback(() => {
+    stopWebSpeech();
+    stopDeepgram();
+  }, [stopWebSpeech, stopDeepgram]);
 
   // --- Wake Lock (keep screen on) ---
   useEffect(() => {
@@ -965,6 +1119,18 @@ export default function RecordPage() {
       {/* --- Active: controls --- */}
       {game.status === "active" && (
         <div className="space-y-3 py-4">
+          {/* Speech engine selector */}
+          {!listening && (
+            <select
+              value={speechEngine}
+              onChange={(e) => setSpeechEngine(e.target.value as "browser" | "deepgram")}
+              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+            >
+              <option value="browser">Browser Speech (default)</option>
+              <option value="deepgram">Deepgram</option>
+            </select>
+          )}
+
           {/* Audio device selector */}
           {audioDevices.length > 1 && !listening && (
             <select
