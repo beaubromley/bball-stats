@@ -123,21 +123,21 @@ export default function RecordPage() {
   // Player assignments during setup: name -> "A" | "B" | null
   const [assignments, setAssignments] = useState<Record<string, PlayerAssignment>>({});
 
-  // Enumerate audio input devices on mount
-  useEffect(() => {
-    async function loadDevices() {
-      try {
-        // Need a getUserMedia call first to get labeled devices
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((t) => t.stop());
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const inputs = devices.filter((d) => d.kind === "audioinput");
-        setAudioDevices(inputs);
-      } catch {
-        // No mic permission — device selector won't appear
-      }
+  // Enumerate audio input devices
+  const refreshDevices = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices.filter((d) => d.kind === "audioinput");
+      setAudioDevices(inputs);
+    } catch {
+      // No mic permission
     }
-    loadDevices();
+  }, []);
+
+  useEffect(() => {
+    refreshDevices();
   }, []);
 
   // Fetch players from GroupMe on mount
@@ -1135,19 +1135,28 @@ export default function RecordPage() {
           )}
 
           {/* Audio device selector */}
-          {audioDevices.length > 1 && !listening && (
-            <select
-              value={selectedDeviceId}
-              onChange={(e) => setSelectedDeviceId(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-blue-500"
-            >
-              <option value="">Default Microphone</option>
-              {audioDevices.map((d) => (
-                <option key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
-                </option>
-              ))}
-            </select>
+          {!listening && (
+            <div className="flex gap-2">
+              <select
+                value={selectedDeviceId}
+                onChange={(e) => setSelectedDeviceId(e.target.value)}
+                className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Default Microphone</option>
+                {audioDevices.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={refreshDevices}
+                className="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm text-gray-400 transition-colors"
+                title="Refresh device list"
+              >
+                Refresh
+              </button>
+            </div>
           )}
 
           <button
