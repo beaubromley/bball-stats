@@ -102,6 +102,11 @@ export default function RecordPage() {
   const [saved, setSaved] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+
+  // Audio input device selection
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
 
@@ -110,6 +115,23 @@ export default function RecordPage() {
   const [playersSource, setPlayersSource] = useState<"loading" | "groupme" | "fallback">("loading");
   // Player assignments during setup: name -> "A" | "B" | null
   const [assignments, setAssignments] = useState<Record<string, PlayerAssignment>>({});
+
+  // Enumerate audio input devices on mount
+  useEffect(() => {
+    async function loadDevices() {
+      try {
+        // Need a getUserMedia call first to get labeled devices
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const inputs = devices.filter((d) => d.kind === "audioinput");
+        setAudioDevices(inputs);
+      } catch {
+        // No mic permission — device selector won't appear
+      }
+    }
+    loadDevices();
+  }, []);
 
   // Fetch players from GroupMe on mount
   useEffect(() => {
@@ -139,12 +161,30 @@ export default function RecordPage() {
   // For adding new player names not in the list
   const [newPlayerName, setNewPlayerName] = useState("");
 
+  // Ref so startListening always sees current selectedDeviceId
+  const selectedDeviceIdRef = useRef(selectedDeviceId);
+  selectedDeviceIdRef.current = selectedDeviceId;
+
   // --- Web Speech API ---
-  const startListening = useCallback(() => {
+  const startListening = useCallback(async () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
       setError("Web Speech API not supported in this browser");
       return;
+    }
+
+    // Activate selected audio device via getUserMedia (Chrome workaround)
+    // This nudges the browser to use this device for SpeechRecognition
+    try {
+      const constraints: MediaStreamConstraints = {
+        audio: selectedDeviceIdRef.current
+          ? { deviceId: { exact: selectedDeviceIdRef.current } }
+          : true,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      audioStreamRef.current = stream;
+    } catch {
+      // Fall back to default mic if device activation fails
     }
 
     const recognition = new SR();
@@ -207,6 +247,10 @@ export default function RecordPage() {
       const ref = recognitionRef.current;
       recognitionRef.current = null;
       ref.stop();
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      audioStreamRef.current = null;
     }
     setListening(false);
   }, []);
@@ -910,6 +954,22 @@ export default function RecordPage() {
       {/* --- Active: controls --- */}
       {game.status === "active" && (
         <div className="space-y-3 py-4">
+          {/* Audio device selector */}
+          {audioDevices.length > 1 && !listening && (
+            <select
+              value={selectedDeviceId}
+              onChange={(e) => setSelectedDeviceId(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+            >
+              <option value="">Default Microphone</option>
+              {audioDevices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
+                </option>
+              ))}
+            </select>
+          )}
+
           <button
             onClick={listening ? stopListening : startListening}
             className={`w-full py-3 font-semibold rounded-lg transition-colors ${
