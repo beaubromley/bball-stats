@@ -306,7 +306,23 @@ export default function RecordPage() {
       const processor = audioContext.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
 
-      const dgUrl = `wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`;
+      // Build keywords from roster + basketball terms to boost recognition
+      const currentGame = gameRef.current;
+      const rosterNames = [...currentGame.teamA, ...currentGame.teamB];
+      const voiceNames = rosterNames.map((name) => {
+        const player = knownPlayersRef.current.find((p) => p.name === name);
+        return player?.voiceName || name.toLowerCase();
+      });
+      const allKeywords = [
+        ...new Set([...rosterNames, ...voiceNames]),
+        "bucket", "two", "three", "steal", "block", "assist",
+        "layup", "deep three", "undo",
+      ];
+      const keywordsParam = allKeywords
+        .map((w) => `keywords=${encodeURIComponent(w)}:2`)
+        .join("&");
+
+      const dgUrl = `wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true&${keywordsParam}`;
       const ws = new WebSocket(dgUrl, ["token", token]);
       deepgramWsRef.current = ws;
 
