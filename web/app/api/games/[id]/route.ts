@@ -32,6 +32,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
   const db = getDb();
 
+  await db.execute({ sql: "DELETE FROM game_transcripts WHERE game_id = ?", args: [id] });
   await db.execute({ sql: "DELETE FROM game_events WHERE game_id = ?", args: [id] });
   await db.execute({ sql: "DELETE FROM rosters WHERE game_id = ?", args: [id] });
   await db.execute({ sql: "DELETE FROM games WHERE id = ?", args: [id] });
