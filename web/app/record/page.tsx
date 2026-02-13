@@ -385,8 +385,14 @@ export default function RecordPage() {
       ws.onclose = (e) => {
         if (deepgramWsRef.current === ws) {
           deepgramWsRef.current = null;
-          if (e.code !== 1000) {
-            setError(`Deepgram disconnected (code ${e.code})`);
+          if (e.code !== 1000 && speechEngineRef.current === "deepgram") {
+            setError(`Deepgram reconnecting...`);
+            // Auto-reconnect after unexpected disconnect
+            setTimeout(() => {
+              if (speechEngineRef.current === "deepgram") {
+                startDeepgram();
+              }
+            }, 1500);
           }
         }
       };
