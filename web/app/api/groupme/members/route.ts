@@ -76,6 +76,19 @@ interface Player {
   voiceName: string;
 }
 
+// Override auto-generated display/voice names for specific GroupMe names.
+// Key: GroupMe name (case-insensitive match). Value: desired displayName and voiceName.
+const NAME_OVERRIDES: Record<string, { displayName: string; voiceName: string }> = {
+  "Tyler": { displayName: "Tyler E.", voiceName: "tyler" },
+};
+
+function findOverride(groupMeName: string): { displayName: string; voiceName: string } | undefined {
+  for (const [key, value] of Object.entries(NAME_OVERRIDES)) {
+    if (groupMeName.toLowerCase() === key.toLowerCase()) return value;
+  }
+  return undefined;
+}
+
 function buildPlayerList(fullNames: string[]): Player[] {
   // Count first names to detect duplicates
   const firstNameCount = new Map<string, number>();
@@ -85,6 +98,12 @@ function buildPlayerList(fullNames: string[]): Player[] {
   }
 
   return fullNames.map((fullName) => {
+    // Check for manual override first
+    const override = findOverride(fullName);
+    if (override) {
+      return { fullName, displayName: override.displayName, voiceName: override.voiceName };
+    }
+
     const parts = fullName.split(/\s+/);
     const first = parts[0];
     const last = parts.slice(1).join(" ");
