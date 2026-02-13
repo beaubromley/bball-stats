@@ -27,7 +27,8 @@ const EXTRA_PLAYERS: KnownPlayer[] = [
 const DEFAULT_PLAYERS: KnownPlayer[] = [
   "Beau", "Joe", "Tyler", "Addison", "Brandon", "Brent", "Gage",
   "AJ", "Austin", "Jackson", "James", "Jacob", "Garett",
-  "Jon", "Matt", "Ty", "JC",
+  "Jon", "Matt", "Ty", "JC", "Taylor", "Mack", "Josh",
+  "Bryson", "Ryan", "David", "Parker", "Grant", "Colton",
 ].map((name) => ({ id: name, name, voiceName: name.toLowerCase() }));
 
 interface ScoringEvent {
@@ -239,8 +240,16 @@ export default function RecordPage() {
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      const messages: Record<string, string> = {
+        network: "Network error — check your internet connection",
+        "not-allowed": "Microphone access denied — check browser permissions",
+        "audio-capture": "No microphone found — check your audio device",
+        aborted: "Speech recognition was aborted",
+        "service-not-available": "Speech service unavailable — try Deepgram instead",
+        "language-not-supported": "Language not supported",
+      };
       if (event.error !== "no-speech") {
-        setError(event.error);
+        setError(messages[event.error] || `Speech error: ${event.error}`);
       }
     };
 
@@ -278,7 +287,7 @@ export default function RecordPage() {
     try {
       const tokenRes = await fetch(`${API_BASE}/deepgram/token`);
       if (!tokenRes.ok) {
-        setError("Failed to get Deepgram token");
+        setError("Failed to get Deepgram token — check internet or server config");
         return;
       }
       const { token } = await tokenRes.json();
@@ -379,14 +388,19 @@ export default function RecordPage() {
       };
 
       ws.onerror = () => {
-        setError("Deepgram connection error — check console");
+        setError("Deepgram failed to connect — check your internet");
       };
 
       ws.onclose = (e) => {
         if (deepgramWsRef.current === ws) {
           deepgramWsRef.current = null;
+          const closeMsgs: Record<number, string> = {
+            1006: "Network dropped — reconnecting...",
+            1008: "Auth failed — try stopping and restarting",
+            1011: "Deepgram server error — reconnecting...",
+          };
           if (e.code !== 1000 && speechEngineRef.current === "deepgram") {
-            setError(`Deepgram reconnecting...`);
+            setError(closeMsgs[e.code] || `Deepgram disconnected (code ${e.code}) — reconnecting...`);
             // Auto-reconnect after unexpected disconnect
             setTimeout(() => {
               if (speechEngineRef.current === "deepgram") {
@@ -1018,7 +1032,15 @@ export default function RecordPage() {
 
       {/* Error */}
       {error && (
-        <div className="text-center text-sm text-red-400 py-1">{error}</div>
+        <div className="mx-auto max-w-sm py-2 px-4 bg-red-900/60 border border-red-500 rounded-lg flex items-center justify-between gap-2">
+          <span className="text-red-200 text-sm font-medium">{error}</span>
+          <button
+            onClick={() => setError("")}
+            className="text-red-400 hover:text-red-200 text-lg font-bold leading-none"
+          >
+            &times;
+          </button>
+        </div>
       )}
 
       {/* --- Idle: start game --- */}

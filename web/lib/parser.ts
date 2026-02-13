@@ -25,9 +25,42 @@ export interface ParsedCommand {
 const ALIASES: Record<string, string> = {
   // Names
   gauge: "gage",
+  gates: "gage",
   bow: "beau",
+  bo: "beau",
   add: "ed",
   john: "jon",
+  garrett: "garett",
+  gareth: "garett",
+  jarrett: "garett",
+  print: "brent",
+  brett: "brent",
+  boston: "austin",
+  awesome: "austin",
+  austen: "austin",
+  madison: "addison",
+  edison: "addison",
+  brendan: "brandon",
+  brenton: "brandon",
+  jaxon: "jackson",
+  tailor: "taylor",
+  tiler: "tyler",
+  "a j": "aj",
+  jay: "aj",
+  jane: "james",
+  chains: "james",
+  mac: "mack",
+  tie: "ty",
+  thai: "ty",
+  jesse: "jc",
+  jaycee: "jc",
+  don: "jon",
+  bison: "bryson",
+  brian: "ryan",
+  dave: "david",
+  darker: "parker",
+  grand: "grant",
+  golden: "colton",
   // Basketball terms
   still: "steal",
   steel: "steal",
@@ -59,14 +92,14 @@ const TWO_RE =
 
 // Words that indicate a 1-pointer (inside shot)
 const ONE_RE =
-  /\b(bucket|score[ds]?|one|1|layup|lay ?up|dunk|floater|mid[- ]?range|hook|hook ?shot|put ?back|tip ?in|finger ?roll|bank|bank ?shot|off ?the ?glass)\b/;
+  /\b(bucket|score[ds]?|one|won|1|layup|lay ?up|dunk|floater|mid[- ]?range|hook|hook ?shot|put ?back|tip ?in|finger ?roll|bank|bank ?shot|off ?the ?glass)\b/;
 
 // All scoring-related words (used to filter them out when finding unknown player names)
 const SCORING_WORDS = new Set([
   "bucket", "score", "scored", "scores", "two", "three", "pointer",
   "layup", "lay", "dunk", "deep", "downtown", "splash", "from", "for",
   "with", "the", "a", "an", "and", "got", "mid", "range", "floater",
-  "one", "hook", "shot", "put", "back", "tip", "in", "finger", "roll",
+  "one", "won", "hook", "shot", "put", "back", "tip", "in", "finger", "roll",
   "bank", "off", "glass", "long", "pull", "up", "bomb", "outside",
   "steal", "steals", "assist", "assists", "block", "blocks", "to", "his", "her",
 ]);
