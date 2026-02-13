@@ -1054,11 +1054,6 @@ export default function RecordPage() {
                   }`}
                 >
                   {player.name}
-                  {assignments[player.name] === "A"
-                    ? " (A)"
-                    : assignments[player.name] === "B"
-                      ? " (B)"
-                      : ""}
                 </button>
               ))}
           </div>
