@@ -319,7 +319,7 @@ export default function RecordPage() {
         "layup", "deep three", "undo",
       ];
       const keywordsParam = allKeywords
-        .map((w) => `keywords=${encodeURIComponent(w)}:2`)
+        .map((w) => `keywords=${encodeURIComponent(w)}:5`)
         .join("&");
 
       const dgUrl = `wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true&${keywordsParam}`;
