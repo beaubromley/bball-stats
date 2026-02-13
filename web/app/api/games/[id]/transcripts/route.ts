@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/lib/turso";
+import { initDb, getDb } from "@/lib/turso";
 import { saveTranscript } from "@/lib/events";
 import { requireAuth } from "@/lib/auth";
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAuth(req);
+  if (denied) return denied;
+  await initDb();
+  const { id } = await params;
+  const db = getDb();
+  const result = await db.execute({
+    sql: "SELECT id, raw_text, created_at FROM game_transcripts WHERE game_id = ? ORDER BY created_at ASC",
+    args: [id],
+  });
+  return NextResponse.json(result.rows);
+}
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireAuth(req);
