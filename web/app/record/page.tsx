@@ -306,8 +306,8 @@ export default function RecordPage() {
       const processor = audioContext.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
 
-      const dgUrl = `wss://api.deepgram.com/v1/listen?token=${encodeURIComponent(token)}&model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`;
-      const ws = new WebSocket(dgUrl);
+      const dgUrl = `wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`;
+      const ws = new WebSocket(dgUrl, ["token", token]);
       deepgramWsRef.current = ws;
 
       ws.onopen = () => {
@@ -363,12 +363,15 @@ export default function RecordPage() {
       };
 
       ws.onerror = () => {
-        setError("Deepgram connection error");
+        setError("Deepgram connection error — check console");
       };
 
-      ws.onclose = () => {
+      ws.onclose = (e) => {
         if (deepgramWsRef.current === ws) {
           deepgramWsRef.current = null;
+          if (e.code !== 1000) {
+            setError(`Deepgram disconnected (code ${e.code})`);
+          }
         }
       };
 
