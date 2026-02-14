@@ -299,8 +299,9 @@ export default function RecordPage() {
         setError("Failed to get Deepgram token — check internet or server config");
         return;
       }
-      const { token } = await tokenRes.json();
-      addDebugLog(`Token received (${token.length} chars, starts: ${token.slice(0, 8)}...)`);
+      const tokenData = await tokenRes.json();
+      const token = tokenData.token;
+      addDebugLog(`Token: ${tokenData.source}${tokenData.tempKeyError ? ` (${tokenData.tempKeyError})` : ""} — ${token.length} chars`);
 
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: false,

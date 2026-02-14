@@ -31,13 +31,25 @@ export async function GET(req: NextRequest) {
       );
       if (res.ok) {
         const data = await res.json();
-        return NextResponse.json({ token: data.key });
+        return NextResponse.json({ token: data.key, source: "temp-key" });
       }
-    } catch {
-      // Fall through to raw API key
+      // Log why temp key creation failed
+      const errText = await res.text().catch(() => "unknown");
+      console.error(`Deepgram temp key failed: ${res.status} ${errText}`);
+      return NextResponse.json({
+        token: apiKey,
+        source: "raw-key",
+        tempKeyError: `${res.status}: ${errText.slice(0, 200)}`,
+      });
+    } catch (err) {
+      console.error("Deepgram temp key exception:", err);
+      return NextResponse.json({
+        token: apiKey,
+        source: "raw-key",
+        tempKeyError: `exception: ${err instanceof Error ? err.message : String(err)}`,
+      });
     }
   }
 
-  // Fallback: return raw API key (works if temp key creation fails)
-  return NextResponse.json({ token: apiKey });
+  return NextResponse.json({ token: apiKey, source: "raw-key", tempKeyError: "no project ID" });
 }
