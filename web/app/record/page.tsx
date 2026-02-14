@@ -115,6 +115,7 @@ export default function RecordPage() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const dgAccumulatorRef = useRef("");
+  const dgReconnectCount = useRef(0);
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
 
@@ -331,8 +332,8 @@ export default function RecordPage() {
         .map((w) => `keywords=${encodeURIComponent(w)}:5`)
         .join("&");
 
-      const dgUrl = `wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true&${keywordsParam}`;
-      const ws = new WebSocket(dgUrl, ["token", token]);
+      const dgUrl = `wss://api.deepgram.com/v1/listen?token=${encodeURIComponent(token)}&model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true&${keywordsParam}`;
+      const ws = new WebSocket(dgUrl);
       deepgramWsRef.current = ws;
 
       ws.onopen = () => {
@@ -393,24 +394,46 @@ export default function RecordPage() {
 
       ws.onclose = (e) => {
         if (deepgramWsRef.current === ws) {
+          // Clean up old audio resources BEFORE reconnecting to prevent iOS AudioContext leak
           deepgramWsRef.current = null;
+          if (processorRef.current) {
+            processorRef.current.disconnect();
+            processorRef.current = null;
+          }
+          if (audioContextRef.current) {
+            audioContextRef.current.close().catch(() => {});
+            audioContextRef.current = null;
+          }
+          if (audioStreamRef.current) {
+            audioStreamRef.current.getTracks().forEach((t) => t.stop());
+            audioStreamRef.current = null;
+          }
+          dgAccumulatorRef.current = "";
+
           const closeMsgs: Record<number, string> = {
-            1006: "Network dropped — reconnecting...",
-            1008: "Auth failed — try stopping and restarting",
-            1011: "Deepgram server error — reconnecting...",
+            1006: "Network dropped",
+            1008: "Auth failed — stop and restart",
+            1011: "Deepgram server error",
           };
           if (e.code !== 1000 && speechEngineRef.current === "deepgram") {
-            setError(closeMsgs[e.code] || `Deepgram disconnected (code ${e.code}) — reconnecting...`);
-            // Auto-reconnect after unexpected disconnect
+            dgReconnectCount.current++;
+            if (dgReconnectCount.current > 3) {
+              setError(`Deepgram keeps disconnecting (${closeMsgs[e.code] || `code ${e.code}`}) — stop and restart`);
+              setListening(false);
+              dgReconnectCount.current = 0;
+              return;
+            }
+            setError(`${closeMsgs[e.code] || `Deepgram disconnected (code ${e.code})`} — reconnecting (${dgReconnectCount.current}/3)...`);
             setTimeout(() => {
               if (speechEngineRef.current === "deepgram") {
                 startDeepgram();
               }
-            }, 1500);
+            }, 2000);
           }
         }
       };
 
+      dgReconnectCount.current = 0; // Reset on successful connect
       setListening(true);
       setError("");
     } catch (err) {

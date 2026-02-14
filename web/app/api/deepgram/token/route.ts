@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
           body: JSON.stringify({
             comment: "browser-temp",
             scopes: ["usage:write"],
-            time_to_live_in_seconds: 10,
+            time_to_live_in_seconds: 300,
           }),
         }
       );
