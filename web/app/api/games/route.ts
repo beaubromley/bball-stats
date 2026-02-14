@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   const denied = await requireAuth(req);
   if (denied) return denied;
   await initDb();
-  const { location } = await req.json();
-  const id = await createGame(location);
+  const { location, target_score } = await req.json();
+  const id = await createGame(location, target_score);
   return NextResponse.json({ id }, { status: 201 });
 }

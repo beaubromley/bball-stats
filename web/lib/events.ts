@@ -18,12 +18,12 @@ export async function ensurePlayer(name: string): Promise<string> {
   return id;
 }
 
-export async function createGame(location?: string): Promise<string> {
+export async function createGame(location?: string, targetScore?: number): Promise<string> {
   const db = getDb();
   const id = uuid();
   await db.execute({
-    sql: "INSERT INTO games (id, location) VALUES (?, ?)",
-    args: [id, location ?? null],
+    sql: "INSERT INTO games (id, location, target_score) VALUES (?, ?, ?)",
+    args: [id, location ?? null, targetScore ?? null],
   });
   return id;
 }

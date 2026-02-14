@@ -73,4 +73,11 @@ export async function initDb() {
   } catch {
     // Column already exists
   }
+
+  // Migration: add target score column for win probability calculations
+  try {
+    await db.execute("ALTER TABLE games ADD COLUMN target_score INTEGER");
+  } catch {
+    // Column already exists
+  }
 }

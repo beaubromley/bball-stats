@@ -8,7 +8,7 @@ import { useAuth } from "@/app/components/AuthProvider";
 
 const API_BASE = "/api";
 
-type TargetScore = 11 | 15 | 21;
+type TargetScore = number;
 type PlayerAssignment = "A" | "B" | null;
 
 interface KnownPlayer {
@@ -883,7 +883,8 @@ export default function RecordPage() {
   }
 
   // --- Game lifecycle ---
-  function startGame(target: TargetScore) {
+  function startGame(target: number) {
+    if (target < 1) return;
     setAssignments({});
     setGame((prev) => ({ ...prev, status: "setup", targetScore: target }));
   }
@@ -906,7 +907,7 @@ export default function RecordPage() {
       const res = await fetch(`${API_BASE}/games`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ location: "Pickup" }),
+        body: JSON.stringify({ location: "Pickup", target_score: game.targetScore }),
       });
       const data = await res.json();
       gameId = data.id;
@@ -1051,9 +1052,25 @@ export default function RecordPage() {
                 : ""}
           </div>
           {game.status === "active" && (
-            <div className="text-xs text-gray-600 mt-0.5">
+            <button
+              className="text-xs text-gray-600 mt-0.5 underline decoration-dotted hover:text-gray-400 transition-colors"
+              onClick={() => {
+                const input = prompt("Change target score:", String(game.targetScore));
+                if (!input) return;
+                const val = parseInt(input);
+                if (isNaN(val) || val < 1) return;
+                setGame((prev) => ({ ...prev, targetScore: val }));
+                if (game.gameId) {
+                  fetch(`${API_BASE}/games/${game.gameId}/target-score`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ target_score: val }),
+                  }).catch(() => {});
+                }
+              }}
+            >
               to {game.targetScore}
-            </div>
+            </button>
           )}
         </div>
         <div className="text-center flex-1">
@@ -1147,6 +1164,31 @@ export default function RecordPage() {
               className="flex-1 py-2.5 border border-blue-600 text-blue-400 font-semibold rounded-lg hover:bg-blue-600/10 transition-colors"
             >
               To 21
+            </button>
+          </div>
+          <div className="flex gap-3 items-center">
+            <input
+              type="number"
+              min={1}
+              placeholder="Custom"
+              className="flex-1 py-2.5 px-3 bg-gray-900 border border-gray-700 text-white rounded-lg text-center focus:border-blue-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const val = parseInt((e.target as HTMLInputElement).value);
+                  if (val >= 1) startGame(val);
+                }
+              }}
+              id="custom-target"
+            />
+            <button
+              onClick={() => {
+                const el = document.getElementById("custom-target") as HTMLInputElement;
+                const val = parseInt(el?.value);
+                if (val >= 1) startGame(val);
+              }}
+              className="py-2.5 px-4 border border-blue-600 text-blue-400 font-semibold rounded-lg hover:bg-blue-600/10 transition-colors"
+            >
+              Go
             </button>
           </div>
         </div>
