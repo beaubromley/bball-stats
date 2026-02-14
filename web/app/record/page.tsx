@@ -343,8 +343,8 @@ export default function RecordPage() {
         .join("&");
 
       addDebugLog("Opening WebSocket to Deepgram...");
-      const dgUrl = `wss://api.deepgram.com/v1/listen?token=${encodeURIComponent(token)}&model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true&${keywordsParam}`;
-      const ws = new WebSocket(dgUrl);
+      const dgUrl = `wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true&${keywordsParam}`;
+      const ws = new WebSocket(dgUrl, ["token", token]);
       deepgramWsRef.current = ws;
 
       ws.onopen = () => {
