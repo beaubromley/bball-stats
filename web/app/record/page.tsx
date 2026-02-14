@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { parseTranscript, type ParsedCommand } from "@/lib/parser";
+import { parseTranscript, type ParsedCommand, type ScoringMode } from "@/lib/parser";
 import BoxScore from "@/app/components/BoxScore";
 import { useAuth } from "@/app/components/AuthProvider";
 
@@ -46,6 +46,7 @@ interface GameState {
   gameId: string | null;
   status: "idle" | "setup" | "active" | "finished";
   targetScore: TargetScore;
+  scoringMode: ScoringMode;
   teamA: string[];
   teamB: string[];
   teamAScore: number;
@@ -58,6 +59,7 @@ const initial: GameState = {
   gameId: null,
   status: "idle",
   targetScore: 11,
+  scoringMode: "1s2s",
   teamA: [],
   teamB: [],
   teamAScore: 0,
@@ -684,7 +686,7 @@ export default function RecordPage() {
       voiceToDisplay.set(voice, displayName);
     }
     const voiceNames = Array.from(voiceToDisplay.keys());
-    const cmd = parseTranscript(text, voiceNames);
+    const cmd = parseTranscript(text, voiceNames, gameRef.current.scoringMode);
 
     // Map voice names back to display names
     if (cmd.playerName) {
@@ -883,10 +885,10 @@ export default function RecordPage() {
   }
 
   // --- Game lifecycle ---
-  function startGame(target: number) {
+  function startGame(target: number, mode?: ScoringMode) {
     if (target < 1) return;
     setAssignments({});
-    setGame((prev) => ({ ...prev, status: "setup", targetScore: target }));
+    setGame((prev) => ({ ...prev, status: "setup", targetScore: target, scoringMode: mode ?? prev.scoringMode }));
   }
 
   async function confirmTeams() {
@@ -907,7 +909,7 @@ export default function RecordPage() {
       const res = await fetch(`${API_BASE}/games`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ location: "Pickup", target_score: game.targetScore }),
+        body: JSON.stringify({ location: "Pickup", target_score: game.targetScore, scoring_mode: game.scoringMode }),
       });
       const data = await res.json();
       gameId = data.id;
@@ -1052,25 +1054,30 @@ export default function RecordPage() {
                 : ""}
           </div>
           {game.status === "active" && (
-            <button
-              className="text-xs text-gray-600 mt-0.5 underline decoration-dotted hover:text-gray-400 transition-colors"
-              onClick={() => {
-                const input = prompt("Change target score:", String(game.targetScore));
-                if (!input) return;
-                const val = parseInt(input);
-                if (isNaN(val) || val < 1) return;
-                setGame((prev) => ({ ...prev, targetScore: val }));
-                if (game.gameId) {
-                  fetch(`${API_BASE}/games/${game.gameId}/target-score`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ target_score: val }),
-                  }).catch(() => {});
-                }
-              }}
-            >
-              to {game.targetScore}
-            </button>
+            <>
+              <button
+                className="text-sm text-blue-400 mt-1 px-2 py-0.5 border border-blue-500/50 rounded hover:bg-blue-500/10 transition-colors"
+                onClick={() => {
+                  const input = prompt("Change target score:", String(game.targetScore));
+                  if (!input) return;
+                  const val = parseInt(input);
+                  if (isNaN(val) || val < 1) return;
+                  setGame((prev) => ({ ...prev, targetScore: val }));
+                  if (game.gameId) {
+                    fetch(`${API_BASE}/games/${game.gameId}/target-score`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ target_score: val }),
+                    }).catch(() => {});
+                  }
+                }}
+              >
+                to {game.targetScore}
+              </button>
+              <div className="text-xs text-gray-600 mt-0.5">
+                {game.scoringMode === "2s3s" ? "2s & 3s" : "1s & 2s"}
+              </div>
+            </>
           )}
         </div>
         <div className="text-center flex-1">
@@ -1146,6 +1153,29 @@ export default function RecordPage() {
       {/* --- Idle: start game --- */}
       {game.status === "idle" && (
         <div className="space-y-3 py-6">
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <span className="text-xs text-gray-500">Scoring:</span>
+            <button
+              onClick={() => setGame((prev) => ({ ...prev, scoringMode: "1s2s" }))}
+              className={`px-3 py-1 text-sm rounded-lg font-medium transition-colors ${
+                game.scoringMode === "1s2s"
+                  ? "bg-blue-600 text-white"
+                  : "border border-gray-700 text-gray-400 hover:border-gray-500"
+              }`}
+            >
+              1s & 2s
+            </button>
+            <button
+              onClick={() => setGame((prev) => ({ ...prev, scoringMode: "2s3s" }))}
+              className={`px-3 py-1 text-sm rounded-lg font-medium transition-colors ${
+                game.scoringMode === "2s3s"
+                  ? "bg-blue-600 text-white"
+                  : "border border-gray-700 text-gray-400 hover:border-gray-500"
+              }`}
+            >
+              2s & 3s
+            </button>
+          </div>
           <button
             onClick={() => startGame(11)}
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
@@ -1271,7 +1301,7 @@ export default function RecordPage() {
             disabled={setupTeamA.length === 0 || setupTeamB.length === 0}
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-800 disabled:text-gray-600 text-white font-semibold rounded-lg transition-colors"
           >
-            Start Game (to {game.targetScore})
+            Start Game (to {game.targetScore}, {game.scoringMode === "2s3s" ? "2s & 3s" : "1s & 2s"})
           </button>
         </div>
       )}

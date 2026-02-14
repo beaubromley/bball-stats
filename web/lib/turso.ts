@@ -80,4 +80,11 @@ export async function initDb() {
   } catch {
     // Column already exists
   }
+
+  // Migration: add scoring mode column (1s2s or 2s3s)
+  try {
+    await db.execute("ALTER TABLE games ADD COLUMN scoring_mode TEXT DEFAULT '1s2s'");
+  } catch {
+    // Column already exists
+  }
 }

@@ -117,8 +117,16 @@ function normalize(text: string): string {
   return t;
 }
 
-/** Detect if the text contains a shot type and return point value (2 for outside, 1 for inside/default) */
-function detectPoints(text: string): number {
+export type ScoringMode = "1s2s" | "2s3s";
+
+/** Detect if the text contains a shot type and return point value.
+ *  1s/2s mode: inside = 1, outside = 2
+ *  2s/3s mode: inside = 2, outside = 3
+ */
+function detectPoints(text: string, scoringMode: ScoringMode = "1s2s"): number {
+  if (scoringMode === "2s3s") {
+    return TWO_RE.test(text) ? 3 : 2;
+  }
   return TWO_RE.test(text) ? 2 : 1;
 }
 
@@ -159,12 +167,13 @@ function findPlayerName(
 
 /**
  * Parse a voice transcript into a basketball command.
- * Pickup scoring: 1's and 2's (inside = 1, outside/three = 2)
+ * Supports 1s/2s (default) or 2s/3s scoring modes.
  * Supports compound events: assists, steals, steal-and-score, assist-to-score
  */
 export function parseTranscript(
   transcript: string,
-  knownPlayers: string[] = []
+  knownPlayers: string[] = [],
+  scoringMode: ScoringMode = "1s2s"
 ): ParsedCommand {
   const text = normalize(transcript);
   const result: ParsedCommand = {
@@ -233,7 +242,7 @@ export function parseTranscript(
       stealBy: stealer,
       assistBy: stealer,
       playerName: scorer,
-      points: detectPoints(text),
+      points: detectPoints(text, scoringMode),
       confidence: 0.85,
     };
   }
@@ -249,7 +258,7 @@ export function parseTranscript(
       type: "score",
       assistBy: assister,
       playerName: scorer,
-      points: detectPoints(text),
+      points: detectPoints(text, scoringMode),
       confidence: 0.85,
     };
   }
@@ -264,7 +273,7 @@ export function parseTranscript(
       type: "score",
       assistBy: assister,
       playerName: scorer,
-      points: detectPoints(text),
+      points: detectPoints(text, scoringMode),
       confidence: 0.8,
     };
   }
@@ -278,7 +287,7 @@ export function parseTranscript(
       type: "score",
       stealBy: player,
       playerName: player,
-      points: detectPoints(text),
+      points: detectPoints(text, scoringMode),
       confidence: 0.85,
     };
   }
@@ -313,7 +322,9 @@ export function parseTranscript(
   const isOne = ONE_RE.test(text);
 
   if (isTwo || isOne) {
-    const points = isTwo ? 2 : 1;
+    const points = isTwo
+      ? (scoringMode === "2s3s" ? 3 : 2)
+      : (scoringMode === "2s3s" ? 2 : 1);
 
     // Check for assist mentioned alongside the score (e.g., "Tyler bucket assist Joe")
     let assistBy: string | undefined;
