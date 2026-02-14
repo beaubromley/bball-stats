@@ -110,12 +110,18 @@ export default function RecordPage() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
 
   // Speech engine selection
-  const [speechEngine, setSpeechEngine] = useState<"browser" | "deepgram">("browser");
+  const [speechEngine, setSpeechEngine] = useState<"browser" | "deepgram">("deepgram");
   const deepgramWsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const dgAccumulatorRef = useRef("");
   const dgReconnectCount = useRef(0);
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+  const [showDebug, setShowDebug] = useState(false);
+  const addDebugLog = useCallback((msg: string) => {
+    const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    setDebugLog((prev) => [`[${ts}] ${msg}`, ...prev].slice(0, 50));
+  }, []);
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
 
@@ -286,12 +292,15 @@ export default function RecordPage() {
   // --- Deepgram streaming ---
   const startDeepgram = useCallback(async () => {
     try {
+      addDebugLog("Fetching Deepgram token...");
       const tokenRes = await fetch(`${API_BASE}/deepgram/token`);
       if (!tokenRes.ok) {
+        addDebugLog(`Token fetch failed: ${tokenRes.status}`);
         setError("Failed to get Deepgram token — check internet or server config");
         return;
       }
       const { token } = await tokenRes.json();
+      addDebugLog(`Token received (${token.length} chars, starts: ${token.slice(0, 8)}...)`);
 
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: false,
@@ -332,11 +341,14 @@ export default function RecordPage() {
         .map((w) => `keywords=${encodeURIComponent(w)}:5`)
         .join("&");
 
+      addDebugLog("Opening WebSocket to Deepgram...");
       const dgUrl = `wss://api.deepgram.com/v1/listen?token=${encodeURIComponent(token)}&model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true&${keywordsParam}`;
       const ws = new WebSocket(dgUrl);
       deepgramWsRef.current = ws;
 
       ws.onopen = () => {
+        addDebugLog("WebSocket OPEN — streaming audio");
+        dgReconnectCount.current = 0;
         processor.onaudioprocess = (e) => {
           if (ws.readyState !== WebSocket.OPEN) return;
           const float32 = e.inputBuffer.getChannelData(0);
@@ -389,10 +401,12 @@ export default function RecordPage() {
       };
 
       ws.onerror = () => {
+        addDebugLog("WebSocket ERROR event fired");
         setError("Deepgram failed to connect — check your internet");
       };
 
       ws.onclose = (e) => {
+        addDebugLog(`WebSocket CLOSED — code: ${e.code}, reason: "${e.reason || "none"}", wasClean: ${e.wasClean}`);
         if (deepgramWsRef.current === ws) {
           // Clean up old audio resources BEFORE reconnecting to prevent iOS AudioContext leak
           deepgramWsRef.current = null;
@@ -417,7 +431,9 @@ export default function RecordPage() {
           };
           if (e.code !== 1000 && speechEngineRef.current === "deepgram") {
             dgReconnectCount.current++;
+            addDebugLog(`Reconnect attempt ${dgReconnectCount.current}/3`);
             if (dgReconnectCount.current > 3) {
+              addDebugLog("Max retries reached — giving up");
               setError(`Deepgram keeps disconnecting (${closeMsgs[e.code] || `code ${e.code}`}) — stop and restart`);
               setListening(false);
               dgReconnectCount.current = 0;
@@ -433,10 +449,10 @@ export default function RecordPage() {
         }
       };
 
-      dgReconnectCount.current = 0; // Reset on successful connect
       setListening(true);
       setError("");
     } catch (err) {
+      addDebugLog(`CATCH: ${err instanceof Error ? err.message : String(err)}`);
       setError(`Deepgram error: ${err instanceof Error ? err.message : "unknown"}`);
     }
   }, []);
@@ -1063,6 +1079,25 @@ export default function RecordPage() {
           >
             &times;
           </button>
+        </div>
+      )}
+
+      {/* Debug log */}
+      {debugLog.length > 0 && (
+        <div className="py-1">
+          <button
+            onClick={() => setShowDebug((p) => !p)}
+            className="text-xs text-gray-600 underline"
+          >
+            {showDebug ? "Hide" : "Show"} debug log ({debugLog.length})
+          </button>
+          {showDebug && (
+            <div className="mt-1 p-2 bg-gray-950 border border-gray-800 rounded text-xs text-gray-400 font-mono max-h-40 overflow-y-auto">
+              {debugLog.map((line, i) => (
+                <div key={i}>{line}</div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
