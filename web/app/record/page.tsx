@@ -111,8 +111,8 @@ export default function RecordPage() {
 
   // Speech engine selection
   const [speechEngine, setSpeechEngine] = useState<"browser" | "deepgram">("deepgram");
-  // Deepgram test modes: A=no keywords+subproto, B=no keywords+queryparam, C=keywords+MediaRecorder, D=MediaRecorder no keywords
-  const [dgMode, setDgMode] = useState<"A" | "B" | "C" | "D">("A");
+  // Deepgram test modes
+  const [dgMode, setDgMode] = useState<"A" | "B" | "C" | "D" | "E">("E");
   const deepgramWsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -328,10 +328,9 @@ export default function RecordPage() {
         nav.audioSession.type = "play-and-record";
       }
 
-      // Build keywords (only for mode C)
-      const useKeywords = mode === "C";
+      // Build keywords — mode C: all (players+terms), mode E: basketball terms only, others: none
       let keywordsParam = "";
-      if (useKeywords) {
+      if (mode === "C") {
         const currentGame = gameRef.current;
         const rosterNames = [...currentGame.teamA, ...currentGame.teamB];
         const voiceNames = rosterNames.map((name) => {
@@ -346,10 +345,15 @@ export default function RecordPage() {
         keywordsParam = "&" + allKeywords
           .map((w) => `keywords=${encodeURIComponent(w)}:5`)
           .join("&");
+      } else if (mode === "E") {
+        const bballOnly = ["bucket", "two", "three", "steal", "block", "assist", "layup", "deep three", "undo"];
+        keywordsParam = "&" + bballOnly
+          .map((w) => `keywords=${encodeURIComponent(w)}:5`)
+          .join("&");
       }
 
-      // Mode A/C/D: subprotocol auth | Mode B: query param auth
-      const useMediaRecorder = mode === "C" || mode === "D";
+      // Mode A/C/D/E: subprotocol auth | Mode B: query param auth
+      const useMediaRecorder = mode === "C" || mode === "D" || mode === "E";
       const baseParams = useMediaRecorder
         ? `model=nova-3&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`
         : `model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`;
@@ -364,7 +368,7 @@ export default function RecordPage() {
         ws = new WebSocket(dgUrl, ["token", token]);
       }
 
-      addDebugLog(`Mode ${mode}: WS URL ${dgUrl.length} chars, auth=${mode === "B" ? "queryparam" : "subproto"}, audio=${useMediaRecorder ? "MediaRecorder" : "PCM"}, keywords=${useKeywords}`);
+      addDebugLog(`Mode ${mode}: URL ${dgUrl.length} chars, keywords=${keywordsParam.length > 0}`);
       deepgramWsRef.current = ws;
 
       ws.onopen = () => {
@@ -1291,13 +1295,14 @@ export default function RecordPage() {
           {!listening && speechEngine === "deepgram" && (
             <select
               value={dgMode}
-              onChange={(e) => setDgMode(e.target.value as "A" | "B" | "C" | "D")}
+              onChange={(e) => setDgMode(e.target.value as "A" | "B" | "C" | "D" | "E")}
               className="w-full px-3 py-2 bg-gray-900 border border-yellow-700 rounded-lg text-xs text-yellow-300 focus:outline-none focus:border-yellow-500"
             >
-              <option value="A">A: No keywords + subprotocol (original)</option>
-              <option value="B">B: No keywords + query param auth</option>
-              <option value="C">C: Keywords + MediaRecorder</option>
-              <option value="D">D: No keywords + MediaRecorder</option>
+              <option value="E">E: Bball keywords only + MediaRecorder (~274 chars)</option>
+              <option value="D">D: No keywords + MediaRecorder (122 chars)</option>
+              <option value="A">A: No keywords + subprotocol PCM (169 chars)</option>
+              <option value="C">C: All keywords + MediaRecorder (435+ chars)</option>
+              <option value="B">B: Query param auth (broken on Safari)</option>
             </select>
           )}
 
