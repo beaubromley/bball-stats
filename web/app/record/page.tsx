@@ -1093,10 +1093,18 @@ export default function RecordPage() {
             {showDebug ? "Hide" : "Show"} debug log ({debugLog.length})
           </button>
           {showDebug && (
-            <div className="mt-1 p-2 bg-gray-950 border border-gray-800 rounded text-xs text-gray-400 font-mono max-h-40 overflow-y-auto">
-              {debugLog.map((line, i) => (
-                <div key={i}>{line}</div>
-              ))}
+            <div className="mt-1">
+              <button
+                onClick={() => navigator.clipboard.writeText(debugLog.join("\n"))}
+                className="text-xs text-blue-500 underline mb-1"
+              >
+                Copy log
+              </button>
+              <div className="p-2 bg-gray-950 border border-gray-800 rounded text-xs text-gray-400 font-mono max-h-40 overflow-y-auto">
+                {debugLog.map((line, i) => (
+                  <div key={i}>{line}</div>
+                ))}
+              </div>
             </div>
           )}
         </div>
