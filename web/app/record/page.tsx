@@ -112,7 +112,7 @@ export default function RecordPage() {
   // Speech engine selection
   const [speechEngine, setSpeechEngine] = useState<"browser" | "deepgram">("deepgram");
   // Deepgram test modes
-  const [dgMode, setDgMode] = useState<"A" | "B" | "C" | "D" | "E">("E");
+  const [dgMode, setDgMode] = useState<"D" | "E" | "F" | "G" | "H">("F");
   const deepgramWsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -328,9 +328,24 @@ export default function RecordPage() {
         nav.audioSession.type = "play-and-record";
       }
 
-      // Build keywords — mode C: all (players+terms), mode E: basketball terms only, others: none
+      // Build keywords based on mode
       let keywordsParam = "";
-      if (mode === "C") {
+      const bballTerms = ["bucket", "two", "three", "steal", "block", "assist", "layup", "deep three", "undo"];
+      if (mode === "E") {
+        // Unencoded colons: keywords=bucket:5 (failed at 281 chars)
+        keywordsParam = "&" + bballTerms
+          .map((w) => `keywords=${encodeURIComponent(w)}:5`)
+          .join("&");
+      } else if (mode === "F") {
+        // Fully encoded: keywords=bucket%3A5 (test if colon is the issue)
+        keywordsParam = "&" + bballTerms
+          .map((w) => `keywords=${encodeURIComponent(w + ":5")}`)
+          .join("&");
+      } else if (mode === "G") {
+        // Just ONE keyword to test minimum viable
+        keywordsParam = `&keywords=${encodeURIComponent("bucket:5")}`;
+      } else if (mode === "H") {
+        // All keywords (players + terms) fully encoded
         const currentGame = gameRef.current;
         const rosterNames = [...currentGame.teamA, ...currentGame.teamB];
         const voiceNames = rosterNames.map((name) => {
@@ -339,34 +354,17 @@ export default function RecordPage() {
         });
         const allKeywords = [
           ...new Set([...rosterNames, ...voiceNames]),
-          "bucket", "two", "three", "steal", "block", "assist",
-          "layup", "deep three", "undo",
+          ...bballTerms,
         ];
         keywordsParam = "&" + allKeywords
-          .map((w) => `keywords=${encodeURIComponent(w)}:5`)
-          .join("&");
-      } else if (mode === "E") {
-        const bballOnly = ["bucket", "two", "three", "steal", "block", "assist", "layup", "deep three", "undo"];
-        keywordsParam = "&" + bballOnly
-          .map((w) => `keywords=${encodeURIComponent(w)}:5`)
+          .map((w) => `keywords=${encodeURIComponent(w + ":5")}`)
           .join("&");
       }
 
-      // Mode A/C/D/E: subprotocol auth | Mode B: query param auth
-      const useMediaRecorder = mode === "C" || mode === "D" || mode === "E";
-      const baseParams = useMediaRecorder
-        ? `model=nova-3&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`
-        : `model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`;
-
-      let dgUrl: string;
-      let ws: WebSocket;
-      if (mode === "B") {
-        dgUrl = `wss://api.deepgram.com/v1/listen?token=${encodeURIComponent(token)}&${baseParams}`;
-        ws = new WebSocket(dgUrl);
-      } else {
-        dgUrl = `wss://api.deepgram.com/v1/listen?${baseParams}${keywordsParam}`;
-        ws = new WebSocket(dgUrl, ["token", token]);
-      }
+      // All modes use subprotocol auth + MediaRecorder
+      const baseParams = `model=nova-3&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`;
+      const dgUrl = `wss://api.deepgram.com/v1/listen?${baseParams}${keywordsParam}`;
+      const ws = new WebSocket(dgUrl, ["token", token]);
 
       addDebugLog(`Mode ${mode}: URL ${dgUrl.length} chars, keywords=${keywordsParam.length > 0}`);
       deepgramWsRef.current = ws;
@@ -375,36 +373,15 @@ export default function RecordPage() {
         addDebugLog("WebSocket OPEN — streaming audio");
         dgReconnectCount.current = 0;
 
-        if (useMediaRecorder) {
-          // MediaRecorder approach (Deepgram's recommended browser method)
-          const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
-          mediaRecorderRef.current = mediaRecorder;
-          mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-              ws.send(e.data);
-            }
-          };
-          mediaRecorder.start(250); // 250ms chunks
-        } else {
-          // ScriptProcessorNode approach (raw PCM)
-          const audioContext = new AudioContext({ sampleRate: 16000 });
-          audioContextRef.current = audioContext;
-          const source = audioContext.createMediaStreamSource(stream);
-          const processor = audioContext.createScriptProcessor(4096, 1, 1);
-          processorRef.current = processor;
-          processor.onaudioprocess = (e) => {
-            if (ws.readyState !== WebSocket.OPEN) return;
-            const float32 = e.inputBuffer.getChannelData(0);
-            const int16 = new Int16Array(float32.length);
-            for (let i = 0; i < float32.length; i++) {
-              const s = Math.max(-1, Math.min(1, float32[i]));
-              int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-            }
-            ws.send(int16.buffer);
-          };
-          source.connect(processor);
-          processor.connect(audioContext.destination);
-        }
+        // MediaRecorder approach (Deepgram's recommended browser method)
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+        mediaRecorderRef.current = mediaRecorder;
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+            ws.send(e.data);
+          }
+        };
+        mediaRecorder.start(250); // 250ms chunks
       };
 
       ws.onmessage = (event) => {
@@ -1295,14 +1272,14 @@ export default function RecordPage() {
           {!listening && speechEngine === "deepgram" && (
             <select
               value={dgMode}
-              onChange={(e) => setDgMode(e.target.value as "A" | "B" | "C" | "D" | "E")}
+              onChange={(e) => setDgMode(e.target.value as "D" | "E" | "F" | "G" | "H")}
               className="w-full px-3 py-2 bg-gray-900 border border-yellow-700 rounded-lg text-xs text-yellow-300 focus:outline-none focus:border-yellow-500"
             >
-              <option value="E">E: Bball keywords only + MediaRecorder (~274 chars)</option>
-              <option value="D">D: No keywords + MediaRecorder (122 chars)</option>
-              <option value="A">A: No keywords + subprotocol PCM (169 chars)</option>
-              <option value="C">C: All keywords + MediaRecorder (435+ chars)</option>
-              <option value="B">B: Query param auth (broken on Safari)</option>
+              <option value="F">F: Bball keywords, encoded colons (bucket%3A5)</option>
+              <option value="G">G: ONE keyword only (minimum test)</option>
+              <option value="H">H: ALL keywords, encoded colons (players+terms)</option>
+              <option value="E">E: Bball keywords, raw colons (failed at 281)</option>
+              <option value="D">D: No keywords (works, 122 chars)</option>
             </select>
           )}
 
