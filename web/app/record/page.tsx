@@ -111,8 +111,7 @@ export default function RecordPage() {
 
   // Speech engine selection
   const [speechEngine, setSpeechEngine] = useState<"browser" | "deepgram">("deepgram");
-  // Deepgram test modes
-  const [dgMode, setDgMode] = useState<"D" | "E" | "F" | "G" | "H">("F");
+  // Deepgram mode — keywords break Safari WebSocket, so no keywords
   const deepgramWsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -293,14 +292,9 @@ export default function RecordPage() {
   }, []);
 
   // --- Deepgram streaming ---
-  // Ref so startDeepgram always sees current dgMode
-  const dgModeRef = useRef(dgMode);
-  dgModeRef.current = dgMode;
-
   const startDeepgram = useCallback(async () => {
-    const mode = dgModeRef.current;
     try {
-      addDebugLog(`Mode ${mode}: Fetching token...`);
+      addDebugLog("Fetching Deepgram token...");
       const tokenRes = await fetch(`${API_BASE}/deepgram/token`);
       if (!tokenRes.ok) {
         addDebugLog(`Token fetch failed: ${tokenRes.status}`);
@@ -328,45 +322,12 @@ export default function RecordPage() {
         nav.audioSession.type = "play-and-record";
       }
 
-      // Build keywords based on mode
-      let keywordsParam = "";
-      const bballTerms = ["bucket", "two", "three", "steal", "block", "assist", "layup", "deep three", "undo"];
-      if (mode === "E") {
-        // Unencoded colons: keywords=bucket:5 (failed at 281 chars)
-        keywordsParam = "&" + bballTerms
-          .map((w) => `keywords=${encodeURIComponent(w)}:5`)
-          .join("&");
-      } else if (mode === "F") {
-        // Fully encoded: keywords=bucket%3A5 (test if colon is the issue)
-        keywordsParam = "&" + bballTerms
-          .map((w) => `keywords=${encodeURIComponent(w + ":5")}`)
-          .join("&");
-      } else if (mode === "G") {
-        // Just ONE keyword to test minimum viable
-        keywordsParam = `&keywords=${encodeURIComponent("bucket:5")}`;
-      } else if (mode === "H") {
-        // All keywords (players + terms) fully encoded
-        const currentGame = gameRef.current;
-        const rosterNames = [...currentGame.teamA, ...currentGame.teamB];
-        const voiceNames = rosterNames.map((name) => {
-          const player = knownPlayersRef.current.find((p) => p.name === name);
-          return player?.voiceName || name.toLowerCase();
-        });
-        const allKeywords = [
-          ...new Set([...rosterNames, ...voiceNames]),
-          ...bballTerms,
-        ];
-        keywordsParam = "&" + allKeywords
-          .map((w) => `keywords=${encodeURIComponent(w + ":5")}`)
-          .join("&");
-      }
-
-      // All modes use subprotocol auth + MediaRecorder
-      const baseParams = `model=nova-3&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`;
-      const dgUrl = `wss://api.deepgram.com/v1/listen?${baseParams}${keywordsParam}`;
+      // Note: Deepgram keywords param breaks Safari WebSocket (even 1 keyword).
+      // Name correction is handled by parser aliases instead.
+      const dgUrl = `wss://api.deepgram.com/v1/listen?model=nova-3&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`;
       const ws = new WebSocket(dgUrl, ["token", token]);
 
-      addDebugLog(`Mode ${mode}: URL ${dgUrl.length} chars, keywords=${keywordsParam.length > 0}`);
+      addDebugLog(`WS URL ${dgUrl.length} chars`);
       deepgramWsRef.current = ws;
 
       ws.onopen = () => {
@@ -1268,20 +1229,6 @@ export default function RecordPage() {
             </select>
           )}
 
-          {/* Deepgram test mode selector */}
-          {!listening && speechEngine === "deepgram" && (
-            <select
-              value={dgMode}
-              onChange={(e) => setDgMode(e.target.value as "D" | "E" | "F" | "G" | "H")}
-              className="w-full px-3 py-2 bg-gray-900 border border-yellow-700 rounded-lg text-xs text-yellow-300 focus:outline-none focus:border-yellow-500"
-            >
-              <option value="F">F: Bball keywords, encoded colons (bucket%3A5)</option>
-              <option value="G">G: ONE keyword only (minimum test)</option>
-              <option value="H">H: ALL keywords, encoded colons (players+terms)</option>
-              <option value="E">E: Bball keywords, raw colons (failed at 281)</option>
-              <option value="D">D: No keywords (works, 122 chars)</option>
-            </select>
-          )}
 
           {/* Audio device selector */}
           {!listening && (
