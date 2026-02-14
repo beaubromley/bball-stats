@@ -111,7 +111,7 @@ export default function RecordPage() {
 
   // Speech engine selection
   const [speechEngine, setSpeechEngine] = useState<"browser" | "deepgram">("deepgram");
-  // Deepgram mode — keywords break Safari WebSocket, so no keywords
+  // Deepgram mode — uses Nova-3 "keyterm" param (not legacy "keywords")
   const deepgramWsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -322,9 +322,36 @@ export default function RecordPage() {
         nav.audioSession.type = "play-and-record";
       }
 
-      // Note: Deepgram keywords param breaks Safari WebSocket (even 1 keyword).
-      // Name correction is handled by parser aliases instead.
-      const dgUrl = `wss://api.deepgram.com/v1/listen?model=nova-3&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`;
+      // Nova-3 uses "keyterm" (not "keywords") — no intensifiers like :5
+      // "keywords" is Nova-2-only and causes Safari to get a 400 handshake rejection
+      const params = new URLSearchParams({
+        model: "nova-3",
+        interim_results: "true",
+        endpointing: "300",
+        utterance_end_ms: "1000",
+        smart_format: "true",
+      });
+
+      // Add active player names as keyterms
+      const currentGame = gameRef.current;
+      const allPlayers = [...currentGame.teamA, ...currentGame.teamB];
+      for (const displayName of allPlayers) {
+        const player = knownPlayersRef.current.find((p) => p.name === displayName);
+        const voiceName = player?.voiceName || displayName.split(/\s/)[0].toLowerCase();
+        const keyterm = voiceName.charAt(0).toUpperCase() + voiceName.slice(1);
+        params.append("keyterm", keyterm);
+      }
+
+      // Add basketball vocabulary as keyterms
+      const basketballTerms = [
+        "bucket", "layup", "dunk", "floater", "three", "deep",
+        "downtown", "steal", "block", "assist", "undo",
+      ];
+      for (const term of basketballTerms) {
+        params.append("keyterm", term);
+      }
+
+      const dgUrl = `wss://api.deepgram.com/v1/listen?${params.toString()}`;
       const ws = new WebSocket(dgUrl, ["token", token]);
 
       addDebugLog(`WS URL ${dgUrl.length} chars`);
