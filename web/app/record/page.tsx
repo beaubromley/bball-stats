@@ -111,9 +111,12 @@ export default function RecordPage() {
 
   // Speech engine selection
   const [speechEngine, setSpeechEngine] = useState<"browser" | "deepgram">("deepgram");
+  // Deepgram test modes: A=no keywords+subproto, B=no keywords+queryparam, C=keywords+MediaRecorder, D=MediaRecorder no keywords
+  const [dgMode, setDgMode] = useState<"A" | "B" | "C" | "D">("A");
   const deepgramWsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const dgAccumulatorRef = useRef("");
   const dgReconnectCount = useRef(0);
   const [debugLog, setDebugLog] = useState<string[]>([]);
@@ -290,9 +293,14 @@ export default function RecordPage() {
   }, []);
 
   // --- Deepgram streaming ---
+  // Ref so startDeepgram always sees current dgMode
+  const dgModeRef = useRef(dgMode);
+  dgModeRef.current = dgMode;
+
   const startDeepgram = useCallback(async () => {
+    const mode = dgModeRef.current;
     try {
-      addDebugLog("Fetching Deepgram token...");
+      addDebugLog(`Mode ${mode}: Fetching token...`);
       const tokenRes = await fetch(`${API_BASE}/deepgram/token`);
       if (!tokenRes.ok) {
         addDebugLog(`Token fetch failed: ${tokenRes.status}`);
@@ -301,7 +309,7 @@ export default function RecordPage() {
       }
       const tokenData = await tokenRes.json();
       const token = tokenData.token;
-      addDebugLog(`Token: ${tokenData.source}${tokenData.tempKeyError ? ` (${tokenData.tempKeyError})` : ""} — ${token.length} chars`);
+      addDebugLog(`Token: ${tokenData.source} — ${token.length} chars`);
 
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: false,
@@ -320,48 +328,79 @@ export default function RecordPage() {
         nav.audioSession.type = "play-and-record";
       }
 
-      const audioContext = new AudioContext({ sampleRate: 16000 });
-      audioContextRef.current = audioContext;
-      const source = audioContext.createMediaStreamSource(stream);
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
+      // Build keywords (only for mode C)
+      const useKeywords = mode === "C";
+      let keywordsParam = "";
+      if (useKeywords) {
+        const currentGame = gameRef.current;
+        const rosterNames = [...currentGame.teamA, ...currentGame.teamB];
+        const voiceNames = rosterNames.map((name) => {
+          const player = knownPlayersRef.current.find((p) => p.name === name);
+          return player?.voiceName || name.toLowerCase();
+        });
+        const allKeywords = [
+          ...new Set([...rosterNames, ...voiceNames]),
+          "bucket", "two", "three", "steal", "block", "assist",
+          "layup", "deep three", "undo",
+        ];
+        keywordsParam = "&" + allKeywords
+          .map((w) => `keywords=${encodeURIComponent(w)}:5`)
+          .join("&");
+      }
 
-      // Build keywords from roster + basketball terms to boost recognition
-      const currentGame = gameRef.current;
-      const rosterNames = [...currentGame.teamA, ...currentGame.teamB];
-      const voiceNames = rosterNames.map((name) => {
-        const player = knownPlayersRef.current.find((p) => p.name === name);
-        return player?.voiceName || name.toLowerCase();
-      });
-      const allKeywords = [
-        ...new Set([...rosterNames, ...voiceNames]),
-        "bucket", "two", "three", "steal", "block", "assist",
-        "layup", "deep three", "undo",
-      ];
-      const keywordsParam = allKeywords
-        .map((w) => `keywords=${encodeURIComponent(w)}:5`)
-        .join("&");
+      // Mode A/C/D: subprotocol auth | Mode B: query param auth
+      const useMediaRecorder = mode === "C" || mode === "D";
+      const baseParams = useMediaRecorder
+        ? `model=nova-3&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`
+        : `model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true`;
 
-      addDebugLog("Opening WebSocket to Deepgram...");
-      const dgUrl = `wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&smart_format=true&${keywordsParam}`;
-      const ws = new WebSocket(dgUrl, ["token", token]);
+      let dgUrl: string;
+      let ws: WebSocket;
+      if (mode === "B") {
+        dgUrl = `wss://api.deepgram.com/v1/listen?token=${encodeURIComponent(token)}&${baseParams}`;
+        ws = new WebSocket(dgUrl);
+      } else {
+        dgUrl = `wss://api.deepgram.com/v1/listen?${baseParams}${keywordsParam}`;
+        ws = new WebSocket(dgUrl, ["token", token]);
+      }
+
+      addDebugLog(`Mode ${mode}: WS URL ${dgUrl.length} chars, auth=${mode === "B" ? "queryparam" : "subproto"}, audio=${useMediaRecorder ? "MediaRecorder" : "PCM"}, keywords=${useKeywords}`);
       deepgramWsRef.current = ws;
 
       ws.onopen = () => {
         addDebugLog("WebSocket OPEN — streaming audio");
         dgReconnectCount.current = 0;
-        processor.onaudioprocess = (e) => {
-          if (ws.readyState !== WebSocket.OPEN) return;
-          const float32 = e.inputBuffer.getChannelData(0);
-          const int16 = new Int16Array(float32.length);
-          for (let i = 0; i < float32.length; i++) {
-            const s = Math.max(-1, Math.min(1, float32[i]));
-            int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-          }
-          ws.send(int16.buffer);
-        };
-        source.connect(processor);
-        processor.connect(audioContext.destination);
+
+        if (useMediaRecorder) {
+          // MediaRecorder approach (Deepgram's recommended browser method)
+          const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+          mediaRecorderRef.current = mediaRecorder;
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+              ws.send(e.data);
+            }
+          };
+          mediaRecorder.start(250); // 250ms chunks
+        } else {
+          // ScriptProcessorNode approach (raw PCM)
+          const audioContext = new AudioContext({ sampleRate: 16000 });
+          audioContextRef.current = audioContext;
+          const source = audioContext.createMediaStreamSource(stream);
+          const processor = audioContext.createScriptProcessor(4096, 1, 1);
+          processorRef.current = processor;
+          processor.onaudioprocess = (e) => {
+            if (ws.readyState !== WebSocket.OPEN) return;
+            const float32 = e.inputBuffer.getChannelData(0);
+            const int16 = new Int16Array(float32.length);
+            for (let i = 0; i < float32.length; i++) {
+              const s = Math.max(-1, Math.min(1, float32[i]));
+              int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+            }
+            ws.send(int16.buffer);
+          };
+          source.connect(processor);
+          processor.connect(audioContext.destination);
+        }
       };
 
       ws.onmessage = (event) => {
@@ -409,8 +448,12 @@ export default function RecordPage() {
       ws.onclose = (e) => {
         addDebugLog(`WebSocket CLOSED — code: ${e.code}, reason: "${e.reason || "none"}", wasClean: ${e.wasClean}`);
         if (deepgramWsRef.current === ws) {
-          // Clean up old audio resources BEFORE reconnecting to prevent iOS AudioContext leak
+          // Clean up old audio resources BEFORE reconnecting
           deepgramWsRef.current = null;
+          if (mediaRecorderRef.current) {
+            try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+            mediaRecorderRef.current = null;
+          }
           if (processorRef.current) {
             processorRef.current.disconnect();
             processorRef.current = null;
@@ -465,6 +508,10 @@ export default function RecordPage() {
       } catch { /* ignore */ }
       deepgramWsRef.current.close();
       deepgramWsRef.current = null;
+    }
+    if (mediaRecorderRef.current) {
+      try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+      mediaRecorderRef.current = null;
     }
     if (processorRef.current) {
       processorRef.current.disconnect();
@@ -1235,8 +1282,22 @@ export default function RecordPage() {
               onChange={(e) => setSpeechEngine(e.target.value as "browser" | "deepgram")}
               className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-blue-500"
             >
-              <option value="browser">Browser Speech (default)</option>
+              <option value="browser">Browser Speech</option>
               <option value="deepgram">Deepgram</option>
+            </select>
+          )}
+
+          {/* Deepgram test mode selector */}
+          {!listening && speechEngine === "deepgram" && (
+            <select
+              value={dgMode}
+              onChange={(e) => setDgMode(e.target.value as "A" | "B" | "C" | "D")}
+              className="w-full px-3 py-2 bg-gray-900 border border-yellow-700 rounded-lg text-xs text-yellow-300 focus:outline-none focus:border-yellow-500"
+            >
+              <option value="A">A: No keywords + subprotocol (original)</option>
+              <option value="B">B: No keywords + query param auth</option>
+              <option value="C">C: Keywords + MediaRecorder</option>
+              <option value="D">D: No keywords + MediaRecorder</option>
             </select>
           )}
 
