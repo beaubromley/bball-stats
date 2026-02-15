@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseTranscript, type ParsedCommand, type ScoringMode } from "@/lib/parser";
+import { loadSherpaEngine, downsampleBuffer, buildHotwords, type SherpaEngine } from "@/lib/sherpa";
 import BoxScore from "@/app/components/BoxScore";
 import { useAuth } from "@/app/components/AuthProvider";
 
@@ -112,7 +113,13 @@ export default function RecordPage() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
 
   // Speech engine selection
-  const [speechEngine, setSpeechEngine] = useState<"browser" | "deepgram">("deepgram");
+  const [speechEngine, setSpeechEngine] = useState<"browser" | "deepgram" | "sherpa">("deepgram");
+  // Sherpa-ONNX mode — local WASM, no server needed
+  const sherpaEngineRef = useRef<SherpaEngine | null>(null);
+  const sherpaStreamRef = useRef<ReturnType<SherpaEngine["createStream"]> | null>(null);
+  const sherpaAudioCtxRef = useRef<AudioContext | null>(null);
+  const sherpaProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const [sherpaStatus, setSherpaStatus] = useState<"not-loaded" | "loading" | "ready" | "error">("not-loaded");
   // Deepgram mode — uses Nova-3 "keyterm" param (not legacy "keywords")
   const deepgramWsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -500,6 +507,138 @@ export default function RecordPage() {
     setListening(false);
   }, []);
 
+  // --- Sherpa-ONNX (local WASM) ---
+  const startSherpa = useCallback(async () => {
+    try {
+      setSherpaStatus("loading");
+      addDebugLog("Loading Sherpa-ONNX engine...");
+
+      // Build hotwords from current game roster
+      const currentGame = gameRef.current;
+      const hotwords = buildHotwords(currentGame.teamA, currentGame.teamB);
+      addDebugLog(`Hotwords: ${currentGame.teamA.length + currentGame.teamB.length} players + basketball terms`);
+
+      // Load WASM engine (downloads model on first use, cached after)
+      const engine = await loadSherpaEngine((msg) => {
+        addDebugLog(`Sherpa: ${msg}`);
+      }, hotwords);
+      sherpaEngineRef.current = engine;
+      setSherpaStatus("ready");
+
+      // Get audio stream
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      };
+      if (selectedDeviceIdRef.current) {
+        audioConstraints.deviceId = { exact: selectedDeviceIdRef.current };
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      audioStreamRef.current = stream;
+
+      // iOS audio session
+      const nav = navigator as never as { audioSession?: { type: string } };
+      if (nav.audioSession) nav.audioSession.type = "play-and-record";
+
+      // Create AudioContext for raw PCM at 16kHz
+      const audioCtx = new AudioContext({ sampleRate: 16000 });
+      sherpaAudioCtxRef.current = audioCtx;
+      const actualRate = audioCtx.sampleRate;
+      addDebugLog(`AudioContext sample rate: ${actualRate}`);
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+      sherpaProcessorRef.current = processor;
+
+      // Create recognition stream
+      const recognizerStream = engine.createStream();
+      sherpaStreamRef.current = recognizerStream;
+
+      let lastResult = "";
+
+      processor.onaudioprocess = (e: AudioProcessingEvent) => {
+        if (!sherpaEngineRef.current || !sherpaStreamRef.current) return;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let samples: any = new Float32Array(e.inputBuffer.getChannelData(0));
+        if (actualRate !== 16000) {
+          samples = downsampleBuffer(samples, actualRate, 16000);
+        }
+
+        const rec = sherpaEngineRef.current.recognizer;
+        const stm = sherpaStreamRef.current;
+
+        stm.acceptWaveform(16000, samples);
+        while (rec.isReady(stm)) {
+          rec.decode(stm);
+        }
+
+        const isEndpoint = rec.isEndpoint(stm);
+        const result = rec.getResult(stm).text;
+
+        if (result.length > 0 && result !== lastResult) {
+          lastResult = result;
+          setInterim(result);
+        }
+
+        if (isEndpoint) {
+          if (lastResult.length > 0) {
+            const finalText = lastResult;
+            lastResult = "";
+            setTranscript(finalText);
+            setInterim("");
+
+            // Save raw transcript to DB
+            const gid = gameRef.current.gameId;
+            if (gid && gameRef.current.status === "active") {
+              fetch(`${API_BASE}/games/${gid}/transcripts`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ raw_text: finalText }),
+              }).catch(() => {});
+            }
+
+            handleVoiceResult(finalText);
+          }
+          rec.reset(stm);
+        }
+      };
+
+      source.connect(processor);
+      processor.connect(audioCtx.destination);
+
+      setListening(true);
+      setError("");
+      addDebugLog("Sherpa-ONNX: streaming audio");
+    } catch (err) {
+      setSherpaStatus("error");
+      addDebugLog(`Sherpa error: ${err instanceof Error ? err.message : String(err)}`);
+      setError(`Sherpa-ONNX error: ${err instanceof Error ? err.message : "unknown"}`);
+    }
+  }, [addDebugLog]);
+
+  const stopSherpa = useCallback(() => {
+    if (sherpaProcessorRef.current) {
+      sherpaProcessorRef.current.disconnect();
+      sherpaProcessorRef.current = null;
+    }
+    if (sherpaAudioCtxRef.current) {
+      sherpaAudioCtxRef.current.close().catch(() => {});
+      sherpaAudioCtxRef.current = null;
+    }
+    if (sherpaStreamRef.current) {
+      try { sherpaStreamRef.current.free(); } catch { /* ignore */ }
+      sherpaStreamRef.current = null;
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      audioStreamRef.current = null;
+    }
+    setListening(false);
+    // Keep sherpaEngineRef.current alive for next start (no re-download needed)
+  }, []);
+
   // --- Dispatchers ---
   const speechEngineRef = useRef(speechEngine);
   speechEngineRef.current = speechEngine;
@@ -507,15 +646,18 @@ export default function RecordPage() {
   const startListening = useCallback(async () => {
     if (speechEngineRef.current === "deepgram") {
       await startDeepgram();
+    } else if (speechEngineRef.current === "sherpa") {
+      await startSherpa();
     } else {
       await startWebSpeech();
     }
-  }, [startDeepgram, startWebSpeech]);
+  }, [startDeepgram, startSherpa, startWebSpeech]);
 
   const stopListening = useCallback(() => {
     stopWebSpeech();
     stopDeepgram();
-  }, [stopWebSpeech, stopDeepgram]);
+    stopSherpa();
+  }, [stopWebSpeech, stopDeepgram, stopSherpa]);
 
   // --- Wake Lock (keep screen on) ---
   useEffect(() => {
@@ -1318,14 +1460,26 @@ export default function RecordPage() {
         <div className="space-y-3 py-4">
           {/* Speech engine selector */}
           {!listening && (
-            <select
-              value={speechEngine}
-              onChange={(e) => setSpeechEngine(e.target.value as "browser" | "deepgram")}
-              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-blue-500"
-            >
-              <option value="browser">Browser Speech</option>
-              <option value="deepgram">Deepgram</option>
-            </select>
+            <>
+              <select
+                value={speechEngine}
+                onChange={(e) => setSpeechEngine(e.target.value as "browser" | "deepgram" | "sherpa")}
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+              >
+                <option value="deepgram">Deepgram</option>
+                <option value="sherpa">Sherpa-ONNX (Local, Free)</option>
+                <option value="browser">Browser Speech</option>
+              </select>
+              {speechEngine === "sherpa" && sherpaStatus === "loading" && (
+                <p className="text-xs text-yellow-400 mt-1">Downloading model (~44MB, one-time)...</p>
+              )}
+              {speechEngine === "sherpa" && sherpaStatus === "ready" && (
+                <p className="text-xs text-green-400 mt-1">Model loaded (runs locally, free)</p>
+              )}
+              {speechEngine === "sherpa" && sherpaStatus === "not-loaded" && (
+                <p className="text-xs text-gray-500 mt-1">~44MB download on first use, cached after</p>
+              )}
+            </>
           )}
 
 
