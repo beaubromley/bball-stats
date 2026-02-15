@@ -169,6 +169,25 @@ export async function loadSherpaEngine(
 
           onStatus("Creating recognizer...");
 
+          // Write hotwords file to FS if provided
+          let hotwordsPath = "";
+          if (hotwords) {
+            const FS2 = win.Module.FS || win.FS;
+            const encoder = new TextEncoder();
+            if (FS2 && FS2.writeFile) {
+              FS2.writeFile("./hotwords.txt", encoder.encode(hotwords));
+              hotwordsPath = "./hotwords.txt";
+              onStatus(`Hotwords file written (${hotwords.split("\n").length} terms)`);
+            } else if (win.Module.FS_createDataFile) {
+              const arr = Array.from(encoder.encode(hotwords));
+              win.Module.FS_createDataFile("/", "hotwords.txt", arr, true, true);
+              hotwordsPath = "./hotwords.txt";
+              onStatus(`Hotwords file written (${hotwords.split("\n").length} terms)`);
+            } else {
+              onStatus("Warning: could not write hotwords file");
+            }
+          }
+
           // Build config
           const config = {
             featConfig: { sampleRate: 16000, featureDim: 80 },
@@ -192,16 +211,16 @@ export async function loadSherpaEngine(
               tokensBuf: "",
               tokensBufSize: 0,
             },
-            decodingMethod: hotwords ? "modified_beam_search" : "greedy_search",
+            decodingMethod: hotwordsPath ? "modified_beam_search" : "greedy_search",
             maxActivePaths: 4,
             enableEndpoint: 1,
             rule1MinTrailingSilence: 2.4,
             rule2MinTrailingSilence: 1.2,
             rule3MinUtteranceLength: 20,
-            hotwordsFile: "",
+            hotwordsFile: hotwordsPath,
             hotwordsScore: 2.0,
-            hotwordsBuf: hotwords || "",
-            hotwordsBufSize: hotwords ? hotwords.length : 0,
+            hotwordsBuf: "",
+            hotwordsBufSize: 0,
             ctcFstDecoderConfig: { graph: "", maxActive: 3000 },
             ruleFsts: "",
             ruleFars: "",
