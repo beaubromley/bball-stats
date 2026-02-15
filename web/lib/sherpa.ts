@@ -143,12 +143,28 @@ export async function loadSherpaEngine(
         clearTimeout(timeout);
         try {
           onStatus("Writing model files to WASM filesystem...");
-          const FS = win.Module.FS;
 
-          // Write each model file to the Emscripten virtual filesystem
-          for (const { name, data } of modelData) {
-            const uint8 = new Uint8Array(data);
-            FS.writeFile(`./${name}`, uint8);
+          // Emscripten exposes FS in different ways depending on build config
+          const FS = win.Module.FS || win.FS;
+          if (!FS || !FS.writeFile) {
+            // Fallback: try FS_createDataFile (older Emscripten API)
+            if (win.Module.FS_createDataFile) {
+              for (const { name, data } of modelData) {
+                const uint8 = new Uint8Array(data);
+                win.Module.FS_createDataFile("/", name, uint8, true, true);
+              }
+            } else {
+              throw new Error(
+                "Emscripten FS not available. The WASM module may require its .data file. " +
+                "Available Module keys: " + Object.keys(win.Module).filter((k: string) => k.startsWith("FS") || k.startsWith("_")).slice(0, 20).join(", ")
+              );
+            }
+          } else {
+            // Write each model file to the Emscripten virtual filesystem
+            for (const { name, data } of modelData) {
+              const uint8 = new Uint8Array(data);
+              FS.writeFile(`./${name}`, uint8);
+            }
           }
 
           onStatus("Creating recognizer...");
