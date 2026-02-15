@@ -18,6 +18,15 @@ class BballView extends WatchUi.View {
     var teamBNames as Lang.String = "";
     var targetScore as Lang.Number = 0;
     var failedTranscript as Lang.String = "";
+    var liveTranscript as Lang.String = "";
+
+    // Recent events feed (last 3 labels)
+    var recentEvent1 as Lang.String = "";
+    var recentEvent2 as Lang.String = "";
+    var recentEvent3 as Lang.String = "";
+    var recentEventType1 as Lang.String = "";
+    var recentEventType2 as Lang.String = "";
+    var recentEventType3 as Lang.String = "";
 
     // Polling
     var pollTimer as Timer.Timer?;
@@ -34,10 +43,8 @@ class BballView extends WatchUi.View {
     }
 
     function onShow() as Void {
-        // Start polling every 5 seconds
         pollTimer = new Timer.Timer();
         pollTimer.start(method(:onPoll), 1000, true);
-        // Immediate first fetch
         BballService.fetchGameState(method(:onDataReceived));
     }
 
@@ -67,16 +74,58 @@ class BballView extends WatchUi.View {
             lastEventPlayer = data["last_event_player"] as Lang.String?;
             lastEventPoints = data["last_event_points"] as Lang.Number?;
             targetScore = (data["target_score"] != null) ? (data["target_score"] as Lang.Number) : 0;
+
+            // Parse failed transcript
             var ft = data["last_failed_transcript"];
             if (ft != null) {
                 var ftStr = ft as Lang.String;
-                // Truncate to 30 chars for watch display
                 if (ftStr.length() > 30) {
                     ftStr = ftStr.substring(0, 30) + "...";
                 }
                 failedTranscript = ftStr;
             } else {
                 failedTranscript = "";
+            }
+
+            // Parse live transcript
+            var lt = data["live_transcript"];
+            if (lt != null) {
+                var ltStr = lt as Lang.String;
+                if (ltStr.length() > 35) {
+                    ltStr = ltStr.substring(0, 35) + "...";
+                }
+                liveTranscript = ltStr;
+            } else {
+                liveTranscript = "";
+            }
+
+            // Parse recent events (last 3 from the array)
+            recentEvent1 = "";
+            recentEvent2 = "";
+            recentEvent3 = "";
+            recentEventType1 = "";
+            recentEventType2 = "";
+            recentEventType3 = "";
+            var re = data["recent_events"];
+            if (re != null) {
+                var events = re as Lang.Array;
+                var size = events.size();
+                // Take last 3 events (array is chronological, newest at end)
+                if (size >= 1) {
+                    var e1 = events[size - 1] as Lang.Dictionary;
+                    recentEvent1 = (e1["label"] != null) ? (e1["label"] as Lang.String) : "";
+                    recentEventType1 = (e1["type"] != null) ? (e1["type"] as Lang.String) : "";
+                }
+                if (size >= 2) {
+                    var e2 = events[size - 2] as Lang.Dictionary;
+                    recentEvent2 = (e2["label"] != null) ? (e2["label"] as Lang.String) : "";
+                    recentEventType2 = (e2["type"] != null) ? (e2["type"] as Lang.String) : "";
+                }
+                if (size >= 3) {
+                    var e3 = events[size - 3] as Lang.Dictionary;
+                    recentEvent3 = (e3["label"] != null) ? (e3["label"] as Lang.String) : "";
+                    recentEventType3 = (e3["type"] != null) ? (e3["type"] as Lang.String) : "";
+                }
             }
 
             // Build name strings from arrays
@@ -117,85 +166,120 @@ class BballView extends WatchUi.View {
         return h.toString() + ":" + mStr + " " + ampm;
     }
 
+    function getEventColor(eventType as Lang.String) as Lang.Number {
+        if (eventType.equals("score")) { return Graphics.COLOR_GREEN; }
+        if (eventType.equals("steal")) { return Graphics.COLOR_YELLOW; }
+        if (eventType.equals("block")) { return Graphics.COLOR_PURPLE; }
+        if (eventType.equals("assist")) { return 0x6699FF; }
+        if (eventType.equals("correction")) { return Graphics.COLOR_RED; }
+        return Graphics.COLOR_LT_GRAY;
+    }
+
     function onUpdate(dc as Graphics.Dc) as Void {
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
         dc.clear();
 
         var w = dc.getWidth();
-        var h = dc.getHeight();
         var cx = w / 2;
 
         if (gameStatus.equals("idle")) {
-            drawIdleScreen(dc, cx, h);
+            drawIdleScreen(dc, cx, dc.getHeight());
             return;
         }
 
-        // --- Time at top ---
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, 14, Graphics.FONT_XTINY, formatTime(),
-                    Graphics.TEXT_JUSTIFY_CENTER);
-
-        // --- Team labels ---
-        dc.setColor(0x6699FF, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx - 50, 30, Graphics.FONT_XTINY, "TEAM A",
-                    Graphics.TEXT_JUSTIFY_CENTER);
-        dc.setColor(0xFF9933, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx + 50, 30, Graphics.FONT_XTINY, "TEAM B",
-                    Graphics.TEXT_JUSTIFY_CENTER);
-
-        // --- Large scores ---
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx - 45, 50, Graphics.FONT_NUMBER_HOT, teamAScore.toString(),
-                    Graphics.TEXT_JUSTIFY_CENTER);
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, 62, Graphics.FONT_MEDIUM, "-",
-                    Graphics.TEXT_JUSTIFY_CENTER);
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx + 45, 50, Graphics.FONT_NUMBER_HOT, teamBScore.toString(),
-                    Graphics.TEXT_JUSTIFY_CENTER);
-
-        // --- Last event ---
-        if (!lastEvent.equals("")) {
-            dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, 120, Graphics.FONT_SMALL, lastEvent,
-                        Graphics.TEXT_JUSTIFY_CENTER);
-        }
-
-        // --- Failed transcript (shown below last event) ---
-        if (!failedTranscript.equals("")) {
-            dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, 140, Graphics.FONT_XTINY, failedTranscript,
-                        Graphics.TEXT_JUSTIFY_CENTER);
-        }
-
-        // --- Status line ---
+        // --- Row 1: Time + Status ---
+        var timeStr = formatTime();
         if (gameStatus.equals("active")) {
-            var statusText = "LIVE";
+            var statusSuffix = " | LIVE";
             if (targetScore > 0) {
-                statusText = "to " + targetScore + " | LIVE";
+                statusSuffix = " | to " + targetScore;
             }
+            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx - 30, 8, Graphics.FONT_XTINY, timeStr,
+                        Graphics.TEXT_JUSTIFY_CENTER);
             dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, 150, Graphics.FONT_XTINY, statusText,
+            dc.drawText(cx + 45, 8, Graphics.FONT_XTINY, statusSuffix,
                         Graphics.TEXT_JUSTIFY_CENTER);
         } else if (gameStatus.equals("finished")) {
+            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx - 30, 8, Graphics.FONT_XTINY, timeStr,
+                        Graphics.TEXT_JUSTIFY_CENTER);
             dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, 150, Graphics.FONT_XTINY, "FINAL",
+            dc.drawText(cx + 45, 8, Graphics.FONT_XTINY, " | FINAL",
+                        Graphics.TEXT_JUSTIFY_CENTER);
+        }
+
+        // --- Row 2: Team labels ---
+        dc.setColor(0x6699FF, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx - 50, 26, Graphics.FONT_XTINY, "TEAM A",
+                    Graphics.TEXT_JUSTIFY_CENTER);
+        dc.setColor(0xFF9933, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx + 50, 26, Graphics.FONT_XTINY, "TEAM B",
+                    Graphics.TEXT_JUSTIFY_CENTER);
+
+        // --- Row 3: Large scores ---
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx - 45, 44, Graphics.FONT_NUMBER_HOT, teamAScore.toString(),
+                    Graphics.TEXT_JUSTIFY_CENTER);
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, 56, Graphics.FONT_MEDIUM, "-",
+                    Graphics.TEXT_JUSTIFY_CENTER);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx + 45, 44, Graphics.FONT_NUMBER_HOT, teamBScore.toString(),
+                    Graphics.TEXT_JUSTIFY_CENTER);
+
+        // --- Separator line ---
+        dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawLine(cx - 80, 98, cx + 80, 98);
+
+        // --- Recent events feed (last 3, newest on top) ---
+        var feedY = 102;
+        var lineH = 16;
+
+        if (!recentEvent1.equals("")) {
+            dc.setColor(getEventColor(recentEventType1), Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, feedY, Graphics.FONT_XTINY, recentEvent1,
+                        Graphics.TEXT_JUSTIFY_CENTER);
+            feedY += lineH;
+        }
+        if (!recentEvent2.equals("")) {
+            dc.setColor(getEventColor(recentEventType2), Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, feedY, Graphics.FONT_XTINY, recentEvent2,
+                        Graphics.TEXT_JUSTIFY_CENTER);
+            feedY += lineH;
+        }
+        if (!recentEvent3.equals("")) {
+            dc.setColor(getEventColor(recentEventType3), Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, feedY, Graphics.FONT_XTINY, recentEvent3,
+                        Graphics.TEXT_JUSTIFY_CENTER);
+            feedY += lineH;
+        }
+
+        // --- Live transcript / heard text ---
+        var transcriptY = 155;
+        if (!liveTranscript.equals("")) {
+            dc.setColor(Graphics.COLOR_BLUE, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, transcriptY, Graphics.FONT_XTINY, liveTranscript,
+                        Graphics.TEXT_JUSTIFY_CENTER);
+        } else if (!failedTranscript.equals("")) {
+            dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, transcriptY, Graphics.FONT_XTINY, failedTranscript,
                         Graphics.TEXT_JUSTIFY_CENTER);
         }
 
         // --- Undo button at bottom (only during active game with events) ---
         if (gameStatus.equals("active") && lastEventId != null) {
-            undoBtnY = 190;
-            undoBtnHeight = 36;
+            undoBtnY = 180;
+            undoBtnHeight = 34;
             if (undoConfirm) {
                 dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
-                dc.drawText(cx, undoBtnY + 6, Graphics.FONT_SMALL,
+                dc.drawText(cx, undoBtnY + 5, Graphics.FONT_SMALL,
                             "Undone!", Graphics.TEXT_JUSTIFY_CENTER);
             } else {
                 dc.setColor(0x990000, 0x990000);
-                dc.fillRoundedRectangle(cx - 45, undoBtnY, 90, undoBtnHeight, 8);
+                dc.fillRoundedRectangle(cx - 42, undoBtnY, 84, undoBtnHeight, 8);
                 dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-                dc.drawText(cx, undoBtnY + 6, Graphics.FONT_SMALL,
+                dc.drawText(cx, undoBtnY + 5, Graphics.FONT_SMALL,
                             "UNDO", Graphics.TEXT_JUSTIFY_CENTER);
             }
         }
@@ -203,7 +287,7 @@ class BballView extends WatchUi.View {
         // --- Error display ---
         if (!lastError.equals("")) {
             dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, 230, Graphics.FONT_XTINY, lastError,
+            dc.drawText(cx, 222, Graphics.FONT_XTINY, lastError,
                         Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
@@ -216,7 +300,7 @@ class BballView extends WatchUi.View {
         dc.drawText(cx, h / 2 + 10, Graphics.FONT_SMALL, "No active game",
                     Graphics.TEXT_JUSTIFY_CENTER);
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, h / 2 + 40, Graphics.FONT_XTINY, "Polling...  v1.1",
+        dc.drawText(cx, h / 2 + 40, Graphics.FONT_XTINY, "Polling...  v2.0",
                     Graphics.TEXT_JUSTIFY_CENTER);
         if (!lastError.equals("")) {
             dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
@@ -228,9 +312,7 @@ class BballView extends WatchUi.View {
     function onUndoComplete(responseCode as Lang.Number, data as Lang.Dictionary?) as Void {
         if (responseCode == 200) {
             undoConfirm = true;
-            // Refresh data immediately after undo
             BballService.fetchGameState(method(:onDataReceived));
-            // Clear "Undone!" after 2 seconds
             var confirmTimer = new Timer.Timer();
             confirmTimer.start(method(:clearUndoConfirm), 2000, false);
         }

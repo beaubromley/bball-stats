@@ -87,4 +87,11 @@ export async function initDb() {
   } catch {
     // Column already exists
   }
+
+  // Migration: add live_transcript column for watch display
+  try {
+    await db.execute("ALTER TABLE games ADD COLUMN live_transcript TEXT");
+  } catch {
+    // Column already exists
+  }
 }

@@ -152,6 +152,9 @@ export async function getActiveGameWatchData() {
       last_event_points: null,
       game_status: "idle" as const,
       target_score: null,
+      last_failed_transcript: null,
+      live_transcript: null,
+      recent_events: [],
     };
   }
 
@@ -212,6 +215,31 @@ export async function getActiveGameWatchData() {
     lastEvent = `${lastEventPlayer} +${lastEventPoints}`;
   }
 
+  // Get recent events of all types (last 5) for watch feed
+  const recentEventsResult = await db.execute({
+    sql: `SELECT ge.id, ge.event_type, ge.point_value, p.name as player_name
+          FROM game_events ge
+          JOIN players p ON ge.player_id = p.id
+          WHERE ge.game_id = ?
+          ORDER BY ge.created_at DESC
+          LIMIT 5`,
+    args: [gameId],
+  });
+
+  const recent_events = recentEventsResult.rows.map((r) => {
+    const type = r.event_type as string;
+    const name = (r.player_name as string).split(/\s/)[0];
+    const pts = r.point_value as number;
+    let label = "";
+    if (type === "score") label = `${name} +${pts}`;
+    else if (type === "correction") label = `UNDO ${name}`;
+    else if (type === "steal") label = `${name} STL`;
+    else if (type === "block") label = `${name} BLK`;
+    else if (type === "assist") label = `${name} AST`;
+    else label = `${name} ${type.toUpperCase()}`;
+    return { id: r.id as number, type, label };
+  }).reverse();
+
   return {
     game_id: gameId,
     team_a_score: Number(scores.team_a_score),
@@ -224,5 +252,8 @@ export async function getActiveGameWatchData() {
     last_event_points: lastEventPoints,
     game_status: (game.status as string) === "finished" ? ("finished" as const) : ("active" as const),
     target_score: game.target_score != null ? Number(game.target_score) : null,
+    last_failed_transcript: (game.last_failed_transcript as string) || null,
+    live_transcript: (game.live_transcript as string) || null,
+    recent_events,
   };
 }

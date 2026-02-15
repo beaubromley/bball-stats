@@ -4,6 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseTranscript, type ParsedCommand, type ScoringMode } from "@/lib/parser";
 import { loadSherpaEngine, downsampleBuffer, buildHotwords, type SherpaEngine } from "@/lib/sherpa";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Legend,
+} from "recharts";
 import BoxScore from "@/app/components/BoxScore";
 import { useAuth } from "@/app/components/AuthProvider";
 
@@ -136,6 +146,36 @@ export default function RecordPage() {
   }, []);
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
+
+  // Auto-clear stale interim text after 5 seconds of no updates
+  const interimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (interimTimerRef.current) clearTimeout(interimTimerRef.current);
+    if (interim) {
+      interimTimerRef.current = setTimeout(() => setInterim(""), 5000);
+    }
+    return () => { if (interimTimerRef.current) clearTimeout(interimTimerRef.current); };
+  }, [interim]);
+
+  // Push interim text to API for Garmin watch display (debounced 1s)
+  const liveTranscriptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPushedTranscript = useRef<string>("");
+  useEffect(() => {
+    if (liveTranscriptTimerRef.current) clearTimeout(liveTranscriptTimerRef.current);
+    const gid = gameRef.current.gameId;
+    if (!gid || gameRef.current.status !== "active") return;
+    const text = interim || transcript || "";
+    if (text === lastPushedTranscript.current) return;
+    liveTranscriptTimerRef.current = setTimeout(() => {
+      lastPushedTranscript.current = text;
+      fetch(`${API_BASE}/games/${gid}/live-transcript`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      }).catch(() => {});
+    }, 1000);
+    return () => { if (liveTranscriptTimerRef.current) clearTimeout(liveTranscriptTimerRef.current); };
+  }, [interim, transcript]);
 
   // Known players from GroupMe API (falls back to hardcoded list)
   const [knownPlayers, setKnownPlayers] = useState<KnownPlayer[]>(DEFAULT_PLAYERS);
@@ -1485,6 +1525,45 @@ export default function RecordPage() {
               <BoxScore gameId={game.gameId} />
             </div>
           )}
+          {/* Game Flow Chart */}
+          {(() => {
+            const teamASet = new Set(game.teamA.map((n) => n.toLowerCase()));
+            let a = 0, b = 0;
+            const flowData: { play: number; "Team A": number; "Team B": number }[] = [
+              { play: 0, "Team A": 0, "Team B": 0 },
+            ];
+            let playNum = 0;
+            for (const evt of game.events) {
+              if (evt.type === "score") {
+                const isTeamA = teamASet.has(evt.playerName.toLowerCase());
+                if (isTeamA) a += evt.points; else b += evt.points;
+                playNum++;
+                flowData.push({ play: playNum, "Team A": a, "Team B": b });
+              }
+            }
+            if (flowData.length <= 1) return null;
+            return (
+              <div className="my-4 text-left">
+                <h3 className="text-sm text-gray-500 mb-2">Game Flow</h3>
+                <div className="border border-gray-800 rounded-lg p-3">
+                  <ResponsiveContainer width="100%" height={180}>
+                    <LineChart data={flowData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
+                      <XAxis dataKey="play" tick={{ fontSize: 10, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151", borderRadius: "8px", fontSize: "12px", color: "#E5E7EB" }}
+                        labelFormatter={(v) => `Play ${v}`}
+                      />
+                      <Legend wrapperStyle={{ fontSize: "11px" }} formatter={(value) => <span style={{ color: "#D1D5DB" }}>{value}</span>} />
+                      <Line type="monotone" dataKey="Team A" stroke="#3B82F6" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="Team B" stroke="#F97316" strokeWidth={2} strokeDasharray="6 3" dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            );
+          })()}
           {saved !== "saved" && (
             <button
               onClick={saveGame}
