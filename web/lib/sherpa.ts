@@ -46,7 +46,8 @@ export async function loadSherpaEngine(
   await loadScript(`${WASM_CDN}/sherpa-onnx-asr.js`);
 
   return new Promise<SherpaEngine>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Sherpa init timeout (60s)")), 120000);
+    // 191MB download + WASM init can take a while — 5 min timeout
+    const timeout = setTimeout(() => reject(new Error("Sherpa init timeout (5 min)")), 300000);
 
     win.Module = {
       locateFile: (path: string) => `${WASM_CDN}/${path}`,
