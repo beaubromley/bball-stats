@@ -106,26 +106,29 @@ class BballView extends WatchUi.View {
             recentEventType1 = "";
             recentEventType2 = "";
             recentEventType3 = "";
-            var re = data["recent_events"];
-            if (re != null) {
-                var events = re as Lang.Array;
-                var size = events.size();
-                // Take last 3 events (array is chronological, newest at end)
-                if (size >= 1) {
-                    var e1 = events[size - 1] as Lang.Dictionary;
-                    recentEvent1 = (e1["label"] != null) ? (e1["label"] as Lang.String) : "";
-                    recentEventType1 = (e1["type"] != null) ? (e1["type"] as Lang.String) : "";
+            try {
+                var re = data["recent_events"];
+                if (re != null) {
+                    var events = re as Lang.Array;
+                    var size = events.size();
+                    if (size >= 1) {
+                        var e1 = events[size - 1] as Lang.Dictionary;
+                        recentEvent1 = (e1["label"] != null) ? (e1["label"] as Lang.String) : "";
+                        recentEventType1 = (e1["type"] != null) ? (e1["type"] as Lang.String) : "";
+                    }
+                    if (size >= 2) {
+                        var e2 = events[size - 2] as Lang.Dictionary;
+                        recentEvent2 = (e2["label"] != null) ? (e2["label"] as Lang.String) : "";
+                        recentEventType2 = (e2["type"] != null) ? (e2["type"] as Lang.String) : "";
+                    }
+                    if (size >= 3) {
+                        var e3 = events[size - 3] as Lang.Dictionary;
+                        recentEvent3 = (e3["label"] != null) ? (e3["label"] as Lang.String) : "";
+                        recentEventType3 = (e3["type"] != null) ? (e3["type"] as Lang.String) : "";
+                    }
                 }
-                if (size >= 2) {
-                    var e2 = events[size - 2] as Lang.Dictionary;
-                    recentEvent2 = (e2["label"] != null) ? (e2["label"] as Lang.String) : "";
-                    recentEventType2 = (e2["type"] != null) ? (e2["type"] as Lang.String) : "";
-                }
-                if (size >= 3) {
-                    var e3 = events[size - 3] as Lang.Dictionary;
-                    recentEvent3 = (e3["label"] != null) ? (e3["label"] as Lang.String) : "";
-                    recentEventType3 = (e3["type"] != null) ? (e3["type"] as Lang.String) : "";
-                }
+            } catch (ex) {
+                // Ignore — don't break core data parsing
             }
 
             // Build name strings from arrays

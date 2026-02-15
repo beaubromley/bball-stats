@@ -10,7 +10,8 @@ module BballService {
         var url = API_BASE + "/games/active";
         var options = {
             :method => Communications.HTTP_REQUEST_METHOD_GET,
-            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
+            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON,
+            :maxLength => 16384
         };
         Communications.makeWebRequest(url, null, options, callback);
     }
