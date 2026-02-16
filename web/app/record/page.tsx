@@ -884,6 +884,23 @@ export default function RecordPage() {
       } else if (cmd.type === "block" && cmd.playerName) {
         postBlockToApi(currentGame.gameId, cmd.playerName, text);
         postFailedTranscript(currentGame.gameId, null); // clear on success
+      } else if (cmd.type === "correction") {
+        // Find last score event to record correction in DB
+        const lastScore = [...currentGame.events].reverse().find((e) => e.type === "score");
+        if (lastScore) {
+          const evtId = lastScore.apiId || lastScore.id;
+          fetch(`${API_BASE}/games/${currentGame.gameId}/events`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              player_name: lastScore.playerName,
+              event_type: "correction",
+              point_value: -lastScore.points,
+              corrected_event_id: evtId,
+              raw_transcript: text,
+            }),
+          }).catch(() => {});
+        }
       } else if (cmd.type === "unknown") {
         postFailedTranscript(currentGame.gameId, text);
       }
