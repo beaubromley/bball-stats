@@ -28,6 +28,7 @@ const ALIASES: Record<string, string> = {
   gates: "gage",
   bow: "beau",
   bo: "beau",
+  o: "beau",
   add: "ed",
   john: "jon",
   garrett: "garett",
@@ -75,6 +76,11 @@ const ALIASES: Record<string, string> = {
   blocks: "block",
   bloc: "block",
   lock: "block",
+  tu: "two",
+  to: "two",
+  too: "two",
+  free: "three",
+  tree: "three",
   buckets: "bucket",
   buggy: "bucket",
   "lay up": "layup",
@@ -106,6 +112,9 @@ const SCORING_WORDS = new Set([
 
 function normalize(text: string): string {
   let t = text.toLowerCase().trim().replace(/[.,!?']/g, "");
+  // Split joined name+number combos: "joe3" → "joe 3", "beaub3" → "beaub 3"
+  t = t.replace(/([a-z])(\d)/g, "$1 $2");
+  t = t.replace(/(\d)([a-z])/g, "$1 $2");
   // Apply longest aliases first to avoid partial replacements
   const sorted = Object.entries(ALIASES).sort(
     (a, b) => b[0].length - a[0].length

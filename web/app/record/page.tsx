@@ -379,8 +379,8 @@ export default function RecordPage() {
       const params = new URLSearchParams({
         model: "nova-3",
         interim_results: "true",
-        endpointing: "300",
-        utterance_end_ms: "1000",
+        endpointing: "500",
+        utterance_end_ms: "1500",
         smart_format: "true",
       });
 
