@@ -16,6 +16,8 @@ import {
   ReferenceLine,
 } from "recharts";
 import BoxScore from "@/app/components/BoxScore";
+import Link from "next/link";
+import { useAuth } from "@/app/components/AuthProvider";
 
 const API_BASE = "/api";
 
@@ -55,6 +57,7 @@ interface WinProbResponse {
 function GameDetailInner() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
+  const { isAdmin } = useAuth();
   const [game, setGame] = useState<GameDetail | null>(null);
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [winProb, setWinProb] = useState<WinProbResponse | null>(null);
@@ -91,7 +94,17 @@ function GameDetailInner() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-2">Game Detail</h1>
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-3xl font-bold">Game Detail</h1>
+        {isAdmin && id && (
+          <Link
+            href={`/game/transcripts?id=${id}`}
+            className="text-sm text-gray-500 hover:text-blue-400 transition-colors"
+          >
+            Voice Log
+          </Link>
+        )}
+      </div>
       <p className="text-gray-500 text-sm mb-6">
         {new Date(game.start_time).toLocaleString()}
         {game.status === "finished" && (
