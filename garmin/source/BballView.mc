@@ -20,13 +20,9 @@ class BballView extends WatchUi.View {
     var failedTranscript as Lang.String = "";
     var liveTranscript as Lang.String = "";
 
-    // Recent events feed (last 3 labels)
+    // Most recent event (1 only)
     var recentEvent1 as Lang.String = "";
-    var recentEvent2 as Lang.String = "";
-    var recentEvent3 as Lang.String = "";
     var recentEventType1 as Lang.String = "";
-    var recentEventType2 as Lang.String = "";
-    var recentEventType3 as Lang.String = "";
 
     // Polling
     var pollTimer as Timer.Timer?;
@@ -99,13 +95,9 @@ class BballView extends WatchUi.View {
                 liveTranscript = "";
             }
 
-            // Parse recent events (last 3 from the array)
+            // Parse most recent event (1 only)
             recentEvent1 = "";
-            recentEvent2 = "";
-            recentEvent3 = "";
             recentEventType1 = "";
-            recentEventType2 = "";
-            recentEventType3 = "";
             try {
                 var re = data["recent_events"];
                 if (re != null) {
@@ -115,16 +107,6 @@ class BballView extends WatchUi.View {
                         var e1 = events[size - 1] as Lang.Dictionary;
                         recentEvent1 = (e1["label"] != null) ? (e1["label"] as Lang.String) : "";
                         recentEventType1 = (e1["type"] != null) ? (e1["type"] as Lang.String) : "";
-                    }
-                    if (size >= 2) {
-                        var e2 = events[size - 2] as Lang.Dictionary;
-                        recentEvent2 = (e2["label"] != null) ? (e2["label"] as Lang.String) : "";
-                        recentEventType2 = (e2["type"] != null) ? (e2["type"] as Lang.String) : "";
-                    }
-                    if (size >= 3) {
-                        var e3 = events[size - 3] as Lang.Dictionary;
-                        recentEvent3 = (e3["label"] != null) ? (e3["label"] as Lang.String) : "";
-                        recentEventType3 = (e3["type"] != null) ? (e3["type"] as Lang.String) : "";
                     }
                 }
             } catch (ex) {
@@ -231,48 +213,42 @@ class BballView extends WatchUi.View {
         dc.drawText(cx + 45, 44, Graphics.FONT_NUMBER_HOT, teamBScore.toString(),
                     Graphics.TEXT_JUSTIFY_CENTER);
 
-        // --- Separator line ---
-        dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawLine(cx - 80, 98, cx + 80, 98);
-
-        // --- Recent events feed (last 3, newest on top) ---
-        var feedY = 102;
-        var lineH = 16;
-
+        // --- Last event (single, centered) ---
         if (!recentEvent1.equals("")) {
             dc.setColor(getEventColor(recentEventType1), Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, feedY, Graphics.FONT_XTINY, recentEvent1,
+            dc.drawText(cx, 108, Graphics.FONT_SMALL, recentEvent1,
                         Graphics.TEXT_JUSTIFY_CENTER);
-            feedY += lineH;
-        }
-        if (!recentEvent2.equals("")) {
-            dc.setColor(getEventColor(recentEventType2), Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, feedY, Graphics.FONT_XTINY, recentEvent2,
-                        Graphics.TEXT_JUSTIFY_CENTER);
-            feedY += lineH;
-        }
-        if (!recentEvent3.equals("")) {
-            dc.setColor(getEventColor(recentEventType3), Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, feedY, Graphics.FONT_XTINY, recentEvent3,
-                        Graphics.TEXT_JUSTIFY_CENTER);
-            feedY += lineH;
         }
 
         // --- Live transcript / heard text ---
-        var transcriptY = 155;
         if (!liveTranscript.equals("")) {
             dc.setColor(Graphics.COLOR_BLUE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, transcriptY, Graphics.FONT_XTINY, liveTranscript,
+            dc.drawText(cx, 132, Graphics.FONT_XTINY, liveTranscript,
                         Graphics.TEXT_JUSTIFY_CENTER);
         } else if (!failedTranscript.equals("")) {
             dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, transcriptY, Graphics.FONT_XTINY, failedTranscript,
+            dc.drawText(cx, 132, Graphics.FONT_XTINY, failedTranscript,
                         Graphics.TEXT_JUSTIFY_CENTER);
         }
 
-        // --- Undo button at bottom (only during active game with events) ---
+        // --- Status line ---
+        if (gameStatus.equals("active")) {
+            var statusText = "LIVE";
+            if (targetScore > 0) {
+                statusText = "to " + targetScore + " | LIVE";
+            }
+            dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, 150, Graphics.FONT_XTINY, statusText,
+                        Graphics.TEXT_JUSTIFY_CENTER);
+        } else if (gameStatus.equals("finished")) {
+            dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, 150, Graphics.FONT_XTINY, "FINAL",
+                        Graphics.TEXT_JUSTIFY_CENTER);
+        }
+
+        // --- Undo button (only during active game with events) ---
         if (gameStatus.equals("active") && lastEventId != null) {
-            undoBtnY = 180;
+            undoBtnY = 170;
             undoBtnHeight = 34;
             if (undoConfirm) {
                 dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
@@ -290,7 +266,7 @@ class BballView extends WatchUi.View {
         // --- Error display ---
         if (!lastError.equals("")) {
             dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, 222, Graphics.FONT_XTINY, lastError,
+            dc.drawText(cx, 215, Graphics.FONT_XTINY, lastError,
                         Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
@@ -303,7 +279,7 @@ class BballView extends WatchUi.View {
         dc.drawText(cx, h / 2 + 10, Graphics.FONT_SMALL, "No active game",
                     Graphics.TEXT_JUSTIFY_CENTER);
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, h / 2 + 40, Graphics.FONT_XTINY, "Polling...  v2.0",
+        dc.drawText(cx, h / 2 + 40, Graphics.FONT_XTINY, "Polling...  v2.1",
                     Graphics.TEXT_JUSTIFY_CENTER);
         if (!lastError.equals("")) {
             dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);

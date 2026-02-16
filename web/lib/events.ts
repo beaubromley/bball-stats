@@ -92,6 +92,40 @@ export async function saveTranscript(gameId: string, rawText: string) {
   });
 }
 
+export async function deleteEvent(gameId: string, eventId: number) {
+  const db = getDb();
+  // Delete any corrections that reference this event
+  await db.execute({
+    sql: "DELETE FROM game_events WHERE game_id = ? AND corrected_event_id = ?",
+    args: [gameId, eventId],
+  });
+  await db.execute({
+    sql: "DELETE FROM game_events WHERE game_id = ? AND id = ?",
+    args: [gameId, eventId],
+  });
+}
+
+export async function updateEvent(
+  gameId: string,
+  eventId: number,
+  updates: { player_name?: string; point_value?: number }
+) {
+  const db = getDb();
+  if (updates.player_name) {
+    const playerId = await ensurePlayer(updates.player_name);
+    await db.execute({
+      sql: "UPDATE game_events SET player_id = ? WHERE game_id = ? AND id = ?",
+      args: [playerId, gameId, eventId],
+    });
+  }
+  if (updates.point_value != null) {
+    await db.execute({
+      sql: "UPDATE game_events SET point_value = ? WHERE game_id = ? AND id = ?",
+      args: [updates.point_value, gameId, eventId],
+    });
+  }
+}
+
 export async function endGame(gameId: string, winningTeam: "A" | "B") {
   const db = getDb();
   await db.execute({

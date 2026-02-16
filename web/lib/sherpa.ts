@@ -98,7 +98,7 @@ export async function loadSherpaEngine(
             rule2MinTrailingSilence: 1.2,
             rule3MinUtteranceLength: 20,
             hotwordsFile: hotwordsPath,
-            hotwordsScore: 2.0,
+            hotwordsScore: 3.5,
             hotwordsBuf: "",
             hotwordsBufSize: 0,
             ctcFstDecoderConfig: { graph: "", maxActive: 3000 },
@@ -156,7 +156,7 @@ export function buildHotwords(teamA: string[], teamB: string[]): string {
   const lines: string[] = [];
   for (const name of [...teamA, ...teamB]) {
     const first = name.split(/\s/)[0].toLowerCase();
-    if (first.length > 1) lines.push(`${first} :3.0`);
+    if (first.length > 1) lines.push(`${first} :5.0`);
   }
   for (const term of ["bucket", "layup", "dunk", "floater", "three", "deep", "downtown", "steal", "block", "assist", "undo", "cancel"]) {
     lines.push(`${term} :2.0`);

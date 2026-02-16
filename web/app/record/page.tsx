@@ -44,6 +44,7 @@ const DEFAULT_PLAYERS: KnownPlayer[] = [
 
 interface ScoringEvent {
   id: number;
+  apiId?: number;
   playerName: string;
   points: number;
   type: "score" | "correction" | "steal" | "block";
@@ -51,6 +52,7 @@ interface ScoringEvent {
   time: number;
   assistBy?: string;
   stealBy?: string;
+  team?: "A" | "B" | null;
 }
 
 interface GameState {
@@ -91,7 +93,7 @@ function calcScores(events: ScoringEvent[], state: GameState) {
     b = 0;
   for (const e of events) {
     if (e.type === "correction") continue;
-    const team = getTeam(state, e.playerName);
+    const team = e.team ?? getTeam(state, e.playerName);
     if (team === "A") a += e.points;
     else if (team === "B") b += e.points;
   }
@@ -695,6 +697,28 @@ export default function RecordPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ winning_team: game.winningTeam }),
         }).catch(() => {});
+      // Fetch API event IDs so post-game edits work
+      if (game.gameId) {
+        fetch(`${API_BASE}/games/${game.gameId}/events`)
+          .then((r) => r.json())
+          .then((apiEvents: { id: number; player_name: string; event_type: string; point_value: number }[]) => {
+            setGame((prev) => {
+              // Match API events to local events by type + player + points (in order)
+              const localScores = prev.events.filter((e) => e.type === "score");
+              const apiScores = apiEvents.filter((e) => e.event_type === "score");
+              const updated = [...prev.events];
+              let apiIdx = 0;
+              for (let i = 0; i < updated.length && apiIdx < apiScores.length; i++) {
+                if (updated[i].type === "score") {
+                  updated[i] = { ...updated[i], apiId: apiScores[apiIdx].id };
+                  apiIdx++;
+                }
+              }
+              return { ...prev, events: updated };
+            });
+          })
+          .catch(() => {});
+      }
       }
     }
     prevStatusRef.current = game.status;
@@ -901,6 +925,7 @@ export default function RecordPage() {
       time: Date.now(),
       assistBy: cmd.assistBy,
       stealBy: cmd.stealBy,
+      team: getTeam(state, cmd.playerName),
     };
     const events = [...state.events, evt];
     const newState = { ...state, events };
@@ -928,6 +953,7 @@ export default function RecordPage() {
       type: "steal",
       transcript: raw,
       time: Date.now(),
+      team: getTeam(state, cmd.playerName),
     };
     const events = [...state.events, evt];
 
@@ -947,6 +973,7 @@ export default function RecordPage() {
       type: "block",
       transcript: raw,
       time: Date.now(),
+      team: getTeam(state, cmd.playerName),
     };
     const events = [...state.events, evt];
 
@@ -1501,6 +1528,91 @@ export default function RecordPage() {
             Undo
           </button>
 
+          {/* Edit Teams mid-game */}
+          <details className="text-left">
+            <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-300 text-center">Edit Teams</summary>
+            <div className="mt-2 space-y-3 p-3 border border-gray-800 rounded-lg">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs text-blue-400 font-semibold mb-1">Team A</div>
+                  {game.teamA.map((name) => (
+                    <div key={name} className="flex items-center justify-between py-0.5">
+                      <span className="text-sm">{name}</span>
+                      <button
+                        onClick={() => {
+                          setGame((prev) => ({
+                            ...prev,
+                            teamA: prev.teamA.filter((p) => p !== name),
+                            teamB: [...prev.teamB, name],
+                          }));
+                          if (game.gameId) {
+                            fetch(`${API_BASE}/games/${game.gameId}/roster`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ player_name: name, new_team: "B" }),
+                            }).catch(() => {});
+                          }
+                        }}
+                        className="text-xs text-orange-400 hover:text-orange-300"
+                      >
+                        → B
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div className="text-xs text-orange-400 font-semibold mb-1">Team B</div>
+                  {game.teamB.map((name) => (
+                    <div key={name} className="flex items-center justify-between py-0.5">
+                      <span className="text-sm">{name}</span>
+                      <button
+                        onClick={() => {
+                          setGame((prev) => ({
+                            ...prev,
+                            teamB: prev.teamB.filter((p) => p !== name),
+                            teamA: [...prev.teamA, name],
+                          }));
+                          if (game.gameId) {
+                            fetch(`${API_BASE}/games/${game.gameId}/roster`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ player_name: name, new_team: "A" }),
+                            }).catch(() => {});
+                          }
+                        }}
+                        className="text-xs text-blue-400 hover:text-blue-300"
+                      >
+                        → A
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Add player..."
+                  className="flex-1 px-2 py-1 bg-gray-900 border border-gray-700 rounded text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const name = (e.target as HTMLInputElement).value.trim();
+                      if (!name) return;
+                      setGame((prev) => ({ ...prev, teamA: [...prev.teamA, name] }));
+                      if (game.gameId) {
+                        fetch(`${API_BASE}/games/${game.gameId}/roster`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ player_name: name, new_team: "A" }),
+                        }).catch(() => {});
+                      }
+                      (e.target as HTMLInputElement).value = "";
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </details>
+
           <button
             onClick={() => {
               const winner =
@@ -1606,13 +1718,22 @@ export default function RecordPage() {
           </p>
         ) : (
           <div className="space-y-1">
-            {[...game.events].reverse().map((evt) => (
+            {(() => {
+              const playNumbers = new Map<number, number>();
+              let playCount = 0;
+              for (const e of game.events) {
+                if (e.type === "score") { playCount++; playNumbers.set(e.id, playCount); }
+              }
+              return [...game.events].reverse().map((evt) => (
               <div
                 key={evt.id}
                 className={`flex items-center gap-3 py-1.5 border-b border-gray-900 ${
                   evt.type === "correction" ? "opacity-40" : ""
                 }`}
               >
+                <span className="text-xs text-gray-600 w-5 text-right tabular-nums">
+                  {playNumbers.get(evt.id) ?? ""}
+                </span>
                 <div className="text-sm flex-1">
                   <span>{evt.playerName}</span>
                   {evt.stealBy && (
@@ -1651,8 +1772,58 @@ export default function RecordPage() {
                     minute: "2-digit",
                   })}
                 </span>
+                {game.status === "finished" && evt.type === "score" && (
+                  <div className="flex gap-1 ml-1">
+                    <button
+                      onClick={() => {
+                        const newName = prompt("Player name:", evt.playerName);
+                        if (!newName || newName === evt.playerName) return;
+                        const evtId = evt.apiId || evt.id;
+                        if (game.gameId) {
+                          fetch(`${API_BASE}/games/${game.gameId}/events/${evtId}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ player_name: newName }),
+                          }).catch(() => {});
+                        }
+                        setGame((prev) => {
+                          const events = prev.events.map((e) =>
+                            e.id === evt.id ? { ...e, playerName: newName, team: getTeam(prev, newName) } : e
+                          );
+                          const scores = calcScores(events.filter((e) => e.type === "score"), { ...prev, events });
+                          return { ...prev, events, ...scores };
+                        });
+                      }}
+                      className="text-xs text-gray-600 hover:text-blue-400"
+                      title="Edit player"
+                    >
+                      &#9998;
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!confirm(`Delete ${evt.playerName} +${evt.points}?`)) return;
+                        const evtId = evt.apiId || evt.id;
+                        if (game.gameId) {
+                          fetch(`${API_BASE}/games/${game.gameId}/events/${evtId}`, {
+                            method: "DELETE",
+                          }).catch(() => {});
+                        }
+                        setGame((prev) => {
+                          const events = prev.events.filter((e) => e.id !== evt.id);
+                          const scores = calcScores(events.filter((e) => e.type === "score"), { ...prev, events });
+                          return { ...prev, events, ...scores };
+                        });
+                      }}
+                      className="text-xs text-gray-600 hover:text-red-400"
+                      title="Delete"
+                    >
+                      &#10005;
+                    </button>
+                  </div>
+                )}
               </div>
-            ))}
+            ));
+            })()}
           </div>
         )}
       </div>

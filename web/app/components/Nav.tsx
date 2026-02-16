@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/app/components/AuthProvider";
 
@@ -11,7 +10,7 @@ export default function Nav() {
     <nav className="border-b border-gray-800 px-6 py-4">
       <div className="max-w-5xl mx-auto flex items-center gap-8">
         <Link href="/">
-          <Image src="/logo.png" alt="Rankin YMCA Stats" width={120} height={40} priority />
+          <img src="/logo.png" alt="Rankin YMCA Stats" width={120} height={40} />
         </Link>
         <div className="flex gap-6 text-sm text-gray-400">
           <Link href="/" className="hover:text-white transition-colors">
