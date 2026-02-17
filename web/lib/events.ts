@@ -84,11 +84,11 @@ export async function setLiveTranscript(gameId: string, text: string | null) {
   });
 }
 
-export async function saveTranscript(gameId: string, rawText: string) {
+export async function saveTranscript(gameId: string, rawText: string, actedOn?: string | null) {
   const db = getDb();
   await db.execute({
-    sql: "INSERT INTO game_transcripts (game_id, raw_text) VALUES (?, ?)",
-    args: [gameId, rawText],
+    sql: "INSERT INTO game_transcripts (game_id, raw_text, acted_on) VALUES (?, ?, ?)",
+    args: [gameId, rawText, actedOn ?? null],
   });
 }
 

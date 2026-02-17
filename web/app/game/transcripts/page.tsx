@@ -11,6 +11,7 @@ const API_BASE = "/api";
 interface Transcript {
   id: number;
   raw_text: string;
+  acted_on: string | null;
   created_at: string;
 }
 
@@ -103,15 +104,18 @@ function TranscriptsInner() {
     return <div className="text-gray-500 text-center py-16">Game not found.</div>;
   }
 
-  // Build a set of raw_transcript strings that matched an event
+  // Build a set of raw_transcript strings that matched an event (fallback for old data without acted_on)
   const matchedTranscripts = new Set<string>();
   for (const evt of events) {
     if (evt.raw_transcript) matchedTranscripts.add(evt.raw_transcript);
   }
 
-  // Separate transcripts into matched (led to an event) vs unmatched (failed)
+  // Separate transcripts: acted_on column (new) or cross-reference with events (old data)
+  const recognizedTranscripts = transcripts.filter(
+    (t) => t.acted_on || matchedTranscripts.has(t.raw_text)
+  );
   const unmatchedTranscripts = transcripts.filter(
-    (t) => !matchedTranscripts.has(t.raw_text)
+    (t) => !t.acted_on && !matchedTranscripts.has(t.raw_text)
   );
 
   return (
@@ -133,14 +137,40 @@ function TranscriptsInner() {
         )}
       </p>
 
-      {/* Events with their raw transcripts */}
-      <h2 className="text-lg font-bold mb-3">Parsed Events</h2>
+      {/* Recognized segments — what was heard → what was interpreted */}
+      <h2 className="text-lg font-bold mb-3">Recognized</h2>
       <p className="text-xs text-gray-600 mb-3">What was heard → what was interpreted</p>
-      {events.length === 0 ? (
+      {recognizedTranscripts.length === 0 && events.length === 0 ? (
         <p className="text-gray-600 text-sm py-4">No events recorded.</p>
       ) : (
         <div className="space-y-1 mb-8">
-          {events.map((evt) => (
+          {/* Show transcript segments that have acted_on */}
+          {recognizedTranscripts.map((t) => (
+            <div
+              key={`t-${t.id}`}
+              className="flex items-start gap-3 py-2 border-b border-gray-900"
+            >
+              <span className="text-xs text-gray-600 w-14 shrink-0 pt-0.5">
+                {new Date(t.created_at).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-gray-400 italic truncate">
+                  &ldquo;{t.raw_text}&rdquo;
+                </div>
+                {t.acted_on && (
+                  <div className="text-sm font-medium text-green-400">
+                    {t.acted_on}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {/* Fallback: show events for old games without per-segment acted_on */}
+          {recognizedTranscripts.length === 0 && events.map((evt) => (
             <div
               key={evt.id}
               className="flex items-start gap-3 py-2 border-b border-gray-900"

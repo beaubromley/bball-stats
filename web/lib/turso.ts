@@ -94,4 +94,11 @@ export async function initDb() {
   } catch {
     // Column already exists
   }
+
+  // Migration: add acted_on column to game_transcripts for parse-on-recognition tracking
+  try {
+    await db.execute("ALTER TABLE game_transcripts ADD COLUMN acted_on TEXT");
+  } catch {
+    // Column already exists
+  }
 }

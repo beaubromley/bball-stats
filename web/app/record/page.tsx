@@ -53,6 +53,7 @@ interface ScoringEvent {
   assistBy?: string;
   stealBy?: string;
   team?: "A" | "B" | null;
+  undone?: boolean;
 }
 
 interface GameState {
@@ -92,7 +93,7 @@ function calcScores(events: ScoringEvent[], state: GameState) {
   let a = 0,
     b = 0;
   for (const e of events) {
-    if (e.type === "correction") continue;
+    if (e.type === "correction" || e.undone) continue;
     const team = e.team ?? getTeam(state, e.playerName);
     if (team === "A") a += e.points;
     else if (team === "B") b += e.points;
@@ -140,11 +141,23 @@ export default function RecordPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const dgAccumulatorRef = useRef("");
   const dgReconnectCount = useRef(0);
+  // Parse-on-recognition: last scored event ref for bolt-on assists
+  const lastScoredEventRef = useRef<{ id: number; time: number } | null>(null);
+  // Name carry-forward: buffer a bare player name for the next segment
+  const pendingNameRef = useRef<{ name: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  // Dual display: last accepted command text (green line)
+  const [acceptedCmd, setAcceptedCmd] = useState("");
+  const acceptedCmdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const [showDebug, setShowDebug] = useState(false);
   const addDebugLog = useCallback((msg: string) => {
     const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     setDebugLog((prev) => [`[${ts}] ${msg}`, ...prev].slice(0, 50));
+  }, []);
+  const showAcceptedCmd = useCallback((msg: string) => {
+    if (acceptedCmdTimerRef.current) clearTimeout(acceptedCmdTimerRef.current);
+    setAcceptedCmd(msg);
+    acceptedCmdTimerRef.current = setTimeout(() => setAcceptedCmd(""), 3000);
   }, []);
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
@@ -287,15 +300,6 @@ export default function RecordPage() {
       if (finalText) {
         setTranscript(finalText);
         setInterim("");
-        // Save raw transcript to DB before parsing (captures even failed parses)
-        const gid = gameRef.current.gameId;
-        if (gid && gameRef.current.status === "active") {
-          fetch(`${API_BASE}/games/${gid}/transcripts`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ raw_text: finalText }),
-          }).catch(() => {});
-        }
         handleVoiceResult(finalText);
       }
     };
@@ -433,25 +437,29 @@ export default function RecordPage() {
           if (!text) return;
 
           if (data.is_final) {
+            // Update raw accumulator for display
             dgAccumulatorRef.current += (dgAccumulatorRef.current ? " " : "") + text;
+            setInterim(dgAccumulatorRef.current);
+
+            // Parse this segment immediately (don't wait for speech_final)
+            // Check if there's a pending name to prepend
+            let textToParse = text;
+            const pending = pendingNameRef.current;
+            if (pending) {
+              clearTimeout(pending.timer);
+              pendingNameRef.current = null;
+              textToParse = pending.name + " " + text;
+            }
+
+            handleVoiceResult(textToParse);
+
             if (data.speech_final) {
-              const fullText = dgAccumulatorRef.current;
+              // Reset accumulator display on silence detection
+              setTranscript(dgAccumulatorRef.current);
               dgAccumulatorRef.current = "";
-              setTranscript(fullText);
-              setInterim("");
-              const gid = gameRef.current.gameId;
-              if (gid && gameRef.current.status === "active") {
-                fetch(`${API_BASE}/games/${gid}/transcripts`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ raw_text: fullText }),
-                }).catch(() => {});
-              }
-              handleVoiceResult(fullText);
-            } else {
-              setInterim(dgAccumulatorRef.current);
             }
           } else {
+            // Interim result — show raw audio
             setInterim(
               dgAccumulatorRef.current + (dgAccumulatorRef.current ? " " : "") + text
             );
@@ -597,10 +605,6 @@ export default function RecordPage() {
           if (lastResult.length > 0) {
             const finalText = lastResult; lastResult = "";
             setTranscript(finalText); setInterim("");
-            const gid = gameRef.current.gameId;
-            if (gid && gameRef.current.status === "active") {
-              fetch(`${API_BASE}/games/${gid}/transcripts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ raw_text: finalText }) }).catch(() => {});
-            }
             handleVoiceResult(finalText);
           }
           rec.reset(stm);
@@ -842,15 +846,27 @@ export default function RecordPage() {
       cmd.stealBy = voiceToDisplay.get(cmd.stealBy.toLowerCase()) || cmd.stealBy;
     }
 
-    // Reject score/steal/block without a recognized player name
-    if ((cmd.type === "score" || cmd.type === "steal" || cmd.type === "block") && !cmd.playerName) {
+    // Name carry-forward: if segment is JUST a known player name, buffer it
+    if (cmd.type === "unknown" && text.trim().split(/\s+/).length <= 2) {
+      const word = text.trim().toLowerCase();
+      const matched = voiceNames.find((v) => word.includes(v));
+      if (matched) {
+        if (pendingNameRef.current) clearTimeout(pendingNameRef.current.timer);
+        const timer = setTimeout(() => { pendingNameRef.current = null; }, 2000);
+        pendingNameRef.current = { name: text.trim(), timer };
+        return;
+      }
+    }
+
+    // Reject score/steal/block/assist without a recognized player name
+    if ((cmd.type === "score" || cmd.type === "steal" || cmd.type === "block" || cmd.type === "assist") && !cmd.playerName) {
       showRetryAlert(`Didn't catch a name — say again`);
       if (currentGame.gameId) postFailedTranscript(currentGame.gameId, text);
       return;
     }
 
     // Reject events where the player isn't on either team
-    if ((cmd.type === "score" || cmd.type === "steal" || cmd.type === "block") && cmd.playerName) {
+    if ((cmd.type === "score" || cmd.type === "steal" || cmd.type === "block" || cmd.type === "assist") && cmd.playerName) {
       if (!allDisplayNames.some((p) => p.toLowerCase() === cmd.playerName!.toLowerCase())) {
         showRetryAlert(`"${cmd.playerName}" isn't in this game`);
         if (currentGame.gameId) postFailedTranscript(currentGame.gameId, text);
@@ -858,11 +874,45 @@ export default function RecordPage() {
       }
     }
 
+    // --- Bolt-on assist: attach to last score within 5 seconds ---
+    if (cmd.type === "assist" && cmd.playerName) {
+      const last = lastScoredEventRef.current;
+      if (last && Date.now() - last.time < 5000) {
+        // Retroactively add assist to the last scored event
+        if (currentGame.gameId) {
+          fetch(`${API_BASE}/games/${currentGame.gameId}/events`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              player_name: cmd.playerName,
+              event_type: "assist",
+              point_value: 0,
+              raw_transcript: text,
+            }),
+          }).catch(() => {});
+        }
+        setGame((prev) => {
+          const events = prev.events.map((e) =>
+            e.id === last.id ? { ...e, assistBy: cmd.playerName } : e
+          );
+          return { ...prev, events };
+        });
+        showAcceptedCmd(`${cmd.playerName} AST`);
+      } else {
+        showRetryAlert("No recent score to attach assist to");
+      }
+      return;
+    }
+
     // Fire API calls ONCE, outside the state updater
+    let actedOn: string | null = null;
     if (currentGame.gameId) {
       if (cmd.type === "score" && cmd.playerName && cmd.points) {
         postScoreToApi(currentGame.gameId, cmd, text);
-        postFailedTranscript(currentGame.gameId, null); // clear on success
+        postFailedTranscript(currentGame.gameId, null);
+        actedOn = `${cmd.playerName} +${cmd.points}`;
+        if (cmd.assistBy) actedOn += ` (${cmd.assistBy} AST)`;
+        showAcceptedCmd(actedOn);
 
         // Check if this score triggers auto-end
         const isTeamA = currentGame.teamA.some(
@@ -880,13 +930,16 @@ export default function RecordPage() {
         }
       } else if (cmd.type === "steal" && cmd.playerName) {
         postStealToApi(currentGame.gameId, cmd.playerName, text);
-        postFailedTranscript(currentGame.gameId, null); // clear on success
+        postFailedTranscript(currentGame.gameId, null);
+        actedOn = `${cmd.playerName} STL`;
+        showAcceptedCmd(actedOn);
       } else if (cmd.type === "block" && cmd.playerName) {
         postBlockToApi(currentGame.gameId, cmd.playerName, text);
-        postFailedTranscript(currentGame.gameId, null); // clear on success
+        postFailedTranscript(currentGame.gameId, null);
+        actedOn = `${cmd.playerName} BLK`;
+        showAcceptedCmd(actedOn);
       } else if (cmd.type === "correction") {
-        // Find last score event to record correction in DB
-        const lastScore = [...currentGame.events].reverse().find((e) => e.type === "score");
+        const lastScore = [...currentGame.events].reverse().find((e) => e.type === "score" && !e.undone);
         if (lastScore) {
           const evtId = lastScore.apiId || lastScore.id;
           fetch(`${API_BASE}/games/${currentGame.gameId}/events`, {
@@ -901,16 +954,32 @@ export default function RecordPage() {
             }),
           }).catch(() => {});
         }
+        actedOn = "UNDO";
+        showAcceptedCmd(actedOn);
       } else if (cmd.type === "unknown") {
         postFailedTranscript(currentGame.gameId, text);
       }
+
+      // Save every segment to game_transcripts with acted_on result
+      fetch(`${API_BASE}/games/${currentGame.gameId}/transcripts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ raw_text: text, acted_on: actedOn }),
+      }).catch(() => {});
     }
 
     // Pure state update
     setGame((prev) => {
       switch (cmd.type) {
-        case "score":
-          return addScore(prev, cmd, text);
+        case "score": {
+          const newState = addScore(prev, cmd, text);
+          // Track last scored event for bolt-on assists
+          const lastEvt = newState.events[newState.events.length - 1];
+          if (lastEvt && lastEvt.type === "score") {
+            lastScoredEventRef.current = { id: lastEvt.id, time: lastEvt.time };
+          }
+          return newState;
+        }
         case "steal":
           return addSteal(prev, cmd, text);
         case "block":
@@ -925,7 +994,7 @@ export default function RecordPage() {
           return prev;
       }
     });
-  }, []);
+  }, [showAcceptedCmd]);
 
   function addScore(
     state: GameState,
@@ -1000,9 +1069,11 @@ export default function RecordPage() {
   function undoLast(state: GameState, raw: string): GameState {
     const lastScore = [...state.events]
       .reverse()
-      .find((e) => e.type === "score");
+      .find((e) => e.type === "score" && !e.undone);
     if (!lastScore) return state;
-    const filtered = state.events.filter((e) => e.id !== lastScore.id);
+    const events = state.events.map((e) =>
+      e.id === lastScore.id ? { ...e, undone: true } : e
+    );
     const correction: ScoringEvent = {
       id: nextId.current++,
       playerName: lastScore.playerName,
@@ -1011,12 +1082,9 @@ export default function RecordPage() {
       transcript: raw,
       time: Date.now(),
     };
-    const events = [...filtered, correction];
-    const newState = { ...state, events };
-    const scores = calcScores(
-      events.filter((e) => e.type === "score"),
-      newState
-    );
+    const allEvents = [...events, correction];
+    const newState = { ...state, events: allEvents };
+    const scores = calcScores(allEvents, newState);
     return { ...newState, ...scores };
   }
 
@@ -1266,10 +1334,19 @@ export default function RecordPage() {
         </div>
       )}
 
-      {/* Transcript display */}
-      {(transcript || interim) && (
-        <div className="text-center text-sm text-gray-500 italic py-1">
-          &ldquo;{interim || transcript}&rdquo;
+      {/* Dual transcript display */}
+      {(transcript || interim || acceptedCmd) && (
+        <div className="text-center py-1 space-y-0.5">
+          {(interim || transcript) && (
+            <div className="text-sm text-gray-500 italic">
+              &ldquo;{interim || transcript}&rdquo;
+            </div>
+          )}
+          {acceptedCmd && (
+            <div className="text-sm text-green-400 font-semibold">
+              {acceptedCmd}
+            </div>
+          )}
         </div>
       )}
 
@@ -1663,7 +1740,7 @@ export default function RecordPage() {
             ];
             let playNum = 0;
             for (const evt of game.events) {
-              if (evt.type === "score") {
+              if (evt.type === "score" && !evt.undone) {
                 const isTeamA = teamASet.has(evt.playerName.toLowerCase());
                 if (isTeamA) a += evt.points; else b += evt.points;
                 playNum++;
@@ -1739,19 +1816,19 @@ export default function RecordPage() {
               const playNumbers = new Map<number, number>();
               let playCount = 0;
               for (const e of game.events) {
-                if (e.type === "score") { playCount++; playNumbers.set(e.id, playCount); }
+                if (e.type === "score" && !e.undone) { playCount++; playNumbers.set(e.id, playCount); }
               }
               return [...game.events].reverse().map((evt) => (
               <div
                 key={evt.id}
                 className={`flex items-center gap-3 py-1.5 border-b border-gray-900 ${
-                  evt.type === "correction" ? "opacity-40" : ""
+                  evt.type === "correction" || evt.undone ? "opacity-40" : ""
                 }`}
               >
                 <span className="text-xs text-gray-600 w-5 text-right tabular-nums">
                   {playNumbers.get(evt.id) ?? ""}
                 </span>
-                <div className="text-sm flex-1">
+                <div className={`text-sm flex-1 ${evt.undone ? "line-through" : ""}`}>
                   <span>{evt.playerName}</span>
                   {evt.stealBy && (
                     <span className="text-yellow-400 text-xs ml-1">
@@ -1766,7 +1843,7 @@ export default function RecordPage() {
                 </div>
                 <span
                   className={`font-bold text-sm tabular-nums ${
-                    evt.type === "correction"
+                    evt.type === "correction" || evt.undone
                       ? "text-red-400"
                       : evt.type === "steal"
                         ? "text-yellow-400"

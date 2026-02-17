@@ -6,6 +6,7 @@ export type CommandType =
   | "set_teams"
   | "steal"
   | "block"
+  | "assist"
   | "unknown";
 
 export interface ParsedCommand {
@@ -324,6 +325,26 @@ export function parseTranscript(
       playerName: resolvePlayer(blockMatch[1], knownPlayers),
       confidence: 0.8,
     };
+  }
+
+  // --- Assist-only (no scoring word) ---
+  // Matches "Tyler assist" or "assist Tyler" when no shot type is present
+  if (/\bassists?\b/.test(text) && !TWO_RE.test(text) && !ONE_RE.test(text)) {
+    const assistOnlyMatch = text.match(/(\w+)\s+assists?(?:\s|$)/) || text.match(/assists?\s+(?:by\s+|to\s+)?(\w+)/);
+    if (assistOnlyMatch) {
+      const name = assistOnlyMatch[1];
+      if (!SCORING_WORDS.has(name) || name === "assist") {
+        const resolvedName = name === "assist" ? undefined : resolvePlayer(name, knownPlayers);
+        if (resolvedName) {
+          return {
+            ...result,
+            type: "assist",
+            playerName: resolvedName,
+            confidence: 0.8,
+          };
+        }
+      }
+    }
   }
 
   // --- Simple scoring ---
