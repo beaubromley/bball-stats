@@ -161,6 +161,8 @@ export default function RecordPage() {
   }, []);
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
+  // Remember last game's teams for "Run it back"
+  const lastGameTeamsRef = useRef<{ teamA: string[]; teamB: string[]; winningTeam: "A" | "B" | null } | null>(null);
 
   // Auto-clear stale interim text after 5 seconds of no updates
   const interimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -695,6 +697,8 @@ export default function RecordPage() {
   useEffect(() => {
     if (prevStatusRef.current !== "finished" && game.status === "finished") {
       stopListening();
+      // Save teams for "Run it back"
+      lastGameTeamsRef.current = { teamA: game.teamA, teamB: game.teamB, winningTeam: game.winningTeam };
       if (game.gameId && game.winningTeam) {
         fetch(`${API_BASE}/games/${game.gameId}/end`, {
           method: "POST",
@@ -1122,6 +1126,19 @@ export default function RecordPage() {
     setGame((prev) => ({ ...prev, status: "setup", targetScore: target, scoringMode: mode ?? prev.scoringMode }));
   }
 
+  function runItBack(target: number, mode?: ScoringMode) {
+    const last = lastGameTeamsRef.current;
+    if (!last) return;
+    // Winners become Team A
+    const newA = last.winningTeam === "B" ? last.teamB : last.teamA;
+    const newB = last.winningTeam === "B" ? last.teamA : last.teamB;
+    const newAssignments: Record<string, PlayerAssignment> = {};
+    for (const name of newA) newAssignments[name] = "A";
+    for (const name of newB) newAssignments[name] = "B";
+    setAssignments(newAssignments);
+    setGame((prev) => ({ ...prev, status: "setup", targetScore: target, scoringMode: mode ?? prev.scoringMode }));
+  }
+
   async function confirmTeams() {
     const teamA = Object.entries(assignments)
       .filter(([, team]) => team === "A")
@@ -1218,6 +1235,7 @@ export default function RecordPage() {
 
       setGame((prev) => ({ ...prev, gameId }));
       setSaved("saved");
+      router.push("/games");
     } catch {
       setSaved("error");
       setError("Failed to save game");
@@ -1233,6 +1251,7 @@ export default function RecordPage() {
       }
     }
     resetGame();
+    router.push("/games");
   }
 
   function resetGame() {
@@ -1416,6 +1435,14 @@ export default function RecordPage() {
               2s & 3s
             </button>
           </div>
+          {lastGameTeamsRef.current && (
+            <button
+              onClick={() => runItBack(game.targetScore)}
+              className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              Run It Back — Same Teams
+            </button>
+          )}
           <button
             onClick={() => startGame(11)}
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
