@@ -108,15 +108,15 @@ function GameDetailInner() {
       <p className="text-gray-500 text-sm mb-6">
         {new Date(game.start_time).toLocaleString()}
         {game.status === "finished" && (
-          <span className="ml-2 text-gray-400">
+          <span className="ml-2 text-gray-500 dark:text-gray-400">
             — Team {game.winning_team} wins
           </span>
         )}
       </p>
 
       <div className="grid grid-cols-2 gap-4 mb-8">
-        <div className="border border-gray-800 rounded-lg p-4">
-          <h3 className="text-sm text-gray-400 mb-2">Team A</h3>
+        <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+          <h3 className="text-sm text-gray-500 dark:text-gray-400 mb-2">Team A</h3>
           <ul className="space-y-1">
             {game.team_a.map((name) => (
               <li key={name} className="text-sm">
@@ -125,8 +125,8 @@ function GameDetailInner() {
             ))}
           </ul>
         </div>
-        <div className="border border-gray-800 rounded-lg p-4">
-          <h3 className="text-sm text-gray-400 mb-2">Team B</h3>
+        <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+          <h3 className="text-sm text-gray-500 dark:text-gray-400 mb-2">Team B</h3>
           <ul className="space-y-1">
             {game.team_b.map((name) => (
               <li key={name} className="text-sm">
@@ -199,7 +199,7 @@ function GameDetailInner() {
                 {leadChanges} Lead Change{leadChanges !== 1 ? "s" : ""}
               </span>
             </div>
-            <div className="border border-gray-800 rounded-lg p-4">
+            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={flowData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
@@ -259,7 +259,7 @@ function GameDetailInner() {
           return (
             <div className="mb-8">
               <h2 className="text-xl font-bold mb-4">Win Probability</h2>
-              <div className="border border-gray-800 rounded-lg p-6 text-center">
+              <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-6 text-center">
                 <p className="text-gray-500 text-sm">{winProb.message}</p>
               </div>
             </div>
@@ -284,7 +284,7 @@ function GameDetailInner() {
                 Based on {winProb.total_games_analyzed} games
               </span>
             </div>
-            <div className="border border-gray-800 rounded-lg p-4">
+            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
               <ResponsiveContainer width="100%" height={220}>
                 <AreaChart data={chartData}>
                   <defs>
@@ -392,7 +392,7 @@ function GameDetailInner() {
               return (
                 <div
                   key={event.id}
-                  className={`flex items-center gap-4 py-2 border-b border-gray-900 ${
+                  className={`flex items-center gap-4 py-2 border-b border-gray-100 dark:border-gray-900 ${
                     isCorrection ? "opacity-50" : ""
                   }`}
                 >
@@ -418,7 +418,7 @@ function GameDetailInner() {
                     {isCorrection ? "UNDO" : event.event_type === "score" ? `+${event.point_value}` : event.event_type.toUpperCase()}
                   </span>
                   {isScore && (
-                    <span className="text-sm text-gray-400 tabular-nums w-14 text-right">
+                    <span className="text-sm text-gray-500 dark:text-gray-400 tabular-nums w-14 text-right">
                       {scoreA}-{scoreB}
                     </span>
                   )}

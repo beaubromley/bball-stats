@@ -61,13 +61,13 @@ export default function BoxScore({ gameId }: { gameId: string }) {
         { label: "Team B", players: teamB, score: data.team_b_score },
       ].map(({ label, players, score }) => (
         <div key={label}>
-          <h3 className="text-sm text-gray-400 mb-2">
+          <h3 className="text-sm text-gray-500 dark:text-gray-400 mb-2">
             {label} &mdash; {score} pts
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-800 text-gray-500 text-xs font-display uppercase tracking-wider">
+                <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 text-xs font-display uppercase tracking-wider">
                   <th className="py-2 pr-3">Player</th>
                   <th className="py-2 pr-3 text-right">PTS</th>
                   <th className="py-2 pr-3 text-right">1s</th>
@@ -82,7 +82,7 @@ export default function BoxScore({ gameId }: { gameId: string }) {
                 {players.map((p) => (
                   <tr
                     key={p.player_id}
-                    className={`border-b border-gray-900 ${p.is_mvp ? "bg-yellow-50 dark:bg-yellow-900/20" : ""}`}
+                    className={`border-b border-gray-100 dark:border-gray-900 ${p.is_mvp ? "bg-yellow-50 dark:bg-yellow-900/20" : ""}`}
                   >
                     <td className="py-2 pr-3">
                       {p.player_name}

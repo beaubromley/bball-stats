@@ -1288,14 +1288,14 @@ export default function RecordPage() {
           <div className="text-6xl font-bold font-display tabular-nums">
             {game.teamAScore}
           </div>
-          <div className="text-xs text-gray-600 mt-1">
+          <div className="text-xs text-gray-400 dark:text-gray-600 mt-1">
             {game.teamA.join(", ") || setupTeamA.join(", ") || "—"}
           </div>
         </div>
         <div className="text-center px-4">
-          <div className="text-gray-600 font-bold">VS</div>
+          <div className="text-gray-400 dark:text-gray-600 font-bold">VS</div>
           <div
-            className={`text-xs font-bold mt-1 ${game.status === "active" ? "text-red-400" : "text-gray-600"}`}
+            className={`text-xs font-bold mt-1 ${game.status === "active" ? "text-red-400" : "text-gray-400 dark:text-gray-600"}`}
           >
             {game.status === "active"
               ? "LIVE"
@@ -1324,7 +1324,7 @@ export default function RecordPage() {
               >
                 to {game.targetScore}
               </button>
-              <div className="text-xs text-gray-600 mt-0.5">
+              <div className="text-xs text-gray-400 dark:text-gray-600 mt-0.5">
                 {game.scoringMode === "2s3s" ? "2s & 3s" : "1s & 2s"}
               </div>
             </>
@@ -1335,7 +1335,7 @@ export default function RecordPage() {
           <div className="text-6xl font-bold font-display tabular-nums">
             {game.teamBScore}
           </div>
-          <div className="text-xs text-gray-600 mt-1">
+          <div className="text-xs text-gray-400 dark:text-gray-600 mt-1">
             {game.teamB.join(", ") || setupTeamB.join(", ") || "—"}
           </div>
         </div>
@@ -1347,7 +1347,7 @@ export default function RecordPage() {
           <div
             className={`w-2.5 h-2.5 rounded-full ${listening ? "bg-green-400 animate-pulse" : "bg-gray-600"}`}
           />
-          <span className="text-sm text-gray-400">
+          <span className="text-sm text-gray-500 dark:text-gray-400">
             {listening ? "Listening..." : "Mic off"}
           </span>
         </div>
@@ -1371,8 +1371,8 @@ export default function RecordPage() {
 
       {/* Error */}
       {error && (
-        <div className="mx-auto max-w-sm py-2 px-4 bg-red-900/60 border border-red-500 rounded-lg flex items-center justify-between gap-2">
-          <span className="text-red-200 text-sm font-medium">{error}</span>
+        <div className="mx-auto max-w-sm py-2 px-4 bg-red-50 dark:bg-red-900/60 border border-red-300 dark:border-red-500 rounded-lg flex items-center justify-between gap-2">
+          <span className="text-red-600 dark:text-red-200 text-sm font-medium">{error}</span>
           <button
             onClick={() => setError("")}
             className="text-red-400 hover:text-red-200 text-lg font-bold leading-none"
@@ -1387,7 +1387,7 @@ export default function RecordPage() {
         <div className="py-1">
           <button
             onClick={() => setShowDebug((p) => !p)}
-            className="text-xs text-gray-600 underline"
+            className="text-xs text-gray-400 dark:text-gray-600 underline"
           >
             {showDebug ? "Hide" : "Show"} debug log ({debugLog.length})
           </button>
@@ -1399,7 +1399,7 @@ export default function RecordPage() {
               >
                 Copy log
               </button>
-              <div className="p-2 bg-gray-950 border border-gray-800 rounded text-xs text-gray-400 font-mono max-h-40 overflow-y-auto">
+              <div className="p-2 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded text-xs text-gray-500 dark:text-gray-400 font-mono max-h-40 overflow-y-auto">
                 {debugLog.map((line, i) => (
                   <div key={i}>{line}</div>
                 ))}
@@ -1419,7 +1419,7 @@ export default function RecordPage() {
               className={`px-3 py-1 text-sm rounded-lg font-medium transition-colors ${
                 game.scoringMode === "1s2s"
                   ? "bg-blue-600 text-white"
-                  : "border border-gray-700 text-gray-400 hover:border-gray-500"
+                  : "border border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500"
               }`}
             >
               1s & 2s
@@ -1429,7 +1429,7 @@ export default function RecordPage() {
               className={`px-3 py-1 text-sm rounded-lg font-medium transition-colors ${
                 game.scoringMode === "2s3s"
                   ? "bg-blue-600 text-white"
-                  : "border border-gray-700 text-gray-400 hover:border-gray-500"
+                  : "border border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500"
               }`}
             >
               2s & 3s
@@ -1468,7 +1468,7 @@ export default function RecordPage() {
               type="number"
               min={1}
               placeholder="Custom"
-              className="flex-1 py-2.5 px-3 bg-gray-900 border border-gray-700 text-white rounded-lg text-center focus:border-blue-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              className="flex-1 py-2.5 px-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg text-center focus:border-blue-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   const val = parseInt((e.target as HTMLInputElement).value);
@@ -1494,7 +1494,7 @@ export default function RecordPage() {
       {/* --- Setup: pick teams --- */}
       {game.status === "setup" && (
         <div className="space-y-4 py-4">
-          <p className="text-sm text-gray-400 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
             Tap to assign: <span className="text-blue-400">Team A</span> →{" "}
             <span className="text-orange-400">Team B</span> → unassigned
           </p>
@@ -1502,7 +1502,7 @@ export default function RecordPage() {
             <p className="text-xs text-green-600 text-center">Players from GroupMe (last 2 days)</p>
           )}
           {playersSource === "loading" && (
-            <p className="text-xs text-gray-600 text-center">Loading players from GroupMe...</p>
+            <p className="text-xs text-gray-400 dark:text-gray-600 text-center">Loading players from GroupMe...</p>
           )}
 
           {/* Player grid */}
@@ -1516,7 +1516,7 @@ export default function RecordPage() {
                       ? "bg-blue-600/20 border-blue-500 text-blue-300"
                       : assignments[player.name] === "B"
                         ? "bg-orange-600/20 border-orange-500 text-orange-300"
-                        : "bg-gray-900 border-gray-700 text-gray-400"
+                        : "bg-gray-50 dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400"
                   }`}
                 >
                   {player.name}
@@ -1531,12 +1531,12 @@ export default function RecordPage() {
               value={newPlayerName}
               onChange={(e) => setNewPlayerName(e.target.value)}
               placeholder="Add new player..."
-              className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
+              className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-sm placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
               onKeyDown={(e) => e.key === "Enter" && addNewPlayer()}
             />
             <button
               onClick={addNewPlayer}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold rounded-lg transition-colors"
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-white text-sm font-semibold rounded-lg transition-colors"
             >
               Add
             </button>
@@ -1548,7 +1548,7 @@ export default function RecordPage() {
               <div className="text-blue-400 font-semibold mb-1">
                 Team A ({setupTeamA.length})
               </div>
-              <div className="text-gray-400">
+              <div className="text-gray-500 dark:text-gray-400">
                 {setupTeamA.join(", ") || "—"}
               </div>
             </div>
@@ -1556,7 +1556,7 @@ export default function RecordPage() {
               <div className="text-orange-400 font-semibold mb-1">
                 Team B ({setupTeamB.length})
               </div>
-              <div className="text-gray-400">
+              <div className="text-gray-500 dark:text-gray-400">
                 {setupTeamB.join(", ") || "—"}
               </div>
             </div>
@@ -1566,7 +1566,7 @@ export default function RecordPage() {
           <button
             onClick={confirmTeams}
             disabled={setupTeamA.length === 0 || setupTeamB.length === 0}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-800 disabled:text-gray-600 text-white font-semibold rounded-lg transition-colors"
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 dark:disabled:bg-gray-800 disabled:text-gray-400 dark:disabled:text-gray-600 text-white font-semibold rounded-lg transition-colors"
           >
             Start Game (to {game.targetScore}, {game.scoringMode === "2s3s" ? "2s & 3s" : "1s & 2s"})
           </button>
@@ -1575,7 +1575,7 @@ export default function RecordPage() {
 
       {/* --- Retry alert --- */}
       {retryAlert && (
-        <div className="mx-auto max-w-sm py-2 px-4 bg-red-900/80 border border-red-500 rounded-lg text-center text-red-200 text-sm font-semibold animate-pulse">
+        <div className="mx-auto max-w-sm py-2 px-4 bg-red-50 dark:bg-red-900/80 border border-red-300 dark:border-red-500 rounded-lg text-center text-red-600 dark:text-red-200 text-sm font-semibold animate-pulse">
           {retryAlert}
         </div>
       )}
@@ -1589,7 +1589,7 @@ export default function RecordPage() {
               <select
                 value={speechEngine}
                 onChange={(e) => setSpeechEngine(e.target.value as "browser" | "deepgram" | "sherpa")}
-                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
               >
                 <option value="deepgram">Deepgram</option>
                 <option value="sherpa">Sherpa-ONNX (Local, Free)</option>
@@ -1611,7 +1611,7 @@ export default function RecordPage() {
               <select
                 value={selectedDeviceId}
                 onChange={(e) => setSelectedDeviceId(e.target.value)}
-                className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+                className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
               >
                 <option value="">Default Microphone</option>
                 {audioDevices.map((d) => (
@@ -1622,7 +1622,7 @@ export default function RecordPage() {
               </select>
               <button
                 onClick={refreshDevices}
-                className="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm text-gray-400 transition-colors"
+                className="px-3 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-500 dark:text-gray-400 transition-colors"
                 title="Refresh device list"
               >
                 Refresh
@@ -1644,15 +1644,15 @@ export default function RecordPage() {
           {/* Manual undo */}
           <button
             onClick={manualUndo}
-            className="w-full py-2.5 bg-red-900/50 hover:bg-red-900 text-white font-semibold rounded-lg transition-colors"
+            className="w-full py-2.5 bg-red-100 dark:bg-red-900/50 hover:bg-red-200 dark:hover:bg-red-900 text-red-700 dark:text-white font-semibold rounded-lg transition-colors"
           >
             Undo
           </button>
 
           {/* Edit Teams mid-game */}
           <details className="text-left">
-            <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-300 text-center">Edit Teams</summary>
-            <div className="mt-2 space-y-3 p-3 border border-gray-800 rounded-lg">
+            <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-900 dark:hover:text-gray-300 text-center">Edit Teams</summary>
+            <div className="mt-2 space-y-3 p-3 border border-gray-200 dark:border-gray-800 rounded-lg">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="text-xs text-blue-400 font-semibold mb-1">Team A</div>
@@ -1713,7 +1713,7 @@ export default function RecordPage() {
                 <input
                   type="text"
                   placeholder="Add player..."
-                  className="flex-1 px-2 py-1 bg-gray-900 border border-gray-700 rounded text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
+                  className="flex-1 px-2 py-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       const name = (e.target as HTMLInputElement).value.trim();
@@ -1740,7 +1740,7 @@ export default function RecordPage() {
                 game.teamAScore > game.teamBScore ? "A" : "B";
               if (confirm(`End game? Team ${winner} wins?`)) endGame(winner);
             }}
-            className="w-full py-2.5 border border-gray-700 text-gray-400 font-semibold rounded-lg hover:bg-gray-900 transition-colors"
+            className="w-full py-2.5 border border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 font-semibold rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors"
           >
             End Game
           </button>
@@ -1778,7 +1778,7 @@ export default function RecordPage() {
             return (
               <div className="my-4 text-left">
                 <h3 className="text-sm text-gray-500 mb-2">Game Flow</h3>
-                <div className="border border-gray-800 rounded-lg p-3">
+                <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 bg-white dark:bg-transparent">
                   <ResponsiveContainer width="100%" height={180}>
                     <LineChart data={flowData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
@@ -1832,7 +1832,7 @@ export default function RecordPage() {
       <div className="py-4">
         <h2 className="text-sm text-gray-500 mb-2">Event Log</h2>
         {game.events.length === 0 ? (
-          <p className="text-sm text-gray-700 text-center py-8">
+          <p className="text-sm text-gray-300 dark:text-gray-700 text-center py-8">
             {game.status === "active"
               ? 'Say "bucket" (+1) or "two" (+2), with a name for other players'
               : "Start a game to begin tracking"}
@@ -1848,11 +1848,11 @@ export default function RecordPage() {
               return [...game.events].reverse().map((evt) => (
               <div
                 key={evt.id}
-                className={`flex items-center gap-3 py-1.5 border-b border-gray-900 ${
+                className={`flex items-center gap-3 py-1.5 border-b border-gray-100 dark:border-gray-900 ${
                   evt.type === "correction" || evt.undone ? "opacity-40" : ""
                 }`}
               >
-                <span className="text-xs text-gray-600 w-5 text-right tabular-nums">
+                <span className="text-xs text-gray-400 dark:text-gray-600 w-5 text-right tabular-nums">
                   {playNumbers.get(evt.id) ?? ""}
                 </span>
                 <div className={`text-sm flex-1 ${evt.undone ? "line-through" : ""}`}>
@@ -1887,7 +1887,7 @@ export default function RecordPage() {
                         ? "BLK"
                         : `+${evt.points}`}
                 </span>
-                <span className="text-xs text-gray-600 w-12 text-right">
+                <span className="text-xs text-gray-400 dark:text-gray-600 w-12 text-right">
                   {new Date(evt.time).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -1915,7 +1915,7 @@ export default function RecordPage() {
                           return { ...prev, events, ...scores };
                         });
                       }}
-                      className="text-xs text-gray-600 hover:text-blue-400"
+                      className="text-xs text-gray-400 dark:text-gray-600 hover:text-blue-400"
                       title="Edit player"
                     >
                       &#9998;
@@ -1935,7 +1935,7 @@ export default function RecordPage() {
                           return { ...prev, events, ...scores };
                         });
                       }}
-                      className="text-xs text-gray-600 hover:text-red-400"
+                      className="text-xs text-gray-400 dark:text-gray-600 hover:text-red-400"
                       title="Delete"
                     >
                       &#10005;

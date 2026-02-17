@@ -50,7 +50,7 @@ export default function Home() {
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-gray-800 text-gray-400 text-sm">
+              <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-sm">
                 <th className="py-3 pr-4">#</th>
                 <th className="py-3 pr-4">Player</th>
                 <th className="py-3 pr-4 text-right">GP</th>
@@ -68,7 +68,7 @@ export default function Home() {
               {players.map((player, i) => (
                 <tr
                   key={player.id}
-                  className="border-b border-gray-900 hover:bg-gray-900/50 transition-colors"
+                  className="border-b border-gray-100 dark:border-gray-900 hover:bg-gray-100 dark:hover:bg-gray-900/50 transition-colors"
                 >
                   <td className="py-3 pr-4 text-gray-500">{i + 1}</td>
                   <td className="py-3 pr-4">

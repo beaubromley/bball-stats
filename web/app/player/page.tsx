@@ -102,7 +102,7 @@ function PlayerDetailInner() {
         ].map(({ label, value }) => (
           <div
             key={label}
-            className="border border-gray-800 rounded-lg p-4 text-center"
+            className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center"
           >
             <div className="text-xs text-gray-500 mb-1">{label}</div>
             <div className="text-2xl font-bold font-display tabular-nums">{value}</div>
@@ -110,8 +110,8 @@ function PlayerDetailInner() {
         ))}
       </div>
 
-      <div className="border border-gray-800 rounded-lg p-4 mb-8">
-        <h2 className="text-sm text-gray-400 mb-3">Shooting</h2>
+      <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 mb-8">
+        <h2 className="text-sm text-gray-500 dark:text-gray-400 mb-3">Shooting</h2>
         <div className="flex gap-8">
           <div>
             <span className="text-2xl font-bold tabular-nums">
@@ -129,8 +129,8 @@ function PlayerDetailInner() {
       </div>
 
       {chartData.length > 1 && (
-        <div className="border border-gray-800 rounded-lg p-4 mb-8">
-          <h2 className="text-sm text-gray-400 mb-3">Scoring Trend</h2>
+        <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 mb-8 bg-white dark:bg-transparent">
+          <h2 className="text-sm text-gray-500 dark:text-gray-400 mb-3">Scoring Trend</h2>
           <ResponsiveContainer width="100%" height={140}>
             <AreaChart data={chartData}>
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#6B7280" }} tickLine={false} axisLine={false} />
@@ -149,7 +149,7 @@ function PlayerDetailInner() {
           {games.map((game) => (
             <div
               key={game.id}
-              className="flex items-center gap-4 py-2 border-b border-gray-900"
+              className="flex items-center gap-4 py-2 border-b border-gray-100 dark:border-gray-900"
             >
               <span
                 className={`font-bold text-sm w-6 ${
@@ -158,7 +158,7 @@ function PlayerDetailInner() {
               >
                 {game.result}
               </span>
-              <span className="flex-1 text-sm text-gray-400">
+              <span className="flex-1 text-sm text-gray-500 dark:text-gray-400">
                 {new Date(game.start_time).toLocaleDateString()}
               </span>
               <span className="tabular-nums font-medium">

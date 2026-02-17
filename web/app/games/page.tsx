@@ -69,14 +69,14 @@ export default function GamesPage() {
         <div className="space-y-8">
           {groupBySeason(games).map(({ season, games: seasonGames }) => (
             <div key={season.key}>
-              <h2 className="text-lg font-bold text-gray-300 mb-3 border-b border-gray-800 pb-2">
+              <h2 className="text-lg font-bold text-gray-700 dark:text-gray-300 mb-3 border-b border-gray-200 dark:border-gray-800 pb-2">
                 {season.label}
               </h2>
               <div className="space-y-4">
                 {seasonGames.map((game) => (
                   <div
                     key={game.id}
-                    className="border border-gray-800 rounded-lg p-4 hover:border-gray-600 transition-colors"
+                    className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
                   >
                     <Link
                       href={`/game?id=${game.id}`}
@@ -94,7 +94,7 @@ export default function GamesPage() {
                             </div>
                           </div>
 
-                          <div className="text-gray-600 text-sm">vs</div>
+                          <div className="text-gray-400 dark:text-gray-600 text-sm">vs</div>
 
                           <div className="text-center">
                             <div className="text-xs text-gray-500 mb-1">Team B</div>
@@ -117,7 +117,7 @@ export default function GamesPage() {
                           >
                             {game.status === "active" ? "LIVE" : "FINAL"}
                           </div>
-                          <div className="text-xs text-gray-600 mt-1">
+                          <div className="text-xs text-gray-400 dark:text-gray-600 mt-1">
                             {new Date(game.start_time).toLocaleDateString()}
                           </div>
                         </div>
@@ -126,13 +126,13 @@ export default function GamesPage() {
 
                     {/* Action buttons (admin only) */}
                     {isAdmin && (
-                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-800">
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-800">
                       {/* End Game (only for active games) */}
                       {game.status === "active" && (
                         <>
                           {endingGame === game.id ? (
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-400">Winner:</span>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">Winner:</span>
                               <button
                                 onClick={() => handleEndGame(game.id, "A")}
                                 className="px-3 py-1 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white"
@@ -147,7 +147,7 @@ export default function GamesPage() {
                               </button>
                               <button
                                 onClick={() => setEndingGame(null)}
-                                className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300"
+                                className="px-2 py-1 text-xs text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"
                               >
                                 Cancel
                               </button>
@@ -155,7 +155,7 @@ export default function GamesPage() {
                           ) : (
                             <button
                               onClick={() => setEndingGame(game.id)}
-                              className="px-3 py-1 text-xs rounded border border-yellow-700 text-yellow-500 hover:bg-yellow-900/30"
+                              className="px-3 py-1 text-xs rounded border border-yellow-300 dark:border-yellow-700 text-yellow-600 dark:text-yellow-500 hover:bg-yellow-100 dark:hover:bg-yellow-900/30"
                             >
                               End Game
                             </button>
@@ -176,7 +176,7 @@ export default function GamesPage() {
                             </button>
                             <button
                               onClick={() => setConfirmDelete(null)}
-                              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300"
+                              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"
                             >
                               No
                             </button>

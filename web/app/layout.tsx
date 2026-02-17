@@ -3,6 +3,7 @@ import { Inter, Bebas_Neue } from "next/font/google";
 import SpaRedirect from "./spa-redirect";
 import RegisterSW from "./register-sw";
 import { AuthProvider } from "./components/AuthProvider";
+import ThemeProvider from "./components/ThemeProvider";
 import Nav from "./components/Nav";
 import "./globals.css";
 
@@ -35,19 +36,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body
-        className={`${inter.variable} ${bebasNeue.variable} antialiased bg-gray-950 text-gray-100 min-h-screen`}
+        className={`${inter.variable} ${bebasNeue.variable} antialiased bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen`}
       >
-        <AuthProvider>
-          <Nav />
-          <SpaRedirect />
-          <RegisterSW />
-          <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <Nav />
+            <SpaRedirect />
+            <RegisterSW />
+            <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

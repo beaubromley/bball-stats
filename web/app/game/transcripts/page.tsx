@@ -55,7 +55,7 @@ function eventColor(type: string): string {
     case "steal": return "text-yellow-400";
     case "block": return "text-purple-400";
     case "assist": return "text-blue-400";
-    default: return "text-gray-400";
+    default: return "text-gray-500 dark:text-gray-400";
   }
 }
 
@@ -143,7 +143,7 @@ function TranscriptsInner() {
       <div className="flex items-center gap-4 mb-6">
         <Link
           href={`/game?id=${id}`}
-          className="text-sm text-gray-500 hover:text-white transition-colors"
+          className="text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           &larr; Back to Game
         </Link>
@@ -158,7 +158,7 @@ function TranscriptsInner() {
       </p>
 
       {timeline.length === 0 ? (
-        <p className="text-gray-600 text-sm py-4">No events recorded.</p>
+        <p className="text-gray-400 dark:text-gray-600 text-sm py-4">No events recorded.</p>
       ) : (
         <div className="space-y-1">
           {timeline.map((entry) => {
@@ -167,9 +167,9 @@ function TranscriptsInner() {
               return (
                 <div
                   key={`t-${t.id}`}
-                  className="flex items-start gap-3 py-2 border-b border-gray-900"
+                  className="flex items-start gap-3 py-2 border-b border-gray-100 dark:border-gray-900"
                 >
-                  <span className="text-xs text-gray-600 w-14 shrink-0 pt-0.5">
+                  <span className="text-xs text-gray-400 dark:text-gray-600 w-14 shrink-0 pt-0.5">
                     {new Date(t.created_at).toLocaleTimeString([], {
                       hour: "2-digit",
                       minute: "2-digit",
@@ -177,7 +177,7 @@ function TranscriptsInner() {
                     })}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className={`text-sm italic truncate ${entry.recognized ? "text-gray-400" : "text-orange-400"}`}>
+                    <div className={`text-sm italic truncate ${entry.recognized ? "text-gray-500 dark:text-gray-400" : "text-orange-400"}`}>
                       &ldquo;{t.raw_text}&rdquo;
                     </div>
                     {t.acted_on && (
@@ -193,9 +193,9 @@ function TranscriptsInner() {
               return (
                 <div
                   key={`e-${evt.id}`}
-                  className="flex items-start gap-3 py-2 border-b border-gray-900"
+                  className="flex items-start gap-3 py-2 border-b border-gray-100 dark:border-gray-900"
                 >
-                  <span className="text-xs text-gray-600 w-14 shrink-0 pt-0.5">
+                  <span className="text-xs text-gray-400 dark:text-gray-600 w-14 shrink-0 pt-0.5">
                     {new Date(evt.created_at).toLocaleTimeString([], {
                       hour: "2-digit",
                       minute: "2-digit",
@@ -204,7 +204,7 @@ function TranscriptsInner() {
                   </span>
                   <div className="flex-1 min-w-0">
                     {evt.raw_transcript && (
-                      <div className="text-sm text-gray-400 italic truncate">
+                      <div className="text-sm text-gray-500 dark:text-gray-400 italic truncate">
                         &ldquo;{evt.raw_transcript}&rdquo;
                       </div>
                     )}
