@@ -59,7 +59,7 @@ export default function GamesPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">Game History</h1>
+      <h1 className="text-3xl font-bold font-display uppercase tracking-wide mb-6">Game History</h1>
 
       {games.length === 0 ? (
         <div className="text-gray-500 text-center py-16">
@@ -86,7 +86,7 @@ export default function GamesPage() {
                         <div className="flex items-center gap-8">
                           <div className="text-center">
                             <div className="text-xs text-gray-500 mb-1">Team A</div>
-                            <div className="text-2xl font-bold tabular-nums">
+                            <div className="text-2xl font-bold font-display tabular-nums">
                               {game.team_a_score}
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
@@ -98,7 +98,7 @@ export default function GamesPage() {
 
                           <div className="text-center">
                             <div className="text-xs text-gray-500 mb-1">Team B</div>
-                            <div className="text-2xl font-bold tabular-nums">
+                            <div className="text-2xl font-bold font-display tabular-nums">
                               {game.team_b_score}
                             </div>
                             <div className="text-xs text-gray-500 mt-1">

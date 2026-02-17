@@ -42,14 +42,26 @@ function ChartTooltip({ active, payload, label }: any) {
   );
 }
 
+interface TodayData {
+  games_today: number;
+  players: PlayerRow[];
+}
+
 export default function StatsPage() {
   const [players, setPlayers] = useState<PlayerRow[]>([]);
+  const [todayStats, setTodayStats] = useState<TodayData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_BASE}/players`)
-      .then((res) => res.json())
-      .then((data) => setPlayers(data))
+    const today = new Date().toISOString().slice(0, 10);
+    Promise.all([
+      fetch(`${API_BASE}/players`).then((r) => r.json()),
+      fetch(`${API_BASE}/stats/today?date=${today}`).then((r) => r.json()).catch(() => null),
+    ])
+      .then(([allPlayers, today]) => {
+        setPlayers(allPlayers);
+        setTodayStats(today);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -94,12 +106,91 @@ export default function StatsPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-8">Stats</h1>
+      <h1 className="text-3xl font-bold font-display uppercase tracking-wide mb-8">Stats</h1>
 
+      {/* Stats of the Day */}
+      {todayStats && todayStats.games_today > 0 && (() => {
+        const topScorer = todayStats.players[0];
+        const topAssist = [...todayStats.players].sort((a, b) => b.assists - a.assists)[0];
+        const fpLeader = [...todayStats.players].sort((a, b) => b.fantasy_points - a.fantasy_points)[0];
+        return (
+          <div className="mb-10">
+            <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-300 mb-4">Stats of the Day</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              <div className="border border-gray-800 rounded-lg p-4 text-center">
+                <div className="text-xs text-gray-500 font-display uppercase mb-1">Games</div>
+                <div className="text-3xl font-bold font-display tabular-nums">{todayStats.games_today}</div>
+              </div>
+              {topScorer && (
+                <div className="border border-gray-800 rounded-lg p-4 text-center">
+                  <div className="text-xs text-gray-500 font-display uppercase mb-1">Top Scorer</div>
+                  <div className="text-lg font-bold font-display">{topScorer.name}</div>
+                  <div className="text-sm text-green-400 tabular-nums">{topScorer.total_points} pts</div>
+                </div>
+              )}
+              {topAssist && topAssist.assists > 0 && (
+                <div className="border border-gray-800 rounded-lg p-4 text-center">
+                  <div className="text-xs text-gray-500 font-display uppercase mb-1">Most Assists</div>
+                  <div className="text-lg font-bold font-display">{topAssist.name}</div>
+                  <div className="text-sm text-blue-400 tabular-nums">{topAssist.assists} ast</div>
+                </div>
+              )}
+              {fpLeader && (
+                <div className="border border-yellow-700/50 rounded-lg p-4 text-center bg-yellow-900/10">
+                  <div className="text-xs text-yellow-500 font-display uppercase mb-1">Fantasy MVP</div>
+                  <div className="text-lg font-bold font-display text-yellow-400">{fpLeader.name}</div>
+                  <div className="text-sm text-gray-400 tabular-nums">{fpLeader.fantasy_points} FP</div>
+                </div>
+              )}
+            </div>
+
+            {/* Today's mini leaderboard */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-gray-800 text-gray-500 text-xs font-display uppercase tracking-wider">
+                    <th className="py-2 pr-3">Player</th>
+                    <th className="py-2 pr-3 text-right">GP</th>
+                    <th className="py-2 pr-3 text-right">W-L</th>
+                    <th className="py-2 pr-3 text-right">PTS</th>
+                    <th className="py-2 pr-3 text-right">AST</th>
+                    <th className="py-2 pr-3 text-right">STL</th>
+                    <th className="py-2 pr-3 text-right">BLK</th>
+                    <th className="py-2 text-right">FP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {todayStats.players.map((p) => (
+                    <tr key={p.id} className="border-b border-gray-900">
+                      <td className="py-2 pr-3">{p.name}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.games_played}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.wins}-{p.games_played - p.wins}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.total_points}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.assists}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.steals}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.blocks}</td>
+                      <td className="py-2 text-right tabular-nums font-bold text-blue-400">{p.fantasy_points}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
+      {todayStats && todayStats.games_today === 0 && (
+        <div className="mb-8 text-center text-gray-600 text-sm py-4 border border-gray-800/50 rounded-lg">
+          No games played today
+        </div>
+      )}
+
+      {/* All-Time Stats */}
+      <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-300 mb-4">All-Time</h2>
       <div className="space-y-10">
         {charts.map(({ title, data, dataKey, color }) => (
           <div key={title}>
-            <h2 className="text-lg font-bold text-gray-300 mb-4">{title}</h2>
+            <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-300 mb-4">{title}</h2>
             <div className="border border-gray-800 rounded-lg p-4">
               <ResponsiveContainer width="100%" height={Math.max(200, data.length * 40)}>
                 <BarChart data={data} layout="vertical" margin={{ left: 20, right: 20 }}>

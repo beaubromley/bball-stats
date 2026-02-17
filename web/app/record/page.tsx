@@ -1284,8 +1284,8 @@ export default function RecordPage() {
       {/* Scoreboard */}
       <div className="flex items-center justify-between py-6">
         <div className="text-center flex-1">
-          <div className="text-xs text-gray-500 tracking-wider">TEAM A</div>
-          <div className="text-6xl font-bold tabular-nums">
+          <div className="text-xs text-gray-500 tracking-wider font-display">TEAM A</div>
+          <div className="text-6xl font-bold font-display tabular-nums">
             {game.teamAScore}
           </div>
           <div className="text-xs text-gray-600 mt-1">
@@ -1331,8 +1331,8 @@ export default function RecordPage() {
           )}
         </div>
         <div className="text-center flex-1">
-          <div className="text-xs text-gray-500 tracking-wider">TEAM B</div>
-          <div className="text-6xl font-bold tabular-nums">
+          <div className="text-xs text-gray-500 tracking-wider font-display">TEAM B</div>
+          <div className="text-6xl font-bold font-display tabular-nums">
             {game.teamBScore}
           </div>
           <div className="text-xs text-gray-600 mt-1">
@@ -1750,7 +1750,7 @@ export default function RecordPage() {
       {/* --- Finished --- */}
       {game.status === "finished" && (
         <div className="space-y-3 py-6 text-center">
-          <div className="text-2xl font-bold text-yellow-400">
+          <div className="text-2xl font-bold font-display text-yellow-400">
             Team {game.winningTeam} wins!
           </div>
           {game.gameId && (

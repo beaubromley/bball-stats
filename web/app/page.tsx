@@ -37,7 +37,7 @@ export default function Home() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">Leaderboard</h1>
+      <h1 className="text-3xl font-bold font-display uppercase tracking-wide mb-6">Leaderboard</h1>
 
       {players.length === 0 ? (
         <div className="text-gray-500 text-center py-16">

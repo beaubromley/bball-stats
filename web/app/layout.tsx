@@ -1,18 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Bebas_Neue } from "next/font/google";
 import SpaRedirect from "./spa-redirect";
 import RegisterSW from "./register-sw";
 import { AuthProvider } from "./components/AuthProvider";
 import Nav from "./components/Nav";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const bebasNeue = Bebas_Neue({
+  weight: "400",
+  variable: "--font-display",
   subsets: ["latin"],
 });
 
@@ -39,7 +40,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-950 text-gray-100 min-h-screen`}
+        className={`${inter.variable} ${bebasNeue.variable} antialiased bg-gray-950 text-gray-100 min-h-screen`}
       >
         <AuthProvider>
           <Nav />

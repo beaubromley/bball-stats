@@ -110,13 +110,33 @@ function TranscriptsInner() {
     if (evt.raw_transcript) matchedTranscripts.add(evt.raw_transcript);
   }
 
-  // Separate transcripts: acted_on column (new) or cross-reference with events (old data)
-  const recognizedTranscripts = transcripts.filter(
-    (t) => t.acted_on || matchedTranscripts.has(t.raw_text)
-  );
-  const unmatchedTranscripts = transcripts.filter(
-    (t) => !t.acted_on && !matchedTranscripts.has(t.raw_text)
-  );
+  // Build unified timeline: transcripts (new data) or events (old data fallback)
+  const hasTranscripts = transcripts.length > 0;
+
+  // Unified entries sorted by time
+  type TimelineEntry =
+    | { kind: "transcript"; data: Transcript; recognized: boolean }
+    | { kind: "event"; data: GameEvent };
+
+  const timeline: TimelineEntry[] = [];
+
+  if (hasTranscripts) {
+    for (const t of transcripts) {
+      const recognized = !!(t.acted_on || matchedTranscripts.has(t.raw_text));
+      timeline.push({ kind: "transcript", data: t, recognized });
+    }
+  } else {
+    // Old game without transcripts — show events directly
+    for (const evt of events) {
+      timeline.push({ kind: "event", data: evt });
+    }
+  }
+
+  timeline.sort((a, b) => {
+    const timeA = new Date(a.kind === "transcript" ? a.data.created_at : a.data.created_at).getTime();
+    const timeB = new Date(b.kind === "transcript" ? b.data.created_at : b.data.created_at).getTime();
+    return timeA - timeB;
+  });
 
   return (
     <div>
@@ -129,7 +149,7 @@ function TranscriptsInner() {
         </Link>
       </div>
 
-      <h1 className="text-2xl font-bold mb-1">Voice Log</h1>
+      <h1 className="text-2xl font-bold font-display uppercase tracking-wide mb-1">Voice Log</h1>
       <p className="text-gray-500 text-sm mb-8">
         {new Date(game.start_time).toLocaleString()}
         {game.status === "finished" && game.winning_team && (
@@ -137,90 +157,65 @@ function TranscriptsInner() {
         )}
       </p>
 
-      {/* Recognized segments — what was heard → what was interpreted */}
-      <h2 className="text-lg font-bold mb-3">Recognized</h2>
-      <p className="text-xs text-gray-600 mb-3">What was heard → what was interpreted</p>
-      {recognizedTranscripts.length === 0 && events.length === 0 ? (
+      {timeline.length === 0 ? (
         <p className="text-gray-600 text-sm py-4">No events recorded.</p>
       ) : (
-        <div className="space-y-1 mb-8">
-          {/* Show transcript segments that have acted_on */}
-          {recognizedTranscripts.map((t) => (
-            <div
-              key={`t-${t.id}`}
-              className="flex items-start gap-3 py-2 border-b border-gray-900"
-            >
-              <span className="text-xs text-gray-600 w-14 shrink-0 pt-0.5">
-                {new Date(t.created_at).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-gray-400 italic truncate">
-                  &ldquo;{t.raw_text}&rdquo;
-                </div>
-                {t.acted_on && (
-                  <div className="text-sm font-medium text-green-400">
-                    {t.acted_on}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-          {/* Fallback: show events for old games without per-segment acted_on */}
-          {recognizedTranscripts.length === 0 && events.map((evt) => (
-            <div
-              key={evt.id}
-              className="flex items-start gap-3 py-2 border-b border-gray-900"
-            >
-              <span className="text-xs text-gray-600 w-14 shrink-0 pt-0.5">
-                {new Date(evt.created_at).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
-              </span>
-              <div className="flex-1 min-w-0">
-                {evt.raw_transcript && (
-                  <div className="text-sm text-gray-400 italic truncate">
-                    &ldquo;{evt.raw_transcript}&rdquo;
-                  </div>
-                )}
-                <div className={`text-sm font-medium ${eventColor(evt.event_type)}`}>
-                  {formatEventLabel(evt)}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Unmatched transcripts (things heard but not parsed into events) */}
-      <h2 className="text-lg font-bold mb-3">Unrecognized</h2>
-      <p className="text-xs text-gray-600 mb-3">Heard by the mic but not matched to any command</p>
-      {unmatchedTranscripts.length === 0 ? (
-        <p className="text-gray-600 text-sm py-4">All transcripts were recognized.</p>
-      ) : (
         <div className="space-y-1">
-          {unmatchedTranscripts.map((t) => (
-            <div
-              key={t.id}
-              className="flex items-center gap-3 py-2 border-b border-gray-900"
-            >
-              <span className="text-xs text-gray-600 w-14 shrink-0">
-                {new Date(t.created_at).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
-              </span>
-              <span className="text-sm text-orange-400 italic">
-                &ldquo;{t.raw_text}&rdquo;
-              </span>
-            </div>
-          ))}
+          {timeline.map((entry) => {
+            if (entry.kind === "transcript") {
+              const t = entry.data;
+              return (
+                <div
+                  key={`t-${t.id}`}
+                  className="flex items-start gap-3 py-2 border-b border-gray-900"
+                >
+                  <span className="text-xs text-gray-600 w-14 shrink-0 pt-0.5">
+                    {new Date(t.created_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm italic truncate ${entry.recognized ? "text-gray-400" : "text-orange-400"}`}>
+                      &ldquo;{t.raw_text}&rdquo;
+                    </div>
+                    {t.acted_on && (
+                      <div className="text-sm font-medium text-green-400">
+                        {t.acted_on}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            } else {
+              const evt = entry.data;
+              return (
+                <div
+                  key={`e-${evt.id}`}
+                  className="flex items-start gap-3 py-2 border-b border-gray-900"
+                >
+                  <span className="text-xs text-gray-600 w-14 shrink-0 pt-0.5">
+                    {new Date(evt.created_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    {evt.raw_transcript && (
+                      <div className="text-sm text-gray-400 italic truncate">
+                        &ldquo;{evt.raw_transcript}&rdquo;
+                      </div>
+                    )}
+                    <div className={`text-sm font-medium ${eventColor(evt.event_type)}`}>
+                      {formatEventLabel(evt)}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+          })}
         </div>
       )}
     </div>

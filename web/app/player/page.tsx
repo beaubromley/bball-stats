@@ -87,7 +87,7 @@ function PlayerDetailInner() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">{stats.name}</h1>
+      <h1 className="text-3xl font-bold font-display tracking-wide mb-6">{stats.name}</h1>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {[
@@ -105,7 +105,7 @@ function PlayerDetailInner() {
             className="border border-gray-800 rounded-lg p-4 text-center"
           >
             <div className="text-xs text-gray-500 mb-1">{label}</div>
-            <div className="text-2xl font-bold tabular-nums">{value}</div>
+            <div className="text-2xl font-bold font-display tabular-nums">{value}</div>
           </div>
         ))}
       </div>
@@ -141,7 +141,7 @@ function PlayerDetailInner() {
         </div>
       )}
 
-      <h2 className="text-xl font-bold mb-4">Recent Games</h2>
+      <h2 className="text-xl font-bold font-display uppercase tracking-wide mb-4">Recent Games</h2>
       {games.length === 0 ? (
         <p className="text-gray-500">No finished games yet.</p>
       ) : (

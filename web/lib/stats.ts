@@ -88,6 +88,100 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
   });
 }
 
+export interface TodayStats {
+  games_today: number;
+  players: PlayerStats[];
+}
+
+export async function getTodayStats(dateStr: string): Promise<TodayStats> {
+  const db = getDb();
+
+  const countResult = await db.execute({
+    sql: "SELECT COUNT(DISTINCT id) as cnt FROM games WHERE date(start_time, '-6 hours') = ?",
+    args: [dateStr],
+  });
+  const games_today = Number(countResult.rows[0]?.cnt ?? 0);
+
+  if (games_today === 0) {
+    return { games_today: 0, players: [] };
+  }
+
+  const result = await db.execute({
+    sql: `
+      SELECT
+        p.id,
+        p.name,
+        COUNT(DISTINCT r.game_id) as games_played,
+        COALESCE(SUM(CASE
+          WHEN g.status = 'finished' AND g.winning_team = r.team THEN 1
+          ELSE 0
+        END), 0) as wins,
+        COALESCE(SUM(CASE
+          WHEN g.status = 'finished' AND g.winning_team IS NOT NULL AND g.winning_team != r.team THEN 1
+          ELSE 0
+        END), 0) as losses,
+        COALESCE(scoring.total_points, 0) as total_points,
+        COALESCE(scoring.ones_made, 0) as ones_made,
+        COALESCE(scoring.twos_made, 0) as twos_made,
+        COALESCE(scoring.assists, 0) as assists,
+        COALESCE(scoring.steals, 0) as steals,
+        COALESCE(scoring.blocks, 0) as blocks
+      FROM players p
+      JOIN rosters r ON p.id = r.player_id
+      JOIN games g ON r.game_id = g.id
+      LEFT JOIN (
+        SELECT
+          ge.player_id,
+          SUM(ge.point_value) as total_points,
+          SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 1
+            AND ge.id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL)
+            THEN 1 ELSE 0 END) as ones_made,
+          SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 2
+            AND ge.id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL)
+            THEN 1 ELSE 0 END) as twos_made,
+          SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END) as assists,
+          SUM(CASE WHEN ge.event_type = 'steal' THEN 1 ELSE 0 END) as steals,
+          SUM(CASE WHEN ge.event_type = 'block' THEN 1 ELSE 0 END) as blocks
+        FROM game_events ge
+        JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id
+        JOIN games g2 ON r2.game_id = g2.id
+        WHERE date(g2.start_time, '-6 hours') = ?
+        GROUP BY ge.player_id
+      ) scoring ON p.id = scoring.player_id
+      WHERE date(g.start_time, '-6 hours') = ?
+      GROUP BY p.id
+      ORDER BY total_points DESC
+    `,
+    args: [dateStr, dateStr],
+  });
+
+  const players = result.rows.map((row) => {
+    const gamesPlayed = Number(row.games_played) || 1;
+    const totalPoints = Number(row.total_points);
+    const assists = Number(row.assists);
+    const steals = Number(row.steals);
+    const blocks = Number(row.blocks);
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      games_played: Number(row.games_played),
+      wins: Number(row.wins),
+      losses: Number(row.losses),
+      win_pct: Math.round((Number(row.wins) / gamesPlayed) * 100),
+      total_points: totalPoints,
+      ppg: Math.round((totalPoints / gamesPlayed) * 10) / 10,
+      ones_made: Number(row.ones_made),
+      twos_made: Number(row.twos_made),
+      assists,
+      steals,
+      blocks,
+      fantasy_points: calculateFantasyPoints({ points: totalPoints, assists, steals, blocks }),
+    };
+  });
+
+  return { games_today, players };
+}
+
 export async function getPlayerStats(playerId: string): Promise<PlayerStats | null> {
   const leaderboard = await getLeaderboard();
   return leaderboard.find((p) => p.id === playerId) ?? null;

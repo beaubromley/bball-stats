@@ -67,7 +67,7 @@ export default function BoxScore({ gameId }: { gameId: string }) {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-800 text-gray-500 text-xs">
+                <tr className="border-b border-gray-800 text-gray-500 text-xs font-display uppercase tracking-wider">
                   <th className="py-2 pr-3">Player</th>
                   <th className="py-2 pr-3 text-right">PTS</th>
                   <th className="py-2 pr-3 text-right">1s</th>

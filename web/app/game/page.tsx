@@ -95,7 +95,7 @@ function GameDetailInner() {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <h1 className="text-3xl font-bold">Game Detail</h1>
+        <h1 className="text-3xl font-bold font-display uppercase tracking-wide">Game Detail</h1>
         {isAdmin && id && (
           <Link
             href={`/game/transcripts?id=${id}`}
@@ -139,7 +139,7 @@ function GameDetailInner() {
 
       {game.status === "finished" && id && (
         <div className="mb-8">
-          <h2 className="text-xl font-bold mb-4">Box Score</h2>
+          <h2 className="text-xl font-bold font-display uppercase tracking-wide mb-4">Box Score</h2>
           <BoxScore gameId={id} />
         </div>
       )}
@@ -194,7 +194,7 @@ function GameDetailInner() {
         return (
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">Game Flow</h2>
+              <h2 className="text-xl font-bold font-display uppercase tracking-wide">Game Flow</h2>
               <span className="text-sm text-gray-500">
                 {leadChanges} Lead Change{leadChanges !== 1 ? "s" : ""}
               </span>
@@ -279,7 +279,7 @@ function GameDetailInner() {
         return (
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">Win Probability</h2>
+              <h2 className="text-xl font-bold font-display uppercase tracking-wide">Win Probability</h2>
               <span className="text-sm text-gray-500">
                 Based on {winProb.total_games_analyzed} games
               </span>
@@ -348,7 +348,7 @@ function GameDetailInner() {
         );
       })()}
 
-      <h2 className="text-xl font-bold mb-4">Play-by-Play</h2>
+      <h2 className="text-xl font-bold font-display uppercase tracking-wide mb-4">Play-by-Play</h2>
       {events.length === 0 ? (
         <p className="text-gray-500">No events recorded.</p>
       ) : (
