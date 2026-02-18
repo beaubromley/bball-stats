@@ -6,11 +6,20 @@ import { getBoxScore } from "@/lib/stats";
 export const runtime = "nodejs";
 
 async function loadFonts() {
-  const [interRes, bebasRes] = await Promise.all([
-    fetch("https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKv0E.woff2"),
-    fetch("https://fonts.gstatic.com/s/bebasneue/v14/JTUSjIg69CK48gW7PXoo9Wlhyw.woff2"),
-  ]);
-  return Promise.all([interRes.arrayBuffer(), bebasRes.arrayBuffer()]);
+  try {
+    const [interRes, bebasRes] = await Promise.all([
+      fetch("https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKv0E.woff2"),
+      fetch("https://fonts.gstatic.com/s/bebasneue/v14/JTUSjIg69CK48gW7PXoo9Wlhyw.woff2"),
+    ]);
+    if (!interRes.ok || !bebasRes.ok) return null;
+    const [inter, bebas] = await Promise.all([interRes.arrayBuffer(), bebasRes.arrayBuffer()]);
+    return [
+      { name: "Inter", data: inter, weight: 700 as const },
+      { name: "Bebas", data: bebas, weight: 400 as const },
+    ];
+  } catch {
+    return null;
+  }
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -34,11 +43,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const teamA = boxScore.players.filter((p) => p.team === "A");
     const teamB = boxScore.players.filter((p) => p.team === "B");
 
-    const [interData, bebasData] = await loadFonts();
-    const fonts = [
-      { name: "Inter", data: interData, weight: 700 as const },
-      { name: "Bebas", data: bebasData, weight: 400 as const },
-    ];
+    const fonts = (await loadFonts()) ?? undefined;
 
     if (style === "boxscore") {
       return new ImageResponse(
