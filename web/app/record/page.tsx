@@ -15,6 +15,7 @@ import {
   Legend,
 } from "recharts";
 import BoxScore from "@/app/components/BoxScore";
+import ShareCard from "@/app/components/ShareCard";
 import { useAuth } from "@/app/components/AuthProvider";
 
 const API_BASE = "/api";
@@ -1756,6 +1757,11 @@ export default function RecordPage() {
           {game.gameId && (
             <div className="my-4 text-left">
               <BoxScore gameId={game.gameId} />
+            </div>
+          )}
+          {game.gameId && (
+            <div className="my-4">
+              <ShareCard gameId={game.gameId} />
             </div>
           )}
           {/* Game Flow Chart */}

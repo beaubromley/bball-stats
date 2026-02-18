@@ -16,6 +16,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import BoxScore from "@/app/components/BoxScore";
+import ShareCard from "@/app/components/ShareCard";
 import Link from "next/link";
 import { useAuth } from "@/app/components/AuthProvider";
 
@@ -141,6 +142,12 @@ function GameDetailInner() {
         <div className="mb-8">
           <h2 className="text-xl font-bold font-display uppercase tracking-wide mb-4">Box Score</h2>
           <BoxScore gameId={id} />
+        </div>
+      )}
+
+      {game.status === "finished" && id && (
+        <div className="mb-8">
+          <ShareCard gameId={id} />
         </div>
       )}
 
