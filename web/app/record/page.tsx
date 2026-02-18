@@ -1759,11 +1759,6 @@ export default function RecordPage() {
               <BoxScore gameId={game.gameId} />
             </div>
           )}
-          {game.gameId && (
-            <div className="my-4">
-              <ShareCard gameId={game.gameId} />
-            </div>
-          )}
           {/* Game Flow Chart */}
           {(() => {
             const teamASet = new Set(game.teamA.map((n) => n.toLowerCase()));
@@ -1954,6 +1949,13 @@ export default function RecordPage() {
           </div>
         )}
       </div>
+
+      {/* Share Card */}
+      {game.status === "finished" && game.gameId && (
+        <div className="py-4">
+          <ShareCard gameId={game.gameId} />
+        </div>
+      )}
     </div>
   );
 }

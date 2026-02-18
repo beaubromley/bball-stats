@@ -145,12 +145,6 @@ function GameDetailInner() {
         </div>
       )}
 
-      {game.status === "finished" && id && (
-        <div className="mb-8">
-          <ShareCard gameId={id} />
-        </div>
-      )}
-
       {/* Game Flow Chart */}
       {(() => {
         // Build set of corrected event IDs to exclude undone plays
@@ -433,6 +427,13 @@ function GameDetailInner() {
               );
             });
           })()}
+        </div>
+      )}
+
+      {/* Share Card */}
+      {game.status === "finished" && id && (
+        <div className="mt-8">
+          <ShareCard gameId={id} />
         </div>
       )}
     </div>

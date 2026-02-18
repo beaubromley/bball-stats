@@ -24,6 +24,16 @@ async function loadFonts() {
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    // Minimal test mode
+    if (req.nextUrl.searchParams.get("test") === "1") {
+      return new ImageResponse(
+        <div style={{ display: "flex", width: "100%", height: "100%", background: "#1e293b", color: "white", alignItems: "center", justifyContent: "center", fontSize: "48px" }}>
+          Card Works!
+        </div>,
+        { width: 600, height: 300 }
+      );
+    }
+
     await initDb();
     const { id } = await params;
     const style = req.nextUrl.searchParams.get("style") || "mvp";
