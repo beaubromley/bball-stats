@@ -16,7 +16,6 @@ import {
   ReferenceLine,
 } from "recharts";
 import BoxScore from "@/app/components/BoxScore";
-import ShareCard from "@/app/components/ShareCard";
 import Link from "next/link";
 import { useAuth } from "@/app/components/AuthProvider";
 
@@ -441,12 +440,6 @@ function GameDetailInner() {
         </div>
       )}
 
-      {/* Share Card */}
-      {game.status === "finished" && id && (
-        <div className="mt-8">
-          <ShareCard gameId={id} />
-        </div>
-      )}
     </div>
   );
 }

@@ -15,7 +15,6 @@ import {
   Legend,
 } from "recharts";
 import BoxScore from "@/app/components/BoxScore";
-import ShareCard from "@/app/components/ShareCard";
 import { useAuth } from "@/app/components/AuthProvider";
 
 const API_BASE = "/api";
@@ -225,8 +224,14 @@ export default function RecordPage() {
   }, []);
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
-  // Remember last game's teams for "Run it back"
-  const lastGameTeamsRef = useRef<{ teamA: string[]; teamB: string[]; winningTeam: "A" | "B" | null } | null>(null);
+  // Remember last game's teams for "Run it back" (persisted in localStorage)
+  const [lastGameTeams, setLastGameTeams] = useState<{ teamA: string[]; teamB: string[]; winningTeam: "A" | "B" | null } | null>(null);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("lastGameTeams");
+      if (saved) setLastGameTeams(JSON.parse(saved));
+    } catch { /* ignore */ }
+  }, []);
 
   // Auto-clear stale interim text after 5 seconds of no updates
   const interimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -756,13 +761,15 @@ export default function RecordPage() {
     return () => clearInterval(interval);
   }, [game.status, game.gameId]);
 
-  // --- Notify API when game auto-ends (target score reached or voice "game over") ---
+  // --- Notify API when game ends (voice "game over" or manual End Game button) ---
   const prevStatusRef = useRef(game.status);
   useEffect(() => {
     if (prevStatusRef.current !== "finished" && game.status === "finished") {
       stopListening();
       // Save teams for "Run it back"
-      lastGameTeamsRef.current = { teamA: game.teamA, teamB: game.teamB, winningTeam: game.winningTeam };
+      const teams = { teamA: game.teamA, teamB: game.teamB, winningTeam: game.winningTeam };
+      setLastGameTeams(teams);
+      try { localStorage.setItem("lastGameTeams", JSON.stringify(teams)); } catch { /* ignore */ }
       if (game.gameId && game.winningTeam) {
         fetch(`${API_BASE}/games/${game.gameId}/end`, {
           method: "POST",
@@ -990,21 +997,6 @@ export default function RecordPage() {
         actedOn = `${cmd.playerName} +${cmd.points}`;
         if (cmd.assistBy) actedOn += ` (${cmd.assistBy} AST)`;
         showAcceptedCmd(actedOn);
-
-        // Check if this score triggers auto-end
-        const isTeamA = currentGame.teamA.some(
-          (p) => p.toLowerCase() === cmd.playerName!.toLowerCase()
-        );
-        const newA = currentGame.teamAScore + (isTeamA ? cmd.points : 0);
-        const newB = currentGame.teamBScore + (!isTeamA ? cmd.points : 0);
-        if (newA >= currentGame.targetScore || newB >= currentGame.targetScore) {
-          const winner = newA >= currentGame.targetScore ? "A" : "B";
-          fetch(`${API_BASE}/games/${currentGame.gameId}/end`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ winning_team: winner }),
-          }).catch(() => {});
-        }
       } else if (cmd.type === "steal" && cmd.playerName) {
         postStealToApi(currentGame.gameId, cmd.playerName, text);
         postFailedTranscript(currentGame.gameId, null);
@@ -1094,13 +1086,7 @@ export default function RecordPage() {
     const newState = { ...state, events };
     const scores = calcScores(events, newState);
 
-    let autoEnd: Partial<GameState> = {};
-    if (scores.teamAScore >= state.targetScore)
-      autoEnd = { status: "finished", winningTeam: "A" };
-    else if (scores.teamBScore >= state.targetScore)
-      autoEnd = { status: "finished", winningTeam: "B" };
-
-    return { ...newState, ...scores, ...autoEnd };
+    return { ...newState, ...scores };
   }
 
   function addSteal(
@@ -1200,7 +1186,7 @@ export default function RecordPage() {
   }
 
   function runItBack(target: number, mode?: ScoringMode) {
-    const last = lastGameTeamsRef.current;
+    const last = lastGameTeams;
     if (!last) return;
     // Winners become Team A
     const newA = last.winningTeam === "B" ? last.teamB : last.teamA;
@@ -1516,7 +1502,7 @@ export default function RecordPage() {
               Resume Active Game ({activeGameData.team_a_score}-{activeGameData.team_b_score})
             </button>
           )}
-          {lastGameTeamsRef.current && (
+          {lastGameTeams && (
             <button
               onClick={() => runItBack(game.targetScore)}
               className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
@@ -2043,12 +2029,6 @@ export default function RecordPage() {
         )}
       </div>
 
-      {/* Share Card */}
-      {game.status === "finished" && game.gameId && (
-        <div className="py-4">
-          <ShareCard gameId={game.gameId} />
-        </div>
-      )}
     </div>
   );
 }
