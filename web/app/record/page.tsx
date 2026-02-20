@@ -113,6 +113,65 @@ export default function RecordPage() {
   }, [authLoading, isAdmin, router]);
 
   const [game, setGame] = useState<GameState>(initial);
+  // Active game resume
+  const [activeGameData, setActiveGameData] = useState<{
+    game_id: string;
+    team_a_names: string[];
+    team_b_names: string[];
+    team_a_score: number;
+    team_b_score: number;
+    target_score: number | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isAdmin || game.status !== "idle") return;
+    fetch(`${API_BASE}/games/active`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.game_id && data.game_status === "active") {
+          setActiveGameData(data);
+        }
+      })
+      .catch(() => {});
+  }, [isAdmin, game.status]);
+
+  async function resumeGame() {
+    if (!activeGameData) return;
+    const { game_id, team_a_names, team_b_names, team_a_score, team_b_score, target_score } = activeGameData;
+    // Fetch events to rebuild local event log
+    let events: ScoringEvent[] = [];
+    try {
+      const res = await fetch(`${API_BASE}/games/${game_id}/events`);
+      const apiEvents = await res.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      events = apiEvents.filter((e: any) => e.event_type !== "correction").map((e: any, i: number) => ({
+        id: i + 1,
+        apiId: e.id,
+        playerName: e.player_name,
+        points: e.point_value,
+        type: e.event_type as "score" | "steal" | "block",
+        transcript: e.raw_transcript || "",
+        time: new Date(e.created_at).getTime(),
+        team: team_a_names.some((n: string) => n.toLowerCase() === e.player_name.toLowerCase()) ? "A" as const : "B" as const,
+      }));
+      nextId.current = events.length + 1;
+    } catch { /* continue without events */ }
+
+    setGame({
+      gameId: game_id,
+      status: "active",
+      targetScore: target_score || 11,
+      scoringMode: "1s2s",
+      teamA: team_a_names,
+      teamB: team_b_names,
+      teamAScore: team_a_score,
+      teamBScore: team_b_score,
+      events,
+      winningTeam: null,
+    });
+    setActiveGameData(null);
+  }
+
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [interim, setInterim] = useState("");
@@ -1449,6 +1508,14 @@ export default function RecordPage() {
               2s & 3s
             </button>
           </div>
+          {activeGameData && (
+            <button
+              onClick={resumeGame}
+              className="w-full py-3 bg-yellow-600 hover:bg-yellow-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              Resume Active Game ({activeGameData.team_a_score}-{activeGameData.team_b_score})
+            </button>
+          )}
           {lastGameTeamsRef.current && (
             <button
               onClick={() => runItBack(game.targetScore)}
