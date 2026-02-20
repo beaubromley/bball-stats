@@ -106,6 +106,17 @@ function EditInner() {
     setSaving(false);
   }
 
+  async function swapEvents(eventId: number, swapWithId: number) {
+    setSaving(true);
+    await fetch(`${API_BASE}/games/${id}/events/${eventId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ swap_with: swapWithId }),
+    });
+    fetchData();
+    setSaving(false);
+  }
+
   async function changeWinner(winner: "A" | "B") {
     setSaving(true);
     await fetch(`${API_BASE}/games/${id}/end`, {
@@ -181,8 +192,22 @@ function EditInner() {
       <div className="mb-8">
         <h2 className="text-sm font-bold font-display uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Scores</h2>
         <div className="space-y-2">
-          {scoreEvents.map((evt) => (
+          {scoreEvents.map((evt, idx) => (
             <div key={evt.id} className="flex items-center gap-2 py-2 px-3 border border-gray-200 dark:border-gray-800 rounded-lg">
+              <div className="flex flex-col gap-0.5">
+                <button
+                  onClick={() => idx > 0 && swapEvents(evt.id, scoreEvents[idx - 1].id)}
+                  disabled={idx === 0}
+                  className="text-xs text-gray-400 hover:text-gray-200 disabled:opacity-20"
+                  title="Move up"
+                >&#9650;</button>
+                <button
+                  onClick={() => idx < scoreEvents.length - 1 && swapEvents(evt.id, scoreEvents[idx + 1].id)}
+                  disabled={idx === scoreEvents.length - 1}
+                  className="text-xs text-gray-400 hover:text-gray-200 disabled:opacity-20"
+                  title="Move down"
+                >&#9660;</button>
+              </div>
               <select
                 value={evt.player_name}
                 onChange={(e) => updatePlayerName(evt.id, e.target.value)}

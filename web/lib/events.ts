@@ -105,6 +105,20 @@ export async function deleteEvent(gameId: string, eventId: number) {
   });
 }
 
+export async function swapEventOrder(gameId: string, eventIdA: number, eventIdB: number) {
+  const db = getDb();
+  const result = await db.execute({
+    sql: "SELECT id, created_at FROM game_events WHERE game_id = ? AND id IN (?, ?)",
+    args: [gameId, eventIdA, eventIdB],
+  });
+  if (result.rows.length !== 2) return;
+  const a = result.rows.find((r) => r.id === eventIdA);
+  const b = result.rows.find((r) => r.id === eventIdB);
+  if (!a || !b) return;
+  await db.execute({ sql: "UPDATE game_events SET created_at = ? WHERE id = ?", args: [b.created_at, eventIdA] });
+  await db.execute({ sql: "UPDATE game_events SET created_at = ? WHERE id = ?", args: [a.created_at, eventIdB] });
+}
+
 export async function updateEvent(
   gameId: string,
   eventId: number,

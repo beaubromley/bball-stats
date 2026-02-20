@@ -257,10 +257,9 @@ export function parseTranscript(
     };
   }
 
-  // --- Compound: [name] assist to [name] [shot] ---
-  // Also handles "assist to [name]" (assister = Me)
-  const assistMatch = text.match(/(\w+)\s+assists?\s+to\s+(\w+)/);
-  if (assistMatch) {
+  // --- Compound: [name] assist [name] [shot] (with optional "to") ---
+  const assistMatch = text.match(/(\w+)\s+assists?\s+(?:to\s+)?(\w+)/);
+  if (assistMatch && !SCORING_WORDS.has(assistMatch[1]) && !SCORING_WORDS.has(assistMatch[2])) {
     const assister = resolvePlayer(assistMatch[1], knownPlayers);
     const scorer = resolvePlayer(assistMatch[2], knownPlayers);
     return {
@@ -270,21 +269,6 @@ export function parseTranscript(
       playerName: scorer,
       points: detectPoints(text, scoringMode),
       confidence: 0.85,
-    };
-  }
-
-  // --- "[name] assist to [name]" or "[name] assist [name]" ---
-  const assistNoTo = text.match(/(\w+)\s+assists?\s+(?:to\s+)?(\w+)/);
-  if (assistNoTo && !SCORING_WORDS.has(assistNoTo[1]) && !SCORING_WORDS.has(assistNoTo[2])) {
-    const assister = resolvePlayer(assistNoTo[1], knownPlayers);
-    const scorer = resolvePlayer(assistNoTo[2], knownPlayers);
-    return {
-      ...result,
-      type: "score",
-      assistBy: assister,
-      playerName: scorer,
-      points: detectPoints(text, scoringMode),
-      confidence: 0.8,
     };
   }
 

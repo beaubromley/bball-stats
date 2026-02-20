@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/lib/turso";
 import { requireAuth } from "@/lib/auth";
-import { deleteEvent, updateEvent } from "@/lib/events";
+import { deleteEvent, updateEvent, swapEventOrder } from "@/lib/events";
 
 export async function DELETE(
   req: NextRequest,
@@ -24,6 +24,10 @@ export async function PATCH(
   await initDb();
   const { id, eventId } = await params;
   const body = await req.json();
-  await updateEvent(id, parseInt(eventId), body);
+  if (body.swap_with) {
+    await swapEventOrder(id, parseInt(eventId), body.swap_with);
+  } else {
+    await updateEvent(id, parseInt(eventId), body);
+  }
   return NextResponse.json({ ok: true });
 }
