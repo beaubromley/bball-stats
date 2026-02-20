@@ -833,10 +833,11 @@ export default function RecordPage() {
 
     if (currentGame.status !== "active") return;
 
-    // Trigger word gate — silently ignore anything without "stat" prefix
-    if (triggerWordRef.current) {
-      const lower = text.toLowerCase().trim();
-      if (!lower.startsWith("stat ") && lower !== "stat") return;
+    // Trigger word — always strip "stat" prefix if present; when toggle is on, require it
+    const lower = text.toLowerCase().trim();
+    const hasStatPrefix = lower.startsWith("stat ") || lower === "stat";
+    if (triggerWordRef.current && !hasStatPrefix) return;
+    if (hasStatPrefix) {
       text = text.replace(/^stat\s*/i, "").trim();
       if (!text) return;
     }
