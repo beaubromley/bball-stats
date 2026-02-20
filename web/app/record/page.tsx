@@ -211,6 +211,10 @@ export default function RecordPage() {
   // Dual display: last accepted command text (green line)
   const [acceptedCmd, setAcceptedCmd] = useState("");
   const acceptedCmdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Green flash on new play
+  const [flashGreen, setFlashGreen] = useState(false);
+  // Fullscreen scoreboard modal
+  const [showScoreboard, setShowScoreboard] = useState(false);
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const [showDebug, setShowDebug] = useState(false);
   const addDebugLog = useCallback((msg: string) => {
@@ -221,6 +225,9 @@ export default function RecordPage() {
     if (acceptedCmdTimerRef.current) clearTimeout(acceptedCmdTimerRef.current);
     setAcceptedCmd(msg);
     acceptedCmdTimerRef.current = setTimeout(() => setAcceptedCmd(""), 3000);
+    // Single green flash
+    setFlashGreen(true);
+    setTimeout(() => setFlashGreen(false), 400);
   }, []);
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
@@ -1339,7 +1346,45 @@ export default function RecordPage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto">
+    <div className="max-w-lg mx-auto relative">
+      {/* Green flash overlay */}
+      {flashGreen && (
+        <div
+          className="fixed inset-0 pointer-events-none z-50"
+          style={{
+            background: "rgba(34, 197, 94, 0.15)",
+            animation: "flashFade 400ms ease-out forwards",
+          }}
+        />
+      )}
+      <style>{`@keyframes flashFade { from { opacity: 1; } to { opacity: 0; } }`}</style>
+
+      {/* Fullscreen scoreboard modal */}
+      {showScoreboard && (
+        <div
+          className="fixed inset-0 z-40 bg-black flex flex-col items-center justify-center"
+          onClick={() => setShowScoreboard(false)}
+        >
+          <div className="text-xs text-gray-500 font-display tracking-wider mb-4">TAP TO CLOSE</div>
+          <div className="flex items-center gap-8">
+            <div className="text-center">
+              <div className="text-lg text-blue-400 font-display tracking-widest">TEAM A</div>
+              <div className="text-[120px] font-display leading-none tabular-nums">{game.teamAScore}</div>
+              <div className="text-xs text-gray-500 mt-2">{game.teamA.join(", ")}</div>
+            </div>
+            <div className="text-3xl text-gray-600 font-display">VS</div>
+            <div className="text-center">
+              <div className="text-lg text-orange-400 font-display tracking-widest">TEAM B</div>
+              <div className="text-[120px] font-display leading-none tabular-nums">{game.teamBScore}</div>
+              <div className="text-xs text-gray-500 mt-2">{game.teamB.join(", ")}</div>
+            </div>
+          </div>
+          {game.status === "active" && (
+            <div className="text-red-400 text-sm font-display tracking-widest mt-6 animate-pulse">LIVE</div>
+          )}
+        </div>
+      )}
+
       {/* Scoreboard */}
       <div className="flex items-center justify-between py-6">
         <div className="text-center flex-1">
@@ -1400,15 +1445,21 @@ export default function RecordPage() {
         </div>
       </div>
 
-      {/* Listening indicator */}
+      {/* Listening indicator + scoreboard button */}
       {game.status === "active" && (
-        <div className="flex items-center justify-center gap-2 py-2">
+        <div className="flex items-center justify-center gap-3 py-2">
           <div
             className={`w-2.5 h-2.5 rounded-full ${listening ? "bg-green-400 animate-pulse" : "bg-gray-600"}`}
           />
           <span className="text-sm text-gray-500 dark:text-gray-400">
             {listening ? "Listening..." : "Mic off"}
           </span>
+          <button
+            onClick={() => setShowScoreboard(true)}
+            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-700 px-2 py-0.5 rounded transition-colors"
+          >
+            Fullscreen
+          </button>
         </div>
       )}
 
