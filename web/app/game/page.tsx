@@ -101,12 +101,20 @@ function GameDetailInner() {
           {game.game_number ? `Game ${game.game_number}` : "Game Detail"}
         </h1>
         {isAdmin && id && (
-          <Link
-            href={`/game/transcripts?id=${id}`}
-            className="text-sm text-gray-500 hover:text-blue-400 transition-colors"
-          >
-            Voice Log
-          </Link>
+          <div className="flex gap-4">
+            <Link
+              href={`/game/edit?id=${id}`}
+              className="text-sm text-gray-500 hover:text-blue-400 transition-colors"
+            >
+              Edit
+            </Link>
+            <Link
+              href={`/game/transcripts?id=${id}`}
+              className="text-sm text-gray-500 hover:text-blue-400 transition-colors"
+            >
+              Voice Log
+            </Link>
+          </div>
         )}
       </div>
       <p className="text-gray-500 text-sm mb-6">
