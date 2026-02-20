@@ -45,6 +45,9 @@ export default function LoginPage() {
           {submitting ? "Logging in..." : "Log In"}
         </button>
       </form>
+      <p className="text-center text-xs text-gray-400 dark:text-gray-600 italic mt-8">
+        &ldquo;He who determines what is measured determines what is true.&rdquo;
+      </p>
     </div>
   );
 }
