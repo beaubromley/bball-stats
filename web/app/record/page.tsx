@@ -128,6 +128,10 @@ export default function RecordPage() {
 
   // Speech engine selection
   const [speechEngine, setSpeechEngine] = useState<"browser" | "deepgram" | "sherpa">("deepgram");
+  // Trigger word mode — require "STAT" prefix before each command
+  const [triggerWord, setTriggerWord] = useState(false);
+  const triggerWordRef = useRef(false);
+  triggerWordRef.current = triggerWord;
   // Sherpa-ONNX refs
   const sherpaEngineRef = useRef<SherpaEngine | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -404,7 +408,7 @@ export default function RecordPage() {
       // Add basketball vocabulary as keyterms
       const basketballTerms = [
         "bucket", "layup", "dunk", "floater", "three", "deep",
-        "downtown", "steal", "block", "assist", "undo",
+        "downtown", "steal", "block", "assist", "undo", "stat",
       ];
       for (const term of basketballTerms) {
         params.append("keyterm", term);
@@ -828,6 +832,14 @@ export default function RecordPage() {
     const currentGame = gameRef.current;
 
     if (currentGame.status !== "active") return;
+
+    // Trigger word gate — silently ignore anything without "stat" prefix
+    if (triggerWordRef.current) {
+      const lower = text.toLowerCase().trim();
+      if (!lower.startsWith("stat ") && lower !== "stat") return;
+      text = text.replace(/^stat\s*/i, "").trim();
+      if (!text) return;
+    }
 
     // Build voice-to-display mapping for the parser
     const allDisplayNames = [...currentGame.teamA, ...currentGame.teamB];
@@ -1605,6 +1617,19 @@ export default function RecordPage() {
             </>
           )}
 
+
+          {/* Trigger word toggle */}
+          {!listening && (
+            <label className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={triggerWord}
+                onChange={(e) => setTriggerWord(e.target.checked)}
+                className="rounded"
+              />
+              Require &ldquo;STAT&rdquo; trigger word
+            </label>
+          )}
 
           {/* Audio device selector */}
           {!listening && (
