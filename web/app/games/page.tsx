@@ -16,6 +16,7 @@ interface GameRow {
   team_b_players: string[];
   team_a_score: number;
   team_b_score: number;
+  game_number: number;
 }
 
 export default function GamesPage() {
@@ -108,6 +109,9 @@ export default function GamesPage() {
                         </div>
 
                         <div className="text-right">
+                          <div className="text-xs font-bold font-display text-gray-500 dark:text-gray-400">
+                            Game {game.game_number}
+                          </div>
                           <div
                             className={`text-xs font-medium ${
                               game.status === "active"

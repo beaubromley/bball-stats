@@ -29,6 +29,7 @@ interface GameDetail {
   winning_team: string | null;
   team_a: string[];
   team_b: string[];
+  game_number: number | null;
 }
 
 interface GameEvent {
@@ -96,7 +97,9 @@ function GameDetailInner() {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <h1 className="text-3xl font-bold font-display uppercase tracking-wide">Game Detail</h1>
+        <h1 className="text-3xl font-bold font-display uppercase tracking-wide">
+          {game.game_number ? `Game ${game.game_number}` : "Game Detail"}
+        </h1>
         {isAdmin && id && (
           <Link
             href={`/game/transcripts?id=${id}`}

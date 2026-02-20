@@ -334,7 +334,9 @@ export async function getGameHistory(limit = 20) {
     args: [limit],
   });
 
-  return result.rows.map((row) => ({
+  // Games are returned DESC — compute game_number (1 = oldest)
+  const totalGames = result.rows.length;
+  return result.rows.map((row, i) => ({
     id: row.id,
     location: row.location,
     start_time: row.start_time,
@@ -349,5 +351,16 @@ export async function getGameHistory(limit = 20) {
       : [],
     team_a_score: Number(row.team_a_score),
     team_b_score: Number(row.team_b_score),
+    game_number: totalGames - i,
   }));
+}
+
+export async function getGameNumber(gameId: string): Promise<number | null> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: "SELECT COUNT(*) as num FROM games WHERE start_time <= (SELECT start_time FROM games WHERE id = ?)",
+    args: [gameId],
+  });
+  const num = Number(result.rows[0]?.num);
+  return num > 0 ? num : null;
 }
