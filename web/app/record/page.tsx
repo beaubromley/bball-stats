@@ -227,7 +227,7 @@ export default function RecordPage() {
     acceptedCmdTimerRef.current = setTimeout(() => setAcceptedCmd(""), 3000);
     // Single green flash
     setFlashGreen(true);
-    setTimeout(() => setFlashGreen(false), 400);
+    setTimeout(() => setFlashGreen(false), 500);
   }, []);
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
@@ -1352,8 +1352,8 @@ export default function RecordPage() {
         <div
           className="fixed inset-0 pointer-events-none z-50"
           style={{
-            background: "rgba(34, 197, 94, 0.15)",
-            animation: "flashFade 400ms ease-out forwards",
+            background: "rgba(34, 197, 94, 0.45)",
+            animation: "flashFade 500ms ease-out forwards",
           }}
         />
       )}
@@ -1365,22 +1365,22 @@ export default function RecordPage() {
           className="fixed inset-0 z-40 bg-black flex flex-col items-center justify-center"
           onClick={() => setShowScoreboard(false)}
         >
-          <div className="text-xs text-gray-500 font-display tracking-wider mb-4">TAP TO CLOSE</div>
-          <div className="flex items-center gap-8">
+          <div className="text-xs text-gray-600 font-display tracking-wider mb-6">TAP TO CLOSE</div>
+          <div className="flex items-center gap-6">
             <div className="text-center">
-              <div className="text-lg text-blue-400 font-display tracking-widest">TEAM A</div>
-              <div className="text-[120px] font-display leading-none tabular-nums">{game.teamAScore}</div>
-              <div className="text-xs text-gray-500 mt-2">{game.teamA.join(", ")}</div>
+              <div className="text-xl text-blue-400 font-display tracking-widest">TEAM A</div>
+              <div className="text-[200px] font-display leading-none tabular-nums">{game.teamAScore}</div>
+              <div className="text-sm text-gray-500 mt-3">{game.teamA.join(", ")}</div>
             </div>
-            <div className="text-3xl text-gray-600 font-display">VS</div>
+            <div className="text-4xl text-gray-700 font-display">-</div>
             <div className="text-center">
-              <div className="text-lg text-orange-400 font-display tracking-widest">TEAM B</div>
-              <div className="text-[120px] font-display leading-none tabular-nums">{game.teamBScore}</div>
-              <div className="text-xs text-gray-500 mt-2">{game.teamB.join(", ")}</div>
+              <div className="text-xl text-orange-400 font-display tracking-widest">TEAM B</div>
+              <div className="text-[200px] font-display leading-none tabular-nums">{game.teamBScore}</div>
+              <div className="text-sm text-gray-500 mt-3">{game.teamB.join(", ")}</div>
             </div>
           </div>
           {game.status === "active" && (
-            <div className="text-red-400 text-sm font-display tracking-widest mt-6 animate-pulse">LIVE</div>
+            <div className="text-red-400 text-lg font-display tracking-widest mt-8 animate-pulse">LIVE</div>
           )}
         </div>
       )}
