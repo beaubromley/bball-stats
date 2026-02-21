@@ -16,6 +16,8 @@ export interface PlayerStats {
   steals: number;
   blocks: number;
   fantasy_points: number;
+  plus_minus: number;
+  plus_minus_per_game: number;
 }
 
 export async function getLeaderboard(): Promise<PlayerStats[]> {
@@ -63,12 +65,43 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
     ORDER BY wins DESC, total_points DESC
   `);
 
+  // Compute +/- per player: for each finished game, team score minus opponent score
+  const pmResult = await db.execute(`
+    SELECT
+      r.player_id,
+      SUM(
+        CASE WHEN r.team = 'A' THEN COALESCE(sa.score, 0) - COALESCE(sb.score, 0)
+             ELSE COALESCE(sb.score, 0) - COALESCE(sa.score, 0)
+        END
+      ) as plus_minus
+    FROM rosters r
+    JOIN games g ON r.game_id = g.id AND g.status = 'finished'
+    LEFT JOIN (
+      SELECT ge.game_id, SUM(ge.point_value) as score
+      FROM game_events ge
+      JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id AND r2.team = 'A'
+      GROUP BY ge.game_id
+    ) sa ON r.game_id = sa.game_id
+    LEFT JOIN (
+      SELECT ge.game_id, SUM(ge.point_value) as score
+      FROM game_events ge
+      JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id AND r2.team = 'B'
+      GROUP BY ge.game_id
+    ) sb ON r.game_id = sb.game_id
+    GROUP BY r.player_id
+  `);
+  const pmMap = new Map<string, number>();
+  for (const row of pmResult.rows) {
+    pmMap.set(row.player_id as string, Number(row.plus_minus));
+  }
+
   return result.rows.map((row) => {
     const gamesPlayed = Number(row.games_played) || 1;
     const totalPoints = Number(row.total_points);
     const assists = Number(row.assists);
     const steals = Number(row.steals);
     const blocks = Number(row.blocks);
+    const pm = pmMap.get(row.id as string) || 0;
     return {
       id: row.id as string,
       name: row.name as string,
@@ -84,6 +117,8 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
       steals,
       blocks,
       fantasy_points: calculateFantasyPoints({ points: totalPoints, assists, steals, blocks }),
+      plus_minus: pm,
+      plus_minus_per_game: Math.round((pm / gamesPlayed) * 10) / 10,
     };
   });
 }
@@ -176,8 +211,47 @@ export async function getTodayStats(dateStr: string): Promise<TodayStats> {
       steals,
       blocks,
       fantasy_points: calculateFantasyPoints({ points: totalPoints, assists, steals, blocks }),
+      plus_minus: 0,
+      plus_minus_per_game: 0,
     };
   });
+
+  // Compute +/- for today's games
+  const pmResult = await db.execute({
+    sql: `
+      SELECT
+        r.player_id,
+        SUM(
+          CASE WHEN r.team = 'A' THEN COALESCE(sa.score, 0) - COALESCE(sb.score, 0)
+               ELSE COALESCE(sb.score, 0) - COALESCE(sa.score, 0)
+          END
+        ) as plus_minus
+      FROM rosters r
+      JOIN games g ON r.game_id = g.id AND g.status = 'finished'
+      LEFT JOIN (
+        SELECT ge.game_id, SUM(ge.point_value) as score
+        FROM game_events ge
+        JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id AND r2.team = 'A'
+        GROUP BY ge.game_id
+      ) sa ON r.game_id = sa.game_id
+      LEFT JOIN (
+        SELECT ge.game_id, SUM(ge.point_value) as score
+        FROM game_events ge
+        JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id AND r2.team = 'B'
+        GROUP BY ge.game_id
+      ) sb ON r.game_id = sb.game_id
+      WHERE date(g.start_time, '-6 hours') = ?
+      GROUP BY r.player_id
+    `,
+    args: [dateStr],
+  });
+  for (const row of pmResult.rows) {
+    const p = players.find((pl) => pl.id === row.player_id);
+    if (p) {
+      p.plus_minus = Number(row.plus_minus);
+      p.plus_minus_per_game = Math.round((p.plus_minus / (p.games_played || 1)) * 10) / 10;
+    }
+  }
 
   return { games_today, players };
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/app/components/AuthProvider";
 import {
   BarChart,
   Bar,
@@ -25,6 +26,8 @@ interface PlayerRow {
   steals: number;
   blocks: number;
   fantasy_points: number;
+  plus_minus: number;
+  plus_minus_per_game: number;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,6 +51,7 @@ interface TodayData {
 }
 
 export default function StatsPage() {
+  const { isAdmin } = useAuth();
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [todayStats, setTodayStats] = useState<TodayData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -157,6 +161,7 @@ export default function StatsPage() {
                     <th className="py-2 pr-3 text-right">STL</th>
                     <th className="py-2 pr-3 text-right">BLK</th>
                     <th className="py-2 text-right">FP</th>
+                    {isAdmin && <th className="py-2 pl-3 text-right">+/-</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -170,6 +175,11 @@ export default function StatsPage() {
                       <td className="py-2 pr-3 text-right tabular-nums">{p.steals}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.blocks}</td>
                       <td className="py-2 text-right tabular-nums font-bold text-blue-400">{p.fantasy_points}</td>
+                      {isAdmin && (
+                        <td className={`py-2 pl-3 text-right tabular-nums font-bold ${p.plus_minus > 0 ? "text-green-400" : p.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
+                          {p.plus_minus > 0 ? "+" : ""}{p.plus_minus}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
