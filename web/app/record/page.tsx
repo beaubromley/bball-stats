@@ -227,7 +227,7 @@ export default function RecordPage() {
     acceptedCmdTimerRef.current = setTimeout(() => setAcceptedCmd(""), 3000);
     // Single green flash
     setFlashGreen(true);
-    setTimeout(() => setFlashGreen(false), 500);
+    setTimeout(() => setFlashGreen(false), 1000);
   }, []);
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
@@ -1352,8 +1352,8 @@ export default function RecordPage() {
         <div
           className="fixed inset-0 pointer-events-none z-50"
           style={{
-            background: "rgba(34, 197, 94, 0.45)",
-            animation: "flashFade 500ms ease-out forwards",
+            background: "rgba(34, 197, 94, 1)",
+            animation: "flashFade 1000ms ease-out forwards",
           }}
         />
       )}
