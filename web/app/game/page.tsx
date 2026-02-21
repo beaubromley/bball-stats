@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import BoxScore from "@/app/components/BoxScore";
 import Link from "next/link";
+import { formatFullCT, formatTimeCT } from "@/lib/time";
 import { useAuth } from "@/app/components/AuthProvider";
 
 const API_BASE = "/api";
@@ -117,7 +118,7 @@ function GameDetailInner() {
         )}
       </div>
       <p className="text-gray-500 text-sm mb-6">
-        {new Date(game.start_time).toLocaleString()}
+        {formatFullCT(game.start_time)}
         {game.status === "finished" && (
           <span className="ml-2 text-gray-500 dark:text-gray-400">
             — Team {game.winning_team} wins
@@ -408,10 +409,7 @@ function GameDetailInner() {
                   }`}
                 >
                   <span className="text-sm text-gray-500 w-16">
-                    {new Date(event.created_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatTimeCT(event.created_at)}
                   </span>
                   <span className="flex-1">
                     {event.player_name}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { groupBySeason } from "@/lib/seasons";
 import { useAuth } from "@/app/components/AuthProvider";
+import { formatShortDateCT } from "@/lib/time";
 
 const API_BASE = "/api";
 
@@ -122,7 +123,7 @@ export default function GamesPage() {
                             {game.status === "active" ? "LIVE" : "FINAL"}
                           </div>
                           <div className="text-xs text-gray-400 dark:text-gray-600 mt-1">
-                            {new Date(game.start_time).toLocaleDateString()}
+                            {formatShortDateCT(game.start_time)}
                           </div>
                         </div>
                       </div>

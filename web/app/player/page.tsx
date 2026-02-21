@@ -4,6 +4,8 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
+import { formatShortDateCT } from "@/lib/time";
+
 const API_BASE = "/api";
 
 interface PlayerStats {
@@ -81,7 +83,7 @@ function PlayerDetailInner() {
     .slice()
     .reverse()
     .map((g) => ({
-      date: new Date(g.start_time).toLocaleDateString(),
+      date: formatShortDateCT(g.start_time),
       pts: Number(g.points_scored),
     }));
 
@@ -159,7 +161,7 @@ function PlayerDetailInner() {
                 {game.result}
               </span>
               <span className="flex-1 text-sm text-gray-500 dark:text-gray-400">
-                {new Date(game.start_time).toLocaleDateString()}
+                {formatShortDateCT(game.start_time)}
               </span>
               <span className="tabular-nums font-medium">
                 {Number(game.points_scored)} pts

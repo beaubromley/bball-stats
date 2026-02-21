@@ -5,6 +5,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/app/components/AuthProvider";
+import { formatFullCT, formatTimeCT } from "@/lib/time";
 
 const API_BASE = "/api";
 
@@ -157,7 +158,7 @@ function EditInner() {
 
       <h1 className="text-3xl font-bold font-display uppercase tracking-wide mb-2">Edit Game</h1>
       <p className="text-gray-500 text-sm mb-8">
-        {new Date(game.start_time).toLocaleString()}
+        {formatFullCT(game.start_time)}
         {game.winning_team && <span className="ml-2">— Team {game.winning_team} wins</span>}
       </p>
 
@@ -227,7 +228,7 @@ function EditInner() {
                 <option value={3}>+3</option>
               </select>
               <span className="text-xs text-gray-400 dark:text-gray-600 w-14 text-right">
-                {new Date(evt.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {formatTimeCT(evt.created_at)}
               </span>
               <button
                 onClick={() => { if (confirm(`Delete ${evt.player_name} +${evt.point_value}?`)) deleteEventById(evt.id); }}

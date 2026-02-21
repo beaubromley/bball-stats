@@ -5,6 +5,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/app/components/AuthProvider";
+import { formatFullCT, formatTimeSecCT } from "@/lib/time";
 
 const API_BASE = "/api";
 
@@ -151,7 +152,7 @@ function TranscriptsInner() {
 
       <h1 className="text-2xl font-bold font-display uppercase tracking-wide mb-1">Voice Log</h1>
       <p className="text-gray-500 text-sm mb-8">
-        {new Date(game.start_time).toLocaleString()}
+        {formatFullCT(game.start_time)}
         {game.status === "finished" && game.winning_team && (
           <span className="ml-2">— Team {game.winning_team} wins</span>
         )}
@@ -170,11 +171,7 @@ function TranscriptsInner() {
                   className="flex items-start gap-3 py-2 border-b border-gray-100 dark:border-gray-900"
                 >
                   <span className="text-xs text-gray-400 dark:text-gray-600 w-14 shrink-0 pt-0.5">
-                    {new Date(t.created_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                    })}
+                    {formatTimeSecCT(t.created_at)}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className={`text-sm italic truncate ${entry.recognized ? "text-gray-500 dark:text-gray-400" : "text-orange-400"}`}>
@@ -196,11 +193,7 @@ function TranscriptsInner() {
                   className="flex items-start gap-3 py-2 border-b border-gray-100 dark:border-gray-900"
                 >
                   <span className="text-xs text-gray-400 dark:text-gray-600 w-14 shrink-0 pt-0.5">
-                    {new Date(evt.created_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                    })}
+                    {formatTimeSecCT(evt.created_at)}
                   </span>
                   <div className="flex-1 min-w-0">
                     {evt.raw_transcript && (
