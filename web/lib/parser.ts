@@ -78,7 +78,6 @@ const ALIASES: Record<string, string> = {
   bloc: "block",
   lock: "block",
   tu: "two",
-  to: "two",
   too: "two",
   free: "three",
   tree: "three",
