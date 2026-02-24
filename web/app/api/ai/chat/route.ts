@@ -25,12 +25,22 @@ game_events(id INTEGER PK, game_id TEXT, player_id TEXT, event_type TEXT, point_
 game_transcripts(id INTEGER PK, game_id TEXT, raw_text TEXT, acted_on TEXT, created_at DATETIME)
   -- Voice recognition segments. acted_on is what the parser interpreted (e.g. "Beau B. +2") or null if unrecognized.
 
+Basketball context:
+- This is pickup basketball at the Rankin YMCA. Games are typically 4v4, first to 11 or 15.
+- scoring_mode '1s2s': inside shots = 1 point (point_value=1), outside/deep/three-pointers = 2 points (point_value=2)
+- scoring_mode '2s3s': inside shots = 2 points (point_value=2), outside/deep/three-pointers = 3 points (point_value=3)
+- "Deep", "from deep", "outside", "three", "downtown" all mean the higher point value shot (2 in 1s2s mode, 3 in 2s3s mode)
+- "Bucket", "layup", "dunk", "floater" mean the lower point value shot (1 in 1s2s mode, 2 in 2s3s mode)
+- Most games so far use 1s2s scoring. So point_value=1 is an inside shot, point_value=2 is an outside/deep shot.
+- To find "deep" or "outside" shots: filter for the higher point_value. In 1s2s games, that's point_value=2. Check games.scoring_mode if needed.
+
 Key relationships:
 - To get a player's scores: JOIN game_events ON player_id, filter event_type = 'score'
 - To get team rosters: JOIN rosters ON game_id and player_id
 - To calculate team scores: SUM point_value from game_events JOINed with rosters filtered by team
 - Corrections should be excluded from stats (they represent undone plays)
 - To find assist-scorer pairs: JOIN assist events (via assisted_event_id) to the score event they assisted. The assist's player_id is the assister, the score's player_id is the scorer.
+- When querying by player name, use LIKE '%name%' or match on p.name. Players are stored as "First L." (e.g. "Brandon K.") so searching for "Brandon" should use p.name LIKE 'Brandon%'.
 - All timestamps are UTC. Central Time = UTC - 6 hours.
 `;
 
