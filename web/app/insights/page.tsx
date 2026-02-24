@@ -14,7 +14,8 @@ interface Message {
 }
 
 export default function InsightsPage() {
-  const { isAdmin, loading: authLoading } = useAuth();
+  const { isAdmin, isViewer, loading: authLoading } = useAuth();
+  const hasAccess = isAdmin || isViewer;
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -23,7 +24,7 @@ export default function InsightsPage() {
   const [showSql, setShowSql] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !isAdmin) router.replace("/login");
+    if (!authLoading && !hasAccess) router.replace("/login");
   }, [authLoading, isAdmin, router]);
 
   useEffect(() => {
@@ -54,7 +55,7 @@ export default function InsightsPage() {
     setAsking(false);
   }
 
-  if (authLoading || !isAdmin) {
+  if (authLoading || !hasAccess) {
     return <div className="text-gray-500 text-center py-16">Loading...</div>;
   }
 

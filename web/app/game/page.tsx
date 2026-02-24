@@ -59,7 +59,7 @@ interface WinProbResponse {
 function GameDetailInner() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
-  const { isAdmin } = useAuth();
+  const { isAdmin, isViewer } = useAuth();
   const [game, setGame] = useState<GameDetail | null>(null);
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [winProb, setWinProb] = useState<WinProbResponse | null>(null);
@@ -100,14 +100,16 @@ function GameDetailInner() {
         <h1 className="text-3xl font-bold font-display uppercase tracking-wide">
           {game.game_number ? `Game ${game.game_number}` : "Game Detail"}
         </h1>
-        {isAdmin && id && (
+        {(isAdmin || isViewer) && id && (
           <div className="flex gap-4">
-            <Link
-              href={`/game/edit?id=${id}`}
-              className="text-sm text-gray-500 hover:text-blue-400 transition-colors"
-            >
-              Edit
-            </Link>
+            {isAdmin && (
+              <Link
+                href={`/game/edit?id=${id}`}
+                className="text-sm text-gray-500 hover:text-blue-400 transition-colors"
+              >
+                Edit
+              </Link>
+            )}
             <Link
               href={`/game/transcripts?id=${id}`}
               className="text-sm text-gray-500 hover:text-blue-400 transition-colors"

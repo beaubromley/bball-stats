@@ -63,7 +63,8 @@ function eventColor(type: string): string {
 function TranscriptsInner() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
-  const { isAdmin, loading: authLoading } = useAuth();
+  const { isAdmin, isViewer, loading: authLoading } = useAuth();
+  const hasAccess = isAdmin || isViewer;
   const router = useRouter();
 
   const [game, setGame] = useState<GameDetail | null>(null);
@@ -72,13 +73,13 @@ function TranscriptsInner() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!authLoading && !isAdmin) {
+    if (!authLoading && !hasAccess) {
       router.replace("/login");
     }
   }, [authLoading, isAdmin, router]);
 
   useEffect(() => {
-    if (!id || !isAdmin) return;
+    if (!id || !hasAccess) return;
     Promise.all([
       fetch(`${API_BASE}/games/${id}`).then((r) => r.json()),
       fetch(`${API_BASE}/games/${id}/events`).then((r) => r.json()),
@@ -93,7 +94,7 @@ function TranscriptsInner() {
       .finally(() => setLoading(false));
   }, [id, isAdmin]);
 
-  if (authLoading || !isAdmin) {
+  if (authLoading || !hasAccess) {
     return <div className="text-gray-500 text-center py-16">Loading...</div>;
   }
 

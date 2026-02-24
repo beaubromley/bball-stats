@@ -50,7 +50,9 @@ export default function Nav() {
     { href: "/stats", label: "Stats" },
     ...(isAdmin
       ? [{ href: "/record", label: "Record" }, { href: "/insights", label: "Insights" }]
-      : !loggedIn ? [{ href: "/login", label: "Login" }] : []),
+      : isViewer
+        ? [{ href: "/insights", label: "Insights" }]
+        : [{ href: "/login", label: "Login" }]),
   ];
 
   function isActive(href: string) {
@@ -125,7 +127,7 @@ export default function Nav() {
               {link.label}
             </Link>
           ))}
-          {isAdmin && (
+          {loggedIn && (
             <button
               onClick={() => { logout(); setMenuOpen(false); }}
               className="text-left py-1 text-gray-500 hover:text-red-400 transition-colors"
