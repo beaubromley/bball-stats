@@ -72,10 +72,10 @@ export default function InsightsPage() {
             <p className="text-sm">Try asking:</p>
             <div className="flex flex-wrap justify-center gap-2">
               {[
-                "Who has the most wins?",
-                "What's Beau's scoring average?",
-                "Who scored the most in a single game?",
-                "What's the win record when Tyler and Beau are on the same team?",
+                "Who has the best win percentage with at least 3 games?",
+                "Which player scores the highest percentage from deep?",
+                "Who has the most assists and who do they assist the most?",
+                "Which two players win the most when on the same team?",
               ].map((q) => (
                 <button
                   key={q}

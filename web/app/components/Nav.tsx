@@ -39,17 +39,18 @@ function ThemeToggle() {
 }
 
 export default function Nav() {
-  const { isAdmin, logout } = useAuth();
+  const { isAdmin, isViewer, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
 
+  const loggedIn = isAdmin || isViewer;
   const links = [
     { href: "/", label: "Leaderboard" },
     { href: "/games", label: "Games" },
     { href: "/stats", label: "Stats" },
     ...(isAdmin
       ? [{ href: "/record", label: "Record" }, { href: "/insights", label: "Insights" }]
-      : [{ href: "/login", label: "Login" }]),
+      : !loggedIn ? [{ href: "/login", label: "Login" }] : []),
   ];
 
   function isActive(href: string) {
@@ -77,7 +78,7 @@ export default function Nav() {
             </Link>
           ))}
           <ThemeToggle />
-          {isAdmin && (
+          {loggedIn && (
             <button
               onClick={logout}
               className="text-gray-500 hover:text-red-400 transition-colors"

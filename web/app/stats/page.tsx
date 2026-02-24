@@ -55,7 +55,8 @@ interface TodayData {
 }
 
 export default function StatsPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isViewer } = useAuth();
+  const showAdvanced = isAdmin || isViewer;
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [todayStats, setTodayStats] = useState<TodayData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -164,7 +165,7 @@ export default function StatsPage() {
                     <th className="py-2 pr-3 text-right">STL</th>
                     <th className="py-2 pr-3 text-right">BLK</th>
                     <th className="py-2 text-right">FP</th>
-                    {isAdmin && <th className="py-2 pl-3 text-right">+/-</th>}
+                    {showAdvanced && <th className="py-2 pl-3 text-right">+/-</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -178,7 +179,7 @@ export default function StatsPage() {
                       <td className="py-2 pr-3 text-right tabular-nums">{p.steals}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.blocks}</td>
                       <td className="py-2 text-right tabular-nums font-bold text-blue-400">{p.fantasy_points}</td>
-                      {isAdmin && (
+                      {showAdvanced && (
                         <td className={`py-2 pl-3 text-right tabular-nums font-bold ${p.plus_minus > 0 ? "text-green-400" : p.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
                           {p.plus_minus > 0 ? "+" : ""}{p.plus_minus}
                         </td>

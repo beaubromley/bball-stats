@@ -24,7 +24,8 @@ interface PlayerRow {
 }
 
 export default function Home() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isViewer } = useAuth();
+  const showAdvanced = isAdmin || isViewer;
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -67,9 +68,9 @@ export default function Home() {
                 <th className="py-3 pr-4 text-right">STL</th>
                 <th className="py-3 pr-4 text-right">BLK</th>
                 <th className="py-3 text-right">FP</th>
-                {isAdmin && <th className="py-3 pl-4 text-right">+/-</th>}
-                {isAdmin && <th className="py-3 pl-4 text-right">+/-PG</th>}
-                {isAdmin && <th className="py-3 pl-4 text-right">STK</th>}
+                {showAdvanced && <th className="py-3 pl-4 text-right">+/-</th>}
+                {showAdvanced && <th className="py-3 pl-4 text-right">+/-PG</th>}
+                {showAdvanced && <th className="py-3 pl-4 text-right">STK</th>}
               </tr>
             </thead>
             <tbody>
@@ -114,17 +115,17 @@ export default function Home() {
                   <td className="py-3 text-right tabular-nums font-bold text-blue-400">
                     {player.fantasy_points}
                   </td>
-                  {isAdmin && (
+                  {showAdvanced && (
                     <td className={`py-3 pl-4 text-right tabular-nums font-bold ${player.plus_minus > 0 ? "text-green-400" : player.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
                       {player.plus_minus > 0 ? "+" : ""}{player.plus_minus}
                     </td>
                   )}
-                  {isAdmin && (
+                  {showAdvanced && (
                     <td className={`py-3 pl-4 text-right tabular-nums ${player.plus_minus_per_game > 0 ? "text-green-400" : player.plus_minus_per_game < 0 ? "text-red-400" : "text-gray-500"}`}>
                       {player.plus_minus_per_game > 0 ? "+" : ""}{player.plus_minus_per_game}
                     </td>
                   )}
-                  {isAdmin && (
+                  {showAdvanced && (
                     <td className={`py-3 pl-4 text-right tabular-nums font-bold ${player.streak.startsWith("W") ? "text-green-400" : player.streak.startsWith("L") ? "text-red-400" : "text-gray-500"}`}>
                       {player.streak}
                     </td>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isAuthenticated } from "@/lib/auth";
+import { getRole } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
-  const authed = await isAuthenticated(req);
-  return NextResponse.json({ authenticated: authed });
+  const role = await getRole(req);
+  return NextResponse.json({ authenticated: !!role, role: role || null });
 }

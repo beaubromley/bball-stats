@@ -2,8 +2,12 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 
+type Role = "admin" | "viewer" | null;
+
 interface AuthContextValue {
   isAdmin: boolean;
+  isViewer: boolean;
+  role: Role;
   loading: boolean;
   login: (password: string) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -11,22 +15,24 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue>({
   isAdmin: false,
+  isViewer: false,
+  role: null,
   loading: true,
   login: async () => false,
   logout: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [role, setRole] = useState<Role>(null);
   const [loading, setLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
     try {
       const res = await fetch("/api/auth/check");
       const data = await res.json();
-      setIsAdmin(data.authenticated);
+      setRole(data.role || null);
     } catch {
-      setIsAdmin(false);
+      setRole(null);
     } finally {
       setLoading(false);
     }
@@ -43,7 +49,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       body: JSON.stringify({ password }),
     });
     if (res.ok) {
-      setIsAdmin(true);
+      const data = await res.json();
+      setRole(data.role || "admin");
       return true;
     }
     return false;
@@ -51,11 +58,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    setIsAdmin(false);
+    setRole(null);
   };
 
+  const isAdmin = role === "admin";
+  const isViewer = role === "viewer";
+
   return (
-    <AuthContext.Provider value={{ isAdmin, loading, login, logout }}>
+    <AuthContext.Provider value={{ isAdmin, isViewer, role, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

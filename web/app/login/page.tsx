@@ -18,7 +18,9 @@ export default function LoginPage() {
     const ok = await login(password);
     setSubmitting(false);
     if (ok) {
-      router.push("/record");
+      // Admin goes to record, viewer goes to leaderboard
+      const isAdminPw = password === "ymcaball";
+      router.push(isAdminPw ? "/record" : "/");
     } else {
       setError("Wrong password");
     }
