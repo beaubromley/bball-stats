@@ -28,6 +28,7 @@ interface PlayerRow {
   fantasy_points: number;
   plus_minus: number;
   plus_minus_per_game: number;
+  streak: string;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

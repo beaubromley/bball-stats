@@ -20,6 +20,7 @@ interface PlayerRow {
   fantasy_points: number;
   plus_minus: number;
   plus_minus_per_game: number;
+  streak: string;
 }
 
 export default function Home() {
@@ -68,6 +69,7 @@ export default function Home() {
                 <th className="py-3 text-right">FP</th>
                 {isAdmin && <th className="py-3 pl-4 text-right">+/-</th>}
                 {isAdmin && <th className="py-3 pl-4 text-right">+/-PG</th>}
+                {isAdmin && <th className="py-3 pl-4 text-right">STK</th>}
               </tr>
             </thead>
             <tbody>
@@ -120,6 +122,11 @@ export default function Home() {
                   {isAdmin && (
                     <td className={`py-3 pl-4 text-right tabular-nums ${player.plus_minus_per_game > 0 ? "text-green-400" : player.plus_minus_per_game < 0 ? "text-red-400" : "text-gray-500"}`}>
                       {player.plus_minus_per_game > 0 ? "+" : ""}{player.plus_minus_per_game}
+                    </td>
+                  )}
+                  {isAdmin && (
+                    <td className={`py-3 pl-4 text-right tabular-nums font-bold ${player.streak.startsWith("W") ? "text-green-400" : player.streak.startsWith("L") ? "text-red-400" : "text-gray-500"}`}>
+                      {player.streak}
                     </td>
                   )}
                 </tr>

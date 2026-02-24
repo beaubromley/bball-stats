@@ -18,6 +18,7 @@ export interface PlayerStats {
   fantasy_points: number;
   plus_minus: number;
   plus_minus_per_game: number;
+  streak: string; // e.g. "W3", "L2"
 }
 
 export async function getLeaderboard(): Promise<PlayerStats[]> {
@@ -95,6 +96,34 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
     pmMap.set(row.player_id as string, Number(row.plus_minus));
   }
 
+  // Compute win/loss streaks: for each player, get their recent game results in order
+  const streakResult = await db.execute(`
+    SELECT r.player_id, g.winning_team, r.team, g.start_time
+    FROM rosters r
+    JOIN games g ON r.game_id = g.id
+    WHERE g.status = 'finished' AND g.winning_team IS NOT NULL
+    ORDER BY g.start_time DESC
+  `);
+  // Group by player, compute streak from most recent games
+  const playerGames = new Map<string, boolean[]>(); // true = win
+  for (const row of streakResult.rows) {
+    const pid = row.player_id as string;
+    const won = row.winning_team === row.team;
+    if (!playerGames.has(pid)) playerGames.set(pid, []);
+    playerGames.get(pid)!.push(won);
+  }
+  const streakMap = new Map<string, string>();
+  for (const [pid, games] of playerGames) {
+    if (games.length === 0) { streakMap.set(pid, "-"); continue; }
+    const first = games[0]; // most recent
+    let count = 1;
+    for (let i = 1; i < games.length; i++) {
+      if (games[i] === first) count++;
+      else break;
+    }
+    streakMap.set(pid, `${first ? "W" : "L"}${count}`);
+  }
+
   return result.rows.map((row) => {
     const gamesPlayed = Number(row.games_played) || 1;
     const totalPoints = Number(row.total_points);
@@ -119,6 +148,7 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
       fantasy_points: calculateFantasyPoints({ points: totalPoints, assists, steals, blocks }),
       plus_minus: pm,
       plus_minus_per_game: Math.round((pm / gamesPlayed) * 10) / 10,
+      streak: streakMap.get(row.id as string) || "-",
     };
   });
 }
@@ -213,6 +243,7 @@ export async function getTodayStats(dateStr: string): Promise<TodayStats> {
       fantasy_points: calculateFantasyPoints({ points: totalPoints, assists, steals, blocks }),
       plus_minus: 0,
       plus_minus_per_game: 0,
+      streak: "-",
     };
   });
 
