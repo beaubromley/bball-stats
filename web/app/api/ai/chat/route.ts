@@ -16,10 +16,11 @@ games(id TEXT PK, location TEXT, start_time DATETIME, end_time DATETIME, status 
 rosters(game_id TEXT, player_id TEXT, team TEXT, PK(game_id, player_id))
   -- team: 'A' or 'B'. Links players to games.
 
-game_events(id INTEGER PK, game_id TEXT, player_id TEXT, event_type TEXT, point_value INTEGER, corrected_event_id INTEGER, raw_transcript TEXT, created_at DATETIME)
+game_events(id INTEGER PK, game_id TEXT, player_id TEXT, event_type TEXT, point_value INTEGER, corrected_event_id INTEGER, raw_transcript TEXT, created_at DATETIME, assisted_event_id INTEGER)
   -- event_type: 'score', 'correction', 'steal', 'block', 'assist'
   -- For scores: point_value is 1, 2, or 3. For corrections: negative point_value (undo).
   -- corrected_event_id references the score event that was undone.
+  -- For assists: assisted_event_id references the score event that was assisted.
 
 game_transcripts(id INTEGER PK, game_id TEXT, raw_text TEXT, acted_on TEXT, created_at DATETIME)
   -- Voice recognition segments. acted_on is what the parser interpreted (e.g. "Beau B. +2") or null if unrecognized.
@@ -29,6 +30,7 @@ Key relationships:
 - To get team rosters: JOIN rosters ON game_id and player_id
 - To calculate team scores: SUM point_value from game_events JOINed with rosters filtered by team
 - Corrections should be excluded from stats (they represent undone plays)
+- To find assist-scorer pairs: JOIN assist events (via assisted_event_id) to the score event they assisted. The assist's player_id is the assister, the score's player_id is the scorer.
 - All timestamps are UTC. Central Time = UTC - 6 hours.
 `;
 

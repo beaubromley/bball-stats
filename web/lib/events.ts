@@ -61,13 +61,14 @@ export async function recordEvent(
   eventType: "score" | "correction",
   pointValue: number,
   rawTranscript?: string,
-  correctedEventId?: number
+  correctedEventId?: number,
+  assistedEventId?: number
 ): Promise<number> {
   const db = getDb();
   const playerId = await ensurePlayer(playerName);
   const result = await db.execute({
-    sql: `INSERT INTO game_events (game_id, player_id, event_type, point_value, corrected_event_id, raw_transcript)
-          VALUES (?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO game_events (game_id, player_id, event_type, point_value, corrected_event_id, raw_transcript, assisted_event_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
     args: [
       gameId,
       playerId,
@@ -75,6 +76,7 @@ export async function recordEvent(
       pointValue,
       correctedEventId ?? null,
       rawTranscript ?? null,
+      assistedEventId ?? null,
     ],
   });
   return Number(result.lastInsertRowid);

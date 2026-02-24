@@ -132,4 +132,25 @@ export async function initDb() {
       args: [fullName, displayName],
     });
   }
+
+  // Migration: add assisted_event_id to link assists to the score they assisted
+  try {
+    await db.execute("ALTER TABLE game_events ADD COLUMN assisted_event_id INTEGER");
+  } catch {
+    // Column already exists
+  }
+
+  // Backfill: link assist events to the score event that immediately precedes them
+  await db.execute(`
+    UPDATE game_events SET assisted_event_id = (
+      SELECT ge2.id FROM game_events ge2
+      WHERE ge2.game_id = game_events.game_id
+        AND ge2.event_type = 'score'
+        AND ge2.created_at <= game_events.created_at
+        AND ge2.id < game_events.id
+      ORDER BY ge2.created_at DESC, ge2.id DESC
+      LIMIT 1
+    )
+    WHERE event_type = 'assist' AND assisted_event_id IS NULL
+  `);
 }

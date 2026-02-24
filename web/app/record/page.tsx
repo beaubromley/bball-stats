@@ -821,19 +821,21 @@ export default function RecordPage() {
         point_value: cmd.points,
         raw_transcript: raw,
       }),
+    }).then((res) => res.json()).then((data) => {
+      if (cmd.assistBy && data.id) {
+        fetch(`${API_BASE}/games/${gameId}/events`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            player_name: cmd.assistBy,
+            event_type: "assist",
+            point_value: 0,
+            raw_transcript: raw,
+            assisted_event_id: data.id,
+          }),
+        }).catch(() => {});
+      }
     }).catch(() => {});
-    if (cmd.assistBy) {
-      fetch(`${API_BASE}/games/${gameId}/events`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          player_name: cmd.assistBy,
-          event_type: "assist",
-          point_value: 0,
-          raw_transcript: raw,
-        }),
-      }).catch(() => {});
-    }
     if (cmd.stealBy) {
       fetch(`${API_BASE}/games/${gameId}/events`, {
         method: "POST",
@@ -979,6 +981,7 @@ export default function RecordPage() {
               event_type: "assist",
               point_value: 0,
               raw_transcript: text,
+              assisted_event_id: last.id,
             }),
           }).catch(() => {});
         }

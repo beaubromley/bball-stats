@@ -15,7 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (denied) return denied;
   await initDb();
   const { id } = await params;
-  const { player_name, event_type, point_value, corrected_event_id, raw_transcript } =
+  const { player_name, event_type, point_value, corrected_event_id, raw_transcript, assisted_event_id } =
     await req.json();
 
   if (!player_name || !event_type || point_value == null) {
@@ -31,7 +31,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     event_type,
     point_value,
     raw_transcript,
-    corrected_event_id
+    corrected_event_id,
+    assisted_event_id
   );
   return NextResponse.json({ id: eventId }, { status: 201 });
 }
