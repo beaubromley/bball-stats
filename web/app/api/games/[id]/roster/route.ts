@@ -9,7 +9,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (denied) return denied;
   await initDb();
   const { id } = await params;
-  const { team_a, team_b } = await req.json();
+  const { team_a, team_b, full_names } = await req.json();
 
   if (!Array.isArray(team_a) || !Array.isArray(team_b)) {
     return NextResponse.json(
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
-  await setRoster(id, team_a, team_b);
+  await setRoster(id, team_a, team_b, full_names);
   return NextResponse.json({ ok: true });
 }
 

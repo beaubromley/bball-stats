@@ -1,19 +1,26 @@
 import { v4 as uuid } from "uuid";
 import { getDb } from "./turso";
 
-export async function ensurePlayer(name: string): Promise<string> {
+export async function ensurePlayer(name: string, fullName?: string): Promise<string> {
   const db = getDb();
   const existing = await db.execute({
-    sql: "SELECT id FROM players WHERE LOWER(name) = LOWER(?)",
+    sql: "SELECT id, full_name FROM players WHERE LOWER(name) = LOWER(?)",
     args: [name],
   });
   if (existing.rows.length > 0) {
+    // Update full_name if we have it and it's not set yet
+    if (fullName && !existing.rows[0].full_name) {
+      await db.execute({
+        sql: "UPDATE players SET full_name = ? WHERE id = ?",
+        args: [fullName, existing.rows[0].id],
+      });
+    }
     return existing.rows[0].id as string;
   }
   const id = uuid();
   await db.execute({
-    sql: "INSERT INTO players (id, name) VALUES (?, ?)",
-    args: [id, name],
+    sql: "INSERT INTO players (id, name, full_name) VALUES (?, ?, ?)",
+    args: [id, name, fullName ?? null],
   });
   return id;
 }
@@ -28,14 +35,19 @@ export async function createGame(location?: string, targetScore?: number, scorin
   return id;
 }
 
-export async function setRoster(gameId: string, teamA: string[], teamB: string[]) {
+export async function setRoster(
+  gameId: string,
+  teamA: string[],
+  teamB: string[],
+  fullNames?: Record<string, string>
+) {
   const db = getDb();
   const allPlayers = [
     ...teamA.map((name) => ({ name, team: "A" })),
     ...teamB.map((name) => ({ name, team: "B" })),
   ];
   for (const { name, team } of allPlayers) {
-    const playerId = await ensurePlayer(name);
+    const playerId = await ensurePlayer(name, fullNames?.[name]);
     await db.execute({
       sql: `INSERT OR REPLACE INTO rosters (game_id, player_id, team) VALUES (?, ?, ?)`,
       args: [gameId, playerId, team],
@@ -241,30 +253,46 @@ export async function getActiveGameWatchData() {
     lastEvent = `${lastEventPlayer} +${lastEventPoints}`;
   }
 
-  // Get recent events of all types (last 5) for watch feed
+  // Get recent events of all types (last 10, then merge assists into scores) for watch feed
   const recentEventsResult = await db.execute({
-    sql: `SELECT ge.id, ge.event_type, ge.point_value, p.name as player_name
+    sql: `SELECT ge.id, ge.event_type, ge.point_value, p.name as player_name, ge.created_at
           FROM game_events ge
           JOIN players p ON ge.player_id = p.id
           WHERE ge.game_id = ?
           ORDER BY ge.created_at DESC
-          LIMIT 5`,
+          LIMIT 10`,
     args: [gameId],
   });
 
-  const recent_events = recentEventsResult.rows.map((r) => {
-    const type = r.event_type as string;
-    const name = (r.player_name as string).split(/\s/)[0]; // first name only for watch
-    const pts = r.point_value as number;
+  // Build raw list, then merge assist into preceding score
+  const rawEvents = recentEventsResult.rows.map((r) => ({
+    id: r.id as number,
+    type: r.event_type as string,
+    name: (r.player_name as string).split(/\s/)[0],
+    pts: r.point_value as number,
+  })).reverse(); // chronological
+
+  const merged: { id: number; type: string; label: string }[] = [];
+  for (let i = 0; i < rawEvents.length; i++) {
+    const e = rawEvents[i];
+    if (e.type === "assist") {
+      // Attach to previous score if it exists
+      if (merged.length > 0 && merged[merged.length - 1].type === "score") {
+        merged[merged.length - 1].label += ` (${e.name})`;
+        continue;
+      }
+    }
     let label = "";
-    if (type === "score") label = `${name} +${pts}`;
-    else if (type === "correction") label = `UNDO ${name}`;
-    else if (type === "steal") label = `${name} STL`;
-    else if (type === "block") label = `${name} BLK`;
-    else if (type === "assist") label = `${name} AST`;
-    else label = `${name} ${type.toUpperCase()}`;
-    return { id: r.id as number, type, label };
-  }).reverse(); // chronological order (oldest first)
+    if (e.type === "score") label = `${e.name} +${e.pts}`;
+    else if (e.type === "correction") label = `UNDO ${e.name}`;
+    else if (e.type === "steal") label = `${e.name} STL`;
+    else if (e.type === "block") label = `${e.name} BLK`;
+    else if (e.type === "assist") label = `${e.name} AST`;
+    else label = `${e.name} ${e.type.toUpperCase()}`;
+    merged.push({ id: e.id, type: e.type, label });
+  }
+
+  const recent_events = merged.slice(-5);
 
   return {
     game_id: gameId,

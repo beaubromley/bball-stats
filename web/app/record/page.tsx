@@ -1228,10 +1228,17 @@ export default function RecordPage() {
       const data = await res.json();
       gameId = data.id;
 
+      // Build full_name map from known players
+      const fullNames: Record<string, string> = {};
+      for (const displayName of [...teamA, ...teamB]) {
+        const player = knownPlayersRef.current.find((p) => p.name === displayName);
+        if (player?.fullName) fullNames[displayName] = player.fullName;
+      }
+
       await fetch(`${API_BASE}/games/${gameId}/roster`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ team_a: teamA, team_b: teamB }),
+        body: JSON.stringify({ team_a: teamA, team_b: teamB, full_names: fullNames }),
       });
     } catch {
       setError("API unreachable — scores will only be tracked locally");

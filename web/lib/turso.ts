@@ -101,4 +101,35 @@ export async function initDb() {
   } catch {
     // Column already exists
   }
+
+  // Migration: add full_name column to players for disambiguation
+  try {
+    await db.execute("ALTER TABLE players ADD COLUMN full_name TEXT");
+  } catch {
+    // Column already exists
+  }
+
+  // Backfill known full names from GroupMe data
+  const knownFullNames: Record<string, string> = {
+    "Addison P.": "Addison Peiroo",
+    "Austin P.": "Austin Place",
+    "Beau B.": "Beau Bromley",
+    "Brandon K.": "Brandon Kinney",
+    "Ed G.": "Ed G.",
+    "Gage S.": "Gage Smith",
+    "Garett H.": "Garett Hill",
+    "Jackson T.": "Jackson Thies",
+    "Jacob T.": "Jacob Taylor",
+    "Joe M.": "Joe Mathews",
+    "JC B.": "JC Bryan",
+    "Tyler E.": "Tyler Engebretson",
+    "Jon J.": "Jon Jester",
+    "Parker D.": "Parker Dooly",
+  };
+  for (const [displayName, fullName] of Object.entries(knownFullNames)) {
+    await db.execute({
+      sql: "UPDATE players SET full_name = ? WHERE LOWER(name) = LOWER(?) AND full_name IS NULL",
+      args: [fullName, displayName],
+    });
+  }
 }
