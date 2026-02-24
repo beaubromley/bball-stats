@@ -49,17 +49,22 @@ const SYSTEM_PROMPT = `You are a basketball stats analyst for a pickup basketbal
 ${DB_SCHEMA}
 
 When the user asks a question:
-1. Write a SQL query to answer it. Use only SELECT statements (read-only).
+1. Write one or more SQL queries to answer it thoroughly. Use CTEs (WITH clauses) for complex analysis.
 2. Return your response as JSON with this exact format:
-{"sql": "SELECT ...", "explanation": "Brief explanation of what this query does"}
+{"queries": [{"sql": "SELECT ...", "label": "Short label for this query"}], "explanation": "What these queries will show"}
+
+For simple questions, use a single query. For complex questions, use multiple queries to show different angles.
 
 Rules:
-- Only SELECT queries. Never INSERT, UPDATE, DELETE, DROP, or ALTER.
+- Only SELECT queries (including WITH/CTE). Never INSERT, UPDATE, DELETE, DROP, or ALTER.
 - Use player name (p.name) for display, not player_id.
 - For win/loss records, use games.winning_team compared to rosters.team.
 - Exclude corrections from point totals (event_type != 'correction').
-- Keep queries efficient. Use JOINs, not subqueries where possible.
-- If the question can't be answered from the database, return: {"sql": null, "explanation": "reason"}
+- Use CTEs freely for complex analysis — readability matters more than brevity.
+- Default to showing the top 5 results when ranking players. Use LIMIT 5 unless the user asks for all.
+- Anticipate follow-up questions. If someone asks "who scores the most?", also show PPG, shooting splits, and games played — not just total points.
+- When asked about a specific player, include context: their rank relative to others, trends, notable stats.
+- If the question can't be answered from the database, return: {"queries": [], "explanation": "reason"}
 - Return ONLY the JSON object, no markdown, no code fences.`;
 
 async function callGemini(prompt: string): Promise<string> {
@@ -85,7 +90,8 @@ async function callGemini(prompt: string): Promise<string> {
   return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
-async function callGeminiSummarize(question: string, rows: Record<string, unknown>[], explanation: string): Promise<string> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function callGeminiSummarize(question: string, results: any, explanation: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
@@ -94,9 +100,17 @@ async function callGeminiSummarize(question: string, rows: Record<string, unknow
 The query explanation: ${explanation}
 
 Query results (JSON):
-${JSON.stringify(rows, null, 2)}
+${JSON.stringify(results, null, 2)}
 
-Write a brief, conversational answer to the user's question based on these results. Use player names, not IDs. Keep it concise — a few sentences max. If the data is empty, say so. Don't mention SQL or databases.`;
+Write a thorough, conversational answer to the user's question based on these results. Guidelines:
+- Use player first names naturally (e.g. "Brandon" not "Brandon K.")
+- Highlight the key finding first, then provide supporting details
+- Include relevant numbers and percentages
+- Point out interesting patterns or surprises in the data
+- If multiple queries were run, synthesize the findings into a cohesive narrative
+- If data is empty, say so and suggest what might be wrong
+- Don't mention SQL, databases, or queries
+- Use line breaks for readability when covering multiple points`;
 
   const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
     method: "POST",
@@ -125,7 +139,7 @@ export async function POST(req: NextRequest) {
   try {
     // Step 1: Get SQL from Gemini
     const raw = await callGemini(question);
-    let parsed: { sql: string | null; explanation: string };
+    let parsed: { queries?: { sql: string; label: string }[]; sql?: string; explanation: string };
     try {
       const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(cleaned);
@@ -133,28 +147,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ answer: "I couldn't understand how to query that. Try rephrasing.", raw });
     }
 
-    if (!parsed.sql) {
+    // Support both old format (single sql) and new format (queries array)
+    const queries = parsed.queries || (parsed.sql ? [{ sql: parsed.sql, label: "Results" }] : []);
+
+    if (queries.length === 0) {
       return NextResponse.json({ answer: parsed.explanation });
     }
 
-    // Safety: only allow SELECT
-    const sqlUpper = parsed.sql.trim().toUpperCase();
-    if (!sqlUpper.startsWith("SELECT")) {
-      return NextResponse.json({ answer: "I can only run read-only queries." });
+    // Step 2: Execute all queries
+    const db = getDb();
+    const allResults: { label: string; sql: string; rows: Record<string, unknown>[] }[] = [];
+
+    for (const q of queries) {
+      const sqlUpper = q.sql.trim().toUpperCase();
+      if (!sqlUpper.startsWith("SELECT") && !sqlUpper.startsWith("WITH")) continue;
+      try {
+        const result = await db.execute(q.sql);
+        allResults.push({ label: q.label, sql: q.sql, rows: (result.rows as Record<string, unknown>[]).slice(0, 50) });
+      } catch (sqlErr) {
+        allResults.push({ label: q.label, sql: q.sql, rows: [{ error: String(sqlErr) }] });
+      }
     }
 
-    // Step 2: Execute the query
-    const db = getDb();
-    const result = await db.execute(parsed.sql);
-    const rows = result.rows as Record<string, unknown>[];
-
-    // Step 3: Summarize with Gemini
-    const answer = await callGeminiSummarize(question, rows.slice(0, 50), parsed.explanation);
+    // Step 3: Summarize all results with Gemini
+    const resultsForSummary = allResults.map((r) => ({
+      label: r.label,
+      data: r.rows.slice(0, 30),
+    }));
+    const answer = await callGeminiSummarize(question, resultsForSummary, parsed.explanation);
 
     return NextResponse.json({
       answer,
-      sql: parsed.sql,
-      rows: rows.slice(0, 20),
+      sql: allResults.map((r) => `-- ${r.label}\n${r.sql}`).join("\n\n"),
+      rows: allResults.length === 1 ? allResults[0].rows.slice(0, 20) : allResults.flatMap((r) => r.rows).slice(0, 20),
     });
   } catch (err) {
     return NextResponse.json({

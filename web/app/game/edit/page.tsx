@@ -140,9 +140,8 @@ function EditInner() {
   }
 
   const allPlayers = [...game.team_a, ...game.team_b];
-  const scoreEvents = events.filter((e) => e.event_type === "score");
-  const otherEvents = events.filter((e) => e.event_type !== "score" && e.event_type !== "correction");
-  const corrections = events.filter((e) => e.event_type === "correction");
+  // All events in chronological order (exclude corrections from main view)
+  const allEvents = events.filter((e) => e.event_type !== "correction");
 
   return (
     <div>
@@ -189,22 +188,22 @@ function EditInner() {
         </div>
       </div>
 
-      {/* Score events */}
+      {/* All events — chronological */}
       <div className="mb-8">
-        <h2 className="text-sm font-bold font-display uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Scores</h2>
+        <h2 className="text-sm font-bold font-display uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Play-by-Play</h2>
         <div className="space-y-2">
-          {scoreEvents.map((evt, idx) => (
+          {allEvents.map((evt, idx) => (
             <div key={evt.id} className="flex items-center gap-2 py-2 px-3 border border-gray-200 dark:border-gray-800 rounded-lg">
               <div className="flex flex-col gap-0.5">
                 <button
-                  onClick={() => idx > 0 && swapEvents(evt.id, scoreEvents[idx - 1].id)}
+                  onClick={() => idx > 0 && swapEvents(evt.id, allEvents[idx - 1].id)}
                   disabled={idx === 0}
                   className="text-xs text-gray-400 hover:text-gray-200 disabled:opacity-20"
                   title="Move up"
                 >&#9650;</button>
                 <button
-                  onClick={() => idx < scoreEvents.length - 1 && swapEvents(evt.id, scoreEvents[idx + 1].id)}
-                  disabled={idx === scoreEvents.length - 1}
+                  onClick={() => idx < allEvents.length - 1 && swapEvents(evt.id, allEvents[idx + 1].id)}
+                  disabled={idx === allEvents.length - 1}
                   className="text-xs text-gray-400 hover:text-gray-200 disabled:opacity-20"
                   title="Move down"
                 >&#9660;</button>
@@ -218,20 +217,33 @@ function EditInner() {
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
-              <select
-                value={evt.point_value}
-                onChange={(e) => updatePointValue(evt.id, parseInt(e.target.value))}
-                className="w-16 px-2 py-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-sm text-gray-900 dark:text-white text-center"
-              >
-                <option value={1}>+1</option>
-                <option value={2}>+2</option>
-                <option value={3}>+3</option>
-              </select>
+              {evt.event_type === "score" ? (
+                <select
+                  value={evt.point_value}
+                  onChange={(e) => updatePointValue(evt.id, parseInt(e.target.value))}
+                  className="w-16 px-2 py-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-sm text-gray-900 dark:text-white text-center"
+                >
+                  <option value={1}>+1</option>
+                  <option value={2}>+2</option>
+                  <option value={3}>+3</option>
+                </select>
+              ) : (
+                <span className={`text-xs font-bold w-16 text-center ${
+                  evt.event_type === "steal" ? "text-yellow-400"
+                    : evt.event_type === "block" ? "text-purple-400"
+                    : "text-blue-400"
+                }`}>
+                  {evt.event_type === "steal" ? "STL" : evt.event_type === "block" ? "BLK" : "AST"}
+                </span>
+              )}
               <span className="text-xs text-gray-400 dark:text-gray-600 w-14 text-right">
                 {formatTimeCT(evt.created_at)}
               </span>
               <button
-                onClick={() => { if (confirm(`Delete ${evt.player_name} +${evt.point_value}?`)) deleteEventById(evt.id); }}
+                onClick={() => {
+                  const label = evt.event_type === "score" ? `${evt.player_name} +${evt.point_value}` : `${evt.player_name} ${evt.event_type}`;
+                  if (confirm(`Delete ${label}?`)) deleteEventById(evt.id);
+                }}
                 className="text-red-400 hover:text-red-300 text-sm px-1"
                 title="Delete"
               >
@@ -239,69 +251,11 @@ function EditInner() {
               </button>
             </div>
           ))}
-          {scoreEvents.length === 0 && (
-            <p className="text-gray-500 text-sm py-2">No scores recorded.</p>
+          {allEvents.length === 0 && (
+            <p className="text-gray-500 text-sm py-2">No events recorded.</p>
           )}
         </div>
       </div>
-
-      {/* Other events (steals, blocks, assists) */}
-      {otherEvents.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-sm font-bold font-display uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Steals / Blocks / Assists</h2>
-          <div className="space-y-2">
-            {otherEvents.map((evt) => (
-              <div key={evt.id} className="flex items-center gap-2 py-2 px-3 border border-gray-200 dark:border-gray-800 rounded-lg">
-                <select
-                  value={evt.player_name}
-                  onChange={(e) => updatePlayerName(evt.id, e.target.value)}
-                  className="flex-1 px-2 py-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-sm text-gray-900 dark:text-white"
-                >
-                  {allPlayers.map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-                <span className={`text-xs font-bold w-10 text-center ${
-                  evt.event_type === "steal" ? "text-yellow-400"
-                    : evt.event_type === "block" ? "text-purple-400"
-                    : "text-blue-400"
-                }`}>
-                  {evt.event_type === "steal" ? "STL" : evt.event_type === "block" ? "BLK" : "AST"}
-                </span>
-                <button
-                  onClick={() => { if (confirm(`Delete ${evt.player_name} ${evt.event_type}?`)) deleteEventById(evt.id); }}
-                  className="text-red-400 hover:text-red-300 text-sm px-1"
-                  title="Delete"
-                >
-                  &times;
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Corrections */}
-      {corrections.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-sm font-bold font-display uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Corrections</h2>
-          <div className="space-y-2">
-            {corrections.map((evt) => (
-              <div key={evt.id} className="flex items-center gap-2 py-2 px-3 border border-gray-200 dark:border-gray-800 rounded-lg opacity-60">
-                <span className="flex-1 text-sm">{evt.player_name}</span>
-                <span className="text-xs text-red-400 font-bold">UNDO {evt.point_value}</span>
-                <button
-                  onClick={() => { if (confirm("Delete this correction?")) deleteEventById(evt.id); }}
-                  className="text-red-400 hover:text-red-300 text-sm px-1"
-                  title="Delete correction"
-                >
-                  &times;
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Add new event */}
       <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-lg">

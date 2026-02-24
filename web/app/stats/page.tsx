@@ -10,6 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  Legend,
 } from "recharts";
 
 const API_BASE = "/api";
@@ -22,6 +23,8 @@ interface PlayerRow {
   win_pct: number;
   total_points: number;
   ppg: number;
+  ones_made: number;
+  twos_made: number;
   assists: number;
   steals: number;
   blocks: number;
@@ -84,30 +87,29 @@ export default function StatsPage() {
     );
   }
 
+  // Fantasy Points — stacked by source (PTS, AST, STL, BLK)
   const fpData = [...players]
     .sort((a, b) => b.fantasy_points - a.fantasy_points)
-    .map((p) => ({ name: p.name, FP: p.fantasy_points }));
+    .map((p) => ({ name: p.name, PTS: p.total_points, AST: p.assists, STL: p.steals, BLK: p.blocks }));
 
   const winData = [...players]
     .filter((p) => p.games_played >= 1)
     .sort((a, b) => b.win_pct - a.win_pct)
     .map((p) => ({ name: p.name, "Win%": p.win_pct }));
 
+  // Total Points — stacked by 1s and 2s
   const ptsData = [...players]
     .sort((a, b) => b.total_points - a.total_points)
-    .map((p) => ({ name: p.name, PTS: p.total_points }));
+    .map((p) => ({ name: p.name, "1s": p.ones_made, "2s": p.twos_made * 2 }));
 
+  // PPG — stacked by 1s and 2s per game
   const ppgData = [...players]
     .filter((p) => p.games_played >= 1)
     .sort((a, b) => b.ppg - a.ppg)
-    .map((p) => ({ name: p.name, PPG: p.ppg }));
-
-  const charts = [
-    { title: "Fantasy Points Leaders", data: fpData, dataKey: "FP", color: "#3B82F6" },
-    { title: "Win %", data: winData, dataKey: "Win%", color: "#F59E0B" },
-    { title: "Total Points", data: ptsData, dataKey: "PTS", color: "#10B981" },
-    { title: "Points Per Game", data: ppgData, dataKey: "PPG", color: "#8B5CF6" },
-  ];
+    .map((p) => {
+      const gp = p.games_played || 1;
+      return { name: p.name, "1s": Math.round((p.ones_made / gp) * 10) / 10, "2s": Math.round((p.twos_made * 2 / gp) * 10) / 10 };
+    });
 
   return (
     <div>
@@ -199,29 +201,77 @@ export default function StatsPage() {
       {/* All-Time Stats */}
       <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">All-Time</h2>
       <div className="space-y-10">
-        {charts.map(({ title, data, dataKey, color }) => (
-          <div key={title}>
-            <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">{title}</h2>
-            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
-              <ResponsiveContainer width="100%" height={Math.max(200, data.length * 40)}>
-                <BarChart data={data} layout="vertical" margin={{ left: 20, right: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    tick={{ fontSize: 12, fill: "#9CA3AF" }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={80}
-                  />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
-                  <Bar dataKey={dataKey} fill={color} radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+        {/* Fantasy Points — stacked by source */}
+        <div>
+          <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">Fantasy Points Leaders</h2>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
+            <ResponsiveContainer width="100%" height={Math.max(200, fpData.length * 40)}>
+              <BarChart data={fpData} layout="vertical" margin={{ left: 20, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                <Legend wrapperStyle={{ fontSize: "11px" }} />
+                <Bar dataKey="PTS" stackId="fp" fill="#10B981" />
+                <Bar dataKey="AST" stackId="fp" fill="#3B82F6" />
+                <Bar dataKey="STL" stackId="fp" fill="#EAB308" />
+                <Bar dataKey="BLK" stackId="fp" fill="#A855F7" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-        ))}
+        </div>
+
+        {/* Win % */}
+        <div>
+          <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">Win %</h2>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
+            <ResponsiveContainer width="100%" height={Math.max(200, winData.length * 40)}>
+              <BarChart data={winData} layout="vertical" margin={{ left: 20, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                <Bar dataKey="Win%" fill="#F59E0B" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Total Points — stacked 1s and 2s */}
+        <div>
+          <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">Total Points</h2>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
+            <ResponsiveContainer width="100%" height={Math.max(200, ptsData.length * 40)}>
+              <BarChart data={ptsData} layout="vertical" margin={{ left: 20, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                <Legend wrapperStyle={{ fontSize: "11px" }} />
+                <Bar dataKey="1s" stackId="pts" fill="#10B981" />
+                <Bar dataKey="2s" stackId="pts" fill="#3B82F6" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* PPG — stacked 1s and 2s */}
+        <div>
+          <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">Points Per Game</h2>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
+            <ResponsiveContainer width="100%" height={Math.max(200, ppgData.length * 40)}>
+              <BarChart data={ppgData} layout="vertical" margin={{ left: 20, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                <Legend wrapperStyle={{ fontSize: "11px" }} />
+                <Bar dataKey="1s" stackId="ppg" fill="#10B981" />
+                <Bar dataKey="2s" stackId="ppg" fill="#3B82F6" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
     </div>
   );
