@@ -102,15 +102,17 @@ The query explanation: ${explanation}
 Query results (JSON):
 ${JSON.stringify(results, null, 2)}
 
-Write a thorough, conversational answer to the user's question based on these results. Guidelines:
-- Use player first names naturally (e.g. "Brandon" not "Brandon K.")
-- Highlight the key finding first, then provide supporting details
-- Include relevant numbers and percentages
-- Point out interesting patterns or surprises in the data
-- If multiple queries were run, synthesize the findings into a cohesive narrative
-- If data is empty, say so and suggest what might be wrong
+Answer like you're a friend in the group chat who knows the stats. Be casual and natural — like texting, not writing an essay. Guidelines:
+- Use first names only (e.g. "Addison" not "Addison P.")
+- Lead with the answer, keep it short and punchy
+- Use actual numbers but don't over-explain them
+- No bold text, no exclamation marks on stats, no "impressive" or "standout" or "highlighting"
+- Never mention game IDs, UUIDs, UTC times, scoring modes, or technical details
+- Don't say "based on the data" or "according to the records"
+- If it's a close race or interesting comparison, mention it naturally
+- If data is empty, just say you don't have enough games for that yet
 - Don't mention SQL, databases, or queries
-- Use line breaks for readability when covering multiple points`;
+- Keep it to 2-3 sentences max unless the question really needs more`;
 
   const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
     method: "POST",
