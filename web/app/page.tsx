@@ -67,7 +67,7 @@ function ScatterTooltip({ active, payload }: any) {
   return (
     <div className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm">
       <p className="text-gray-300 font-medium">{data.name}</p>
-      <p className="text-green-400">PPG: {data.ppg}</p>
+      <p className="text-green-400">FPG: {data.fpg}</p>
       <p className="text-yellow-400">Win%: {data.winPct}%</p>
     </div>
   );
@@ -157,7 +157,7 @@ export default function Home() {
 
   const scatterData = [...players]
     .filter((p) => p.games_played >= 1)
-    .map((p) => ({ name: p.name, ppg: p.ppg, winPct: p.win_pct }));
+    .map((p) => ({ name: p.name, fpg: Math.round((p.fantasy_points / p.games_played) * 10) / 10, winPct: p.win_pct }));
 
   const SCATTER_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#A855F7", "#EC4899", "#06B6D4", "#F97316", "#84CC16", "#6366F1"];
 
@@ -446,19 +446,19 @@ export default function Home() {
       {/* PPG vs Win% Scatter */}
       {scatterData.length > 0 && (
         <div className="mb-10">
-          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">PPG vs Win %</h3>
+          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Fantasy Points Per Game vs Win %</h3>
           <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
             <ResponsiveContainer width="100%" height={350}>
               <ScatterChart margin={{ left: 10, right: 20, top: 20, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
                 <XAxis
                   type="number"
-                  dataKey="ppg"
-                  name="PPG"
+                  dataKey="fpg"
+                  name="FPG"
                   tick={{ fontSize: 12, fill: "#9CA3AF" }}
                   axisLine={false}
                   tickLine={false}
-                  label={{ value: "Points Per Game", position: "insideBottom", offset: -5, fontSize: 12, fill: "#6B7280" }}
+                  label={{ value: "Fantasy Points Per Game", position: "insideBottom", offset: -5, fontSize: 12, fill: "#6B7280" }}
                 />
                 <YAxis
                   type="number"

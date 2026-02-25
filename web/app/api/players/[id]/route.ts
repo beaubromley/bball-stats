@@ -109,13 +109,10 @@ export async function DELETE(
     const hasHistory = gameHistory.rows.some((row: any) => Number(row.count) > 0);
 
     if (hasHistory) {
-      // Soft delete: set status to inactive
-      await db.execute({
-        sql: "UPDATE players SET status = 'inactive' WHERE id = ?",
-        args: [id],
-      });
-
-      return NextResponse.json({ deleted: true, soft: true });
+      return NextResponse.json(
+        { error: "Cannot delete a player with game history. Set their status to inactive instead." },
+        { status: 409 }
+      );
     }
 
     // Hard delete: no game history

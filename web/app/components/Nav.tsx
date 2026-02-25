@@ -48,7 +48,7 @@ export default function Nav() {
     { href: "/", label: "Stats" },
     { href: "/games", label: "Games" },
     ...(isAdmin
-      ? [{ href: "/record", label: "Record" }, { href: "/insights", label: "Insights" }]
+      ? [{ href: "/record", label: "Record" }, { href: "/players", label: "Players" }, { href: "/insights", label: "Insights" }]
       : isViewer
         ? [{ href: "/insights", label: "Insights" }]
         : [{ href: "/login", label: "Login" }]),
