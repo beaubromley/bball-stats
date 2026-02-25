@@ -30,6 +30,7 @@ interface GameDetail {
   team_a: string[];
   team_b: string[];
   game_number: number | null;
+  notes: string | null;
 }
 
 interface GameEvent {
@@ -64,6 +65,9 @@ function GameDetailInner() {
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [winProb, setWinProb] = useState<WinProbResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
 
   useEffect(() => {
     if (!id) {
@@ -160,6 +164,66 @@ function GameDetailInner() {
         <div className="mb-8">
           <h2 className="text-xl font-bold font-display uppercase tracking-wide mb-4">Box Score</h2>
           <BoxScore gameId={id} />
+        </div>
+      )}
+
+      {/* Admin Notes */}
+      {isAdmin && id && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xl font-bold font-display uppercase tracking-wide">Notes</h2>
+            {!editingNotes && (
+              <button
+                onClick={() => { setEditingNotes(true); setNotesValue(game.notes || ""); }}
+                className="text-sm text-gray-500 hover:text-blue-400 transition-colors"
+              >
+                {game.notes ? "Edit" : "Add"}
+              </button>
+            )}
+          </div>
+          {editingNotes ? (
+            <div>
+              <textarea
+                value={notesValue}
+                onChange={(e) => setNotesValue(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500 resize-y"
+                placeholder="Add notes about this game..."
+                autoFocus
+              />
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={async () => {
+                    setSavingNotes(true);
+                    try {
+                      await fetch(`/api/games/${id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ notes: notesValue.trim() }),
+                      });
+                      setGame({ ...game, notes: notesValue.trim() || null });
+                      setEditingNotes(false);
+                    } catch {}
+                    setSavingNotes(false);
+                  }}
+                  disabled={savingNotes}
+                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {savingNotes ? "Saving..." : "Save"}
+                </button>
+                <button
+                  onClick={() => setEditingNotes(false)}
+                  className="px-3 py-1 text-gray-500 hover:text-gray-300 text-sm transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : game.notes ? (
+            <p className="text-sm text-gray-400 whitespace-pre-wrap">{game.notes}</p>
+          ) : (
+            <p className="text-sm text-gray-600 italic">No notes</p>
+          )}
         </div>
       )}
 

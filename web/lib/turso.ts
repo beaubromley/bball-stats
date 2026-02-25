@@ -146,6 +146,13 @@ export async function initDb() {
     // Column already exists
   }
 
+  // Migration: add notes column to games for admin notes
+  try {
+    await db.execute("ALTER TABLE games ADD COLUMN notes TEXT");
+  } catch {
+    // Column already exists
+  }
+
   // Backfill known full names from GroupMe data
   const knownFullNames: Record<string, string> = {
     "Addison P.": "Addison Peiroo",

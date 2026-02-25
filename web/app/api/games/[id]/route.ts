@@ -27,6 +27,28 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ ...game.rows[0], team_a: teamA, team_b: teamB, game_number: gameNumber });
 }
 
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAuth(req);
+  if (denied) return denied;
+  await initDb();
+  const { id } = await params;
+  const db = getDb();
+
+  const body = await req.json();
+  const { notes } = body;
+
+  if (notes === undefined) {
+    return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+  }
+
+  await db.execute({
+    sql: "UPDATE games SET notes = ? WHERE id = ?",
+    args: [notes || null, id],
+  });
+
+  return NextResponse.json({ ok: true });
+}
+
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireAuth(req);
   if (denied) return denied;
