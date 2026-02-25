@@ -3,10 +3,11 @@ import { initDb, getDb } from "@/lib/turso";
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await initDb();
   const db = getDb();
+  const { id } = await params;
 
   try {
     const body = await request.json();
@@ -50,7 +51,7 @@ export async function PATCH(
       // Get current player data
       const current = await db.execute({
         sql: "SELECT first_name, last_name FROM players WHERE id = ?",
-        args: [params.id],
+        args: [id],
       });
 
       if (current.rows.length === 0) {
@@ -69,7 +70,7 @@ export async function PATCH(
       return NextResponse.json({ error: "No fields to update" }, { status: 400 });
     }
 
-    args.push(params.id);
+    args.push(id);
 
     await db.execute({
       sql: `UPDATE players SET ${updates.join(", ")} WHERE id = ?`,
@@ -78,7 +79,7 @@ export async function PATCH(
 
     const result = await db.execute({
       sql: "SELECT * FROM players WHERE id = ?",
-      args: [params.id],
+      args: [id],
     });
 
     if (result.rows.length === 0) {
@@ -94,10 +95,11 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await initDb();
   const db = getDb();
+  const { id } = await params;
 
   try {
     // Check if player has game history
@@ -105,7 +107,7 @@ export async function DELETE(
       sql: `SELECT COUNT(*) as count FROM rosters WHERE player_id = ?
             UNION ALL
             SELECT COUNT(*) as count FROM game_events WHERE player_id = ?`,
-      args: [params.id, params.id],
+      args: [id, id],
     });
 
     const hasHistory = gameHistory.rows.some((row: any) => Number(row.count) > 0);
@@ -114,7 +116,7 @@ export async function DELETE(
       // Soft delete: set status to inactive
       await db.execute({
         sql: "UPDATE players SET status = 'inactive' WHERE id = ?",
-        args: [params.id],
+        args: [id],
       });
 
       return NextResponse.json({ deleted: true, soft: true });
@@ -123,7 +125,7 @@ export async function DELETE(
     // Hard delete: no game history
     await db.execute({
       sql: "DELETE FROM players WHERE id = ?",
-      args: [params.id],
+      args: [id],
     });
 
     return NextResponse.json({ deleted: true, soft: false });
