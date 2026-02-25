@@ -27,6 +27,7 @@ interface KnownPlayer {
   name: string;        // displayName (e.g., "Beau B.")
   voiceName: string;   // what voice recognition matches (e.g., "beau")
   fullName?: string;   // original full name from GroupMe
+  aliases?: string[];  // voice recognition aliases (e.g., ["gauge", "gates"])
 }
 
 // Players not in GroupMe who should always appear
