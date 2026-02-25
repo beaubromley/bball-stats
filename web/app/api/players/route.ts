@@ -87,7 +87,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { first_name, last_name, full_name, aliases, status } = body;
+    const { first_name, last_name, full_name, status } = body;
 
     if (!first_name || !last_name) {
       return NextResponse.json(
@@ -130,7 +130,7 @@ export async function POST(request: Request) {
         last_name,
         name: disambiguatedName,
         full_name: full_name || `${first_name} ${last_name}`,
-        aliases: aliases || [],
+        aliases: [],
         status: status || "active",
       });
     }
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
       last_name,
       name: displayName,
       full_name: full_name || `${first_name} ${last_name}`,
-      aliases: aliases || [],
+      aliases: [],
       status: status || "active",
     });
   } catch (error) {

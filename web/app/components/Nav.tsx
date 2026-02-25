@@ -45,9 +45,8 @@ export default function Nav() {
 
   const loggedIn = isAdmin || isViewer;
   const links = [
-    { href: "/", label: "Leaderboard" },
+    { href: "/", label: "Stats" },
     { href: "/games", label: "Games" },
-    { href: "/stats", label: "Stats" },
     ...(isAdmin
       ? [{ href: "/record", label: "Record" }, { href: "/insights", label: "Insights" }]
       : isViewer

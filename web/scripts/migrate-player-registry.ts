@@ -33,12 +33,8 @@ const VOICE_ALIASES: Record<string, string[]> = {
 };
 
 async function migrate() {
-  const url = process.env.TURSO_DATABASE_URL;
-  const authToken = process.env.TURSO_AUTH_TOKEN;
-
-  if (!url) {
-    throw new Error("TURSO_DATABASE_URL environment variable is required");
-  }
+  const url = process.env.TURSO_DATABASE_URL || "libsql://bball-stats-beaubromley.aws-us-east-2.turso.io";
+  const authToken = process.env.TURSO_AUTH_TOKEN || "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzA2ODg1NDcsImlkIjoiMzAzMTljZWYtNTlmYy00YzJkLThjODAtNDJmY2YzZWI1YmI3IiwicmlkIjoiZGU1NWJmZmItMDY0NC00NDM2LWEwZmQtODI5YTU4NzNlODY1In0.aD6SggGksUEtVyjys7UCi5Si7X8PlqXL9SJZ1AgpbmKz6RRLSYl6aZG-C4WhllJdi36nc58hKJIt1I82OhYsBg";
 
   const db = createClient({ url, authToken });
 

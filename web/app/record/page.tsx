@@ -27,7 +27,6 @@ interface KnownPlayer {
   name: string;        // displayName (e.g., "Beau B.")
   voiceName: string;   // what voice recognition matches (e.g., "beau")
   fullName?: string;   // original full name from GroupMe
-  aliases?: string[];  // voice recognition aliases (e.g., ["gauge", "gates"])
 }
 
 // Players not in GroupMe who should always appear
@@ -315,7 +314,6 @@ export default function RecordPage() {
           name: p.display_name,
           voiceName: p.first_name?.toLowerCase() || p.display_name.split(" ")[0].toLowerCase(),
           fullName: p.full_name,
-          aliases: p.aliases || [],
         }));
         setExpectedPlayers(players);
         setPlayersSource("registry");
@@ -334,7 +332,6 @@ export default function RecordPage() {
           name: p.display_name,
           voiceName: p.first_name?.toLowerCase() || p.display_name.split(" ")[0].toLowerCase(),
           fullName: p.full_name,
-          aliases: p.aliases || [],
         }));
         setFullPlayerList(players);
       })
@@ -394,7 +391,6 @@ export default function RecordPage() {
         name: newPlayer.display_name,
         voiceName: newPlayer.first_name.toLowerCase(),
         fullName: newPlayer.full_name,
-        aliases: newPlayer.aliases || [],
       };
 
       // Add to both lists
@@ -567,20 +563,11 @@ export default function RecordPage() {
         const voiceName = player?.voiceName || displayName.split(/\s/)[0].toLowerCase();
         const keyterm = voiceName.charAt(0).toUpperCase() + voiceName.slice(1);
         params.append("keyterm", keyterm);
-
-        // Add aliases as keywords too
-        if (player?.aliases) {
-          for (const alias of player.aliases) {
-            const aliasKeyterm = alias.charAt(0).toUpperCase() + alias.slice(1);
-            params.append("keyterm", aliasKeyterm);
-          }
-        }
       }
 
       // Add basketball vocabulary as keyterms
       const basketballTerms = [
-        "bucket", "layup", "dunk", "floater", "three", "deep",
-        "downtown", "steal", "block", "assist", "undo", "stat",
+        "bucket", "layup", "three", "steal", "block", "assist", "undo", "stat",
       ];
       for (const term of basketballTerms) {
         params.append("keyterm", term);
@@ -1030,13 +1017,6 @@ export default function RecordPage() {
       const player = uniquePlayers.find((p) => p.name === displayName);
       const voice = player?.voiceName || displayName.toLowerCase();
       voiceToDisplay.set(voice, displayName);
-
-      // Also add aliases if available
-      if (player?.aliases) {
-        for (const alias of player.aliases) {
-          voiceToDisplay.set(alias.toLowerCase(), displayName);
-        }
-      }
     }
     const voiceNames = Array.from(voiceToDisplay.keys());
     const cmd = parseTranscript(text, voiceNames, gameRef.current.scoringMode);

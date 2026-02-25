@@ -3,6 +3,20 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/app/components/AuthProvider";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Legend,
+  LabelList,
+  ScatterChart,
+  Scatter,
+  Cell,
+} from "recharts";
 
 const API_BASE = "/api";
 
@@ -14,6 +28,8 @@ interface PlayerRow {
   win_pct: number;
   total_points: number;
   ppg: number;
+  ones_made: number;
+  twos_made: number;
   assists: number;
   steals: number;
   blocks: number;
@@ -21,18 +37,59 @@ interface PlayerRow {
   plus_minus: number;
   plus_minus_per_game: number;
   streak: string;
+  mvp_count: number;
+}
+
+interface TodayData {
+  games_today: number;
+  players: PlayerRow[];
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm">
+      <p className="text-gray-300 font-medium">{label}</p>
+      {payload.map((entry: { color: string; name: string; value: number }, i: number) => (
+        <p key={i} style={{ color: entry.color }}>
+          {entry.name}: {entry.value}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ScatterTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const data = payload[0].payload;
+  return (
+    <div className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm">
+      <p className="text-gray-300 font-medium">{data.name}</p>
+      <p className="text-green-400">PPG: {data.ppg}</p>
+      <p className="text-yellow-400">Win%: {data.winPct}%</p>
+    </div>
+  );
 }
 
 export default function Home() {
   const { isAdmin, isViewer } = useAuth();
   const showAdvanced = isAdmin || isViewer;
   const [players, setPlayers] = useState<PlayerRow[]>([]);
+  const [todayStats, setTodayStats] = useState<TodayData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_BASE}/players`)
-      .then((res) => res.json())
-      .then((data) => setPlayers(data))
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+    Promise.all([
+      fetch(`${API_BASE}/players`).then((r) => r.json()),
+      fetch(`${API_BASE}/stats/today?date=${today}`).then((r) => r.json()).catch(() => null),
+    ])
+      .then(([allPlayers, today]) => {
+        setPlayers(allPlayers);
+        setTodayStats(today);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -41,99 +98,388 @@ export default function Home() {
     return <div className="text-gray-500 text-center py-16">Loading...</div>;
   }
 
+  if (players.length === 0) {
+    return (
+      <div className="text-gray-500 text-center py-16">
+        <p className="text-lg">No games recorded yet.</p>
+        <p className="text-sm mt-2">Start a game on the Record page to see stats here.</p>
+      </div>
+    );
+  }
+
+  // Chart data
+  const fpData = [...players]
+    .sort((a, b) => b.fantasy_points - a.fantasy_points)
+    .map((p) => ({ name: p.name, PTS: p.total_points, AST: p.assists, STL: p.steals, BLK: p.blocks, total: p.fantasy_points }));
+
+  const fpPerGameData = [...players]
+    .filter((p) => p.games_played >= 1)
+    .sort((a, b) => {
+      const aFPG = a.fantasy_points / a.games_played;
+      const bFPG = b.fantasy_points / b.games_played;
+      return bFPG - aFPG;
+    })
+    .map((p) => {
+      const gp = p.games_played || 1;
+      return {
+        name: p.name,
+        PTS: Math.round((p.total_points / gp) * 10) / 10,
+        AST: Math.round((p.assists / gp) * 10) / 10,
+        STL: Math.round((p.steals / gp) * 10) / 10,
+        BLK: Math.round((p.blocks / gp) * 10) / 10,
+        total: Math.round((p.fantasy_points / gp) * 10) / 10,
+      };
+    });
+
+  const ptsData = [...players]
+    .sort((a, b) => b.total_points - a.total_points)
+    .map((p) => ({ name: p.name, "1s": p.ones_made, "2s": p.twos_made * 2, total: p.total_points }));
+
+  const ppgData = [...players]
+    .filter((p) => p.games_played >= 1)
+    .sort((a, b) => b.ppg - a.ppg)
+    .map((p) => {
+      const gp = p.games_played || 1;
+      const ones = Math.round((p.ones_made / gp) * 10) / 10;
+      const twos = Math.round((p.twos_made * 2 / gp) * 10) / 10;
+      return { name: p.name, "1s": ones, "2s": twos, total: Math.round((ones + twos) * 10) / 10 };
+    });
+
+  const winData = [...players]
+    .filter((p) => p.games_played >= 1)
+    .sort((a, b) => b.win_pct - a.win_pct)
+    .map((p) => ({ name: p.name, "Win%": p.win_pct }));
+
+  const mvpData = [...players]
+    .filter((p) => p.mvp_count > 0)
+    .sort((a, b) => b.mvp_count - a.mvp_count)
+    .map((p) => ({ name: p.name, MVPs: p.mvp_count }));
+
+  const scatterData = [...players]
+    .filter((p) => p.games_played >= 1)
+    .map((p) => ({ name: p.name, ppg: p.ppg, winPct: p.win_pct }));
+
+  const SCATTER_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#A855F7", "#EC4899", "#06B6D4", "#F97316", "#84CC16", "#6366F1"];
+
   return (
     <div>
-      <h1 className="text-3xl font-bold font-display uppercase tracking-wide mb-6">Leaderboard</h1>
+      <h1 className="text-3xl font-bold font-display uppercase tracking-wide mb-8">Stats</h1>
 
-      {players.length === 0 ? (
-        <div className="text-gray-500 text-center py-16">
-          <p className="text-lg">No games recorded yet.</p>
-          <p className="text-sm mt-2">
-            Start a game on the Record page to see stats here.
-          </p>
+      {/* Stats of the Day */}
+      {todayStats && todayStats.games_today > 0 && (() => {
+        const topScorer = todayStats.players[0];
+        const topAssist = [...todayStats.players].sort((a, b) => b.assists - a.assists)[0];
+        const fpLeader = [...todayStats.players].sort((a, b) => b.fantasy_points - a.fantasy_points)[0];
+        return (
+          <div className="mb-10">
+            <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">Stats of the Day</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center">
+                <div className="text-xs text-gray-500 font-display uppercase mb-1">Games</div>
+                <div className="text-3xl font-bold font-display tabular-nums">{todayStats.games_today}</div>
+              </div>
+              {topScorer && (
+                <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center">
+                  <div className="text-xs text-gray-500 font-display uppercase mb-1">Top Scorer</div>
+                  <div className="text-lg font-bold font-display">{topScorer.name}</div>
+                  <div className="text-sm text-green-400 tabular-nums">{topScorer.total_points} pts</div>
+                </div>
+              )}
+              {topAssist && topAssist.assists > 0 && (
+                <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center">
+                  <div className="text-xs text-gray-500 font-display uppercase mb-1">Most Assists</div>
+                  <div className="text-lg font-bold font-display">{topAssist.name}</div>
+                  <div className="text-sm text-blue-400 tabular-nums">{topAssist.assists} ast</div>
+                </div>
+              )}
+              {fpLeader && (
+                <div className="border border-yellow-300 dark:border-yellow-700/50 rounded-lg p-4 text-center bg-yellow-50 dark:bg-yellow-900/10">
+                  <div className="text-xs text-yellow-600 dark:text-yellow-500 font-display uppercase mb-1">Fantasy MVP</div>
+                  <div className="text-lg font-bold font-display text-yellow-400">{fpLeader.name}</div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400 tabular-nums">{fpLeader.fantasy_points} FP</div>
+                </div>
+              )}
+            </div>
+
+            {/* Today's mini leaderboard */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 text-xs font-display uppercase tracking-wider">
+                    <th className="py-2 pr-3">Player</th>
+                    <th className="py-2 pr-3 text-right">GP</th>
+                    <th className="py-2 pr-3 text-right">W-L</th>
+                    <th className="py-2 pr-3 text-right">PTS</th>
+                    <th className="py-2 pr-3 text-right">AST</th>
+                    <th className="py-2 pr-3 text-right">STL</th>
+                    <th className="py-2 pr-3 text-right">BLK</th>
+                    <th className="py-2 text-right">FP</th>
+                    {showAdvanced && <th className="py-2 pl-3 text-right">+/-</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {todayStats.players.map((p) => (
+                    <tr key={p.id} className="border-b border-gray-100 dark:border-gray-900">
+                      <td className="py-2 pr-3">{p.name}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.games_played}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.wins}-{p.games_played - p.wins}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.total_points}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.assists}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.steals}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.blocks}</td>
+                      <td className="py-2 text-right tabular-nums font-bold text-blue-400">{p.fantasy_points}</td>
+                      {showAdvanced && (
+                        <td className={`py-2 pl-3 text-right tabular-nums font-bold ${p.plus_minus > 0 ? "text-green-400" : p.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
+                          {p.plus_minus > 0 ? "+" : ""}{p.plus_minus}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
+      {todayStats && todayStats.games_today === 0 && (
+        <div className="mb-8 text-center text-gray-400 dark:text-gray-600 text-sm py-4 border border-gray-200 dark:border-gray-800/50 rounded-lg">
+          No games played today
         </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-sm">
-                <th className="py-3 pr-4">#</th>
-                <th className="py-3 pr-4">Player</th>
-                <th className="py-3 pr-4 text-right">GP</th>
-                <th className="py-3 pr-4 text-right">W</th>
-                <th className="py-3 pr-4 text-right">Win%</th>
-                <th className="py-3 pr-4 text-right">PTS</th>
-                <th className="py-3 pr-4 text-right">PPG</th>
-                <th className="py-3 pr-4 text-right">AST</th>
-                <th className="py-3 pr-4 text-right">STL</th>
-                <th className="py-3 pr-4 text-right">BLK</th>
-                <th className="py-3 text-right">FP</th>
-                {showAdvanced && <th className="py-3 pl-4 text-right">+/-</th>}
-                {showAdvanced && <th className="py-3 pl-4 text-right">+/-PG</th>}
-                {showAdvanced && <th className="py-3 pl-4 text-right">STK</th>}
+      )}
+
+      {/* Leaderboard Table */}
+      <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">Leaderboard</h2>
+      <div className="overflow-x-auto mb-10">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-sm">
+              <th className="py-3 pr-4">#</th>
+              <th className="py-3 pr-4">Player</th>
+              <th className="py-3 pr-4 text-right">GP</th>
+              <th className="py-3 pr-4 text-right">W</th>
+              <th className="py-3 pr-4 text-right">Win%</th>
+              <th className="py-3 pr-4 text-right">PTS</th>
+              <th className="py-3 pr-4 text-right">PPG</th>
+              <th className="py-3 pr-4 text-right">AST</th>
+              <th className="py-3 pr-4 text-right">STL</th>
+              <th className="py-3 pr-4 text-right">BLK</th>
+              <th className="py-3 text-right">FP</th>
+              {showAdvanced && <th className="py-3 pl-4 text-right">+/-</th>}
+              {showAdvanced && <th className="py-3 pl-4 text-right">+/-PG</th>}
+              {showAdvanced && <th className="py-3 pl-4 text-right">STK</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {players.map((player, i) => (
+              <tr
+                key={player.id}
+                className="border-b border-gray-100 dark:border-gray-900 hover:bg-gray-100 dark:hover:bg-gray-900/50 transition-colors"
+              >
+                <td className="py-3 pr-4 text-gray-500">{i + 1}</td>
+                <td className="py-3 pr-4">
+                  <Link
+                    href={`/player?id=${player.id}`}
+                    className="text-blue-400 hover:text-blue-300"
+                  >
+                    {player.name}
+                  </Link>
+                </td>
+                <td className="py-3 pr-4 text-right tabular-nums">{player.games_played}</td>
+                <td className="py-3 pr-4 text-right tabular-nums">{player.wins}</td>
+                <td className="py-3 pr-4 text-right tabular-nums">{player.win_pct}%</td>
+                <td className="py-3 pr-4 text-right tabular-nums">{player.total_points}</td>
+                <td className="py-3 pr-4 text-right tabular-nums">{player.ppg}</td>
+                <td className="py-3 pr-4 text-right tabular-nums">{player.assists}</td>
+                <td className="py-3 pr-4 text-right tabular-nums">{player.steals}</td>
+                <td className="py-3 pr-4 text-right tabular-nums">{player.blocks}</td>
+                <td className="py-3 text-right tabular-nums font-bold text-blue-400">{player.fantasy_points}</td>
+                {showAdvanced && (
+                  <td className={`py-3 pl-4 text-right tabular-nums font-bold ${player.plus_minus > 0 ? "text-green-400" : player.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
+                    {player.plus_minus > 0 ? "+" : ""}{player.plus_minus}
+                  </td>
+                )}
+                {showAdvanced && (
+                  <td className={`py-3 pl-4 text-right tabular-nums ${player.plus_minus_per_game > 0 ? "text-green-400" : player.plus_minus_per_game < 0 ? "text-red-400" : "text-gray-500"}`}>
+                    {player.plus_minus_per_game > 0 ? "+" : ""}{player.plus_minus_per_game}
+                  </td>
+                )}
+                {showAdvanced && (
+                  <td className={`py-3 pl-4 text-right tabular-nums font-bold ${player.streak.startsWith("W") ? "text-green-400" : player.streak.startsWith("L") ? "text-red-400" : "text-gray-500"}`}>
+                    {player.streak}
+                  </td>
+                )}
               </tr>
-            </thead>
-            <tbody>
-              {players.map((player, i) => (
-                <tr
-                  key={player.id}
-                  className="border-b border-gray-100 dark:border-gray-900 hover:bg-gray-100 dark:hover:bg-gray-900/50 transition-colors"
-                >
-                  <td className="py-3 pr-4 text-gray-500">{i + 1}</td>
-                  <td className="py-3 pr-4">
-                    <Link
-                      href={`/player?id=${player.id}`}
-                      className="text-blue-400 hover:text-blue-300"
-                    >
-                      {player.name}
-                    </Link>
-                  </td>
-                  <td className="py-3 pr-4 text-right tabular-nums">
-                    {player.games_played}
-                  </td>
-                  <td className="py-3 pr-4 text-right tabular-nums">
-                    {player.wins}
-                  </td>
-                  <td className="py-3 pr-4 text-right tabular-nums">
-                    {player.win_pct}%
-                  </td>
-                  <td className="py-3 pr-4 text-right tabular-nums">
-                    {player.total_points}
-                  </td>
-                  <td className="py-3 pr-4 text-right tabular-nums">
-                    {player.ppg}
-                  </td>
-                  <td className="py-3 pr-4 text-right tabular-nums">
-                    {player.assists}
-                  </td>
-                  <td className="py-3 pr-4 text-right tabular-nums">
-                    {player.steals}
-                  </td>
-                  <td className="py-3 pr-4 text-right tabular-nums">
-                    {player.blocks}
-                  </td>
-                  <td className="py-3 text-right tabular-nums font-bold text-blue-400">
-                    {player.fantasy_points}
-                  </td>
-                  {showAdvanced && (
-                    <td className={`py-3 pl-4 text-right tabular-nums font-bold ${player.plus_minus > 0 ? "text-green-400" : player.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
-                      {player.plus_minus > 0 ? "+" : ""}{player.plus_minus}
-                    </td>
-                  )}
-                  {showAdvanced && (
-                    <td className={`py-3 pl-4 text-right tabular-nums ${player.plus_minus_per_game > 0 ? "text-green-400" : player.plus_minus_per_game < 0 ? "text-red-400" : "text-gray-500"}`}>
-                      {player.plus_minus_per_game > 0 ? "+" : ""}{player.plus_minus_per_game}
-                    </td>
-                  )}
-                  {showAdvanced && (
-                    <td className={`py-3 pl-4 text-right tabular-nums font-bold ${player.streak.startsWith("W") ? "text-green-400" : player.streak.startsWith("L") ? "text-red-400" : "text-gray-500"}`}>
-                      {player.streak}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* All-Time Charts */}
+      <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">All-Time</h2>
+
+      {/* Two-column layout: Totals vs Per Game */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+        {/* Fantasy Points — Totals */}
+        <div>
+          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Fantasy Points</h3>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
+            <ResponsiveContainer width="100%" height={Math.max(200, fpData.length * 36)}>
+              <BarChart data={fpData} layout="vertical" margin={{ left: 20, right: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                <Legend wrapperStyle={{ fontSize: "11px" }} />
+                <Bar dataKey="PTS" stackId="fp" fill="#10B981" />
+                <Bar dataKey="AST" stackId="fp" fill="#3B82F6" />
+                <Bar dataKey="STL" stackId="fp" fill="#EAB308" />
+                <Bar dataKey="BLK" stackId="fp" fill="#A855F7" radius={[0, 4, 4, 0]}>
+                  <LabelList dataKey="total" position="right" fill="#9CA3AF" fontSize={11} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Fantasy Points Per Game */}
+        <div>
+          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Fantasy Points Per Game</h3>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
+            <ResponsiveContainer width="100%" height={Math.max(200, fpPerGameData.length * 36)}>
+              <BarChart data={fpPerGameData} layout="vertical" margin={{ left: 20, right: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                <Legend wrapperStyle={{ fontSize: "11px" }} />
+                <Bar dataKey="PTS" stackId="fpg" fill="#10B981" />
+                <Bar dataKey="AST" stackId="fpg" fill="#3B82F6" />
+                <Bar dataKey="STL" stackId="fpg" fill="#EAB308" />
+                <Bar dataKey="BLK" stackId="fpg" fill="#A855F7" radius={[0, 4, 4, 0]}>
+                  <LabelList dataKey="total" position="right" fill="#9CA3AF" fontSize={11} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Total Points */}
+        <div>
+          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Total Points</h3>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
+            <ResponsiveContainer width="100%" height={Math.max(200, ptsData.length * 36)}>
+              <BarChart data={ptsData} layout="vertical" margin={{ left: 20, right: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                <Legend wrapperStyle={{ fontSize: "11px" }} />
+                <Bar dataKey="1s" stackId="pts" fill="#10B981" />
+                <Bar dataKey="2s" stackId="pts" fill="#3B82F6" radius={[0, 4, 4, 0]}>
+                  <LabelList dataKey="total" position="right" fill="#9CA3AF" fontSize={11} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Points Per Game */}
+        <div>
+          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Points Per Game</h3>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
+            <ResponsiveContainer width="100%" height={Math.max(200, ppgData.length * 36)}>
+              <BarChart data={ppgData} layout="vertical" margin={{ left: 20, right: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                <Legend wrapperStyle={{ fontSize: "11px" }} />
+                <Bar dataKey="1s" stackId="ppg" fill="#10B981" />
+                <Bar dataKey="2s" stackId="ppg" fill="#3B82F6" radius={[0, 4, 4, 0]}>
+                  <LabelList dataKey="total" position="right" fill="#9CA3AF" fontSize={11} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Win % */}
+      <div className="mb-10">
+        <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Win %</h3>
+        <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
+          <ResponsiveContainer width="100%" height={Math.max(200, winData.length * 36)}>
+            <BarChart data={winData} layout="vertical" margin={{ left: 20, right: 30 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+              <Bar dataKey="Win%" fill="#F59E0B" radius={[0, 4, 4, 0]}>
+                <LabelList dataKey="Win%" position="right" fill="#9CA3AF" fontSize={11} formatter={(v) => `${v}%`} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* MVP Count */}
+      {mvpData.length > 0 && (
+        <div className="mb-10">
+          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">MVP Awards</h3>
+          <div className="border border-yellow-300/30 dark:border-yellow-700/30 rounded-lg p-4 bg-yellow-50/50 dark:bg-yellow-900/5">
+            <ResponsiveContainer width="100%" height={Math.max(200, mvpData.length * 36)}>
+              <BarChart data={mvpData} layout="vertical" margin={{ left: 20, right: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                <Bar dataKey="MVPs" fill="#EAB308" radius={[0, 4, 4, 0]}>
+                  <LabelList dataKey="MVPs" position="right" fill="#EAB308" fontSize={11} fontWeight="bold" />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* PPG vs Win% Scatter */}
+      {scatterData.length > 0 && (
+        <div className="mb-10">
+          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">PPG vs Win %</h3>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
+            <ResponsiveContainer width="100%" height={350}>
+              <ScatterChart margin={{ left: 10, right: 20, top: 20, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
+                <XAxis
+                  type="number"
+                  dataKey="ppg"
+                  name="PPG"
+                  tick={{ fontSize: 12, fill: "#9CA3AF" }}
+                  axisLine={false}
+                  tickLine={false}
+                  label={{ value: "Points Per Game", position: "insideBottom", offset: -5, fontSize: 12, fill: "#6B7280" }}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="winPct"
+                  name="Win%"
+                  tick={{ fontSize: 12, fill: "#9CA3AF" }}
+                  axisLine={false}
+                  tickLine={false}
+                  label={{ value: "Win %", angle: -90, position: "insideLeft", offset: 10, fontSize: 12, fill: "#6B7280" }}
+                  tickFormatter={(v) => `${v}%`}
+                />
+                <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: "3 3" }} />
+                <Scatter data={scatterData}>
+                  {scatterData.map((_entry, index) => (
+                    <Cell key={index} fill={SCATTER_COLORS[index % SCATTER_COLORS.length]} />
+                  ))}
+                  <LabelList dataKey="name" position="top" fill="#9CA3AF" fontSize={10} />
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
     </div>

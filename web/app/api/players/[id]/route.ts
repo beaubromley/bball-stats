@@ -11,7 +11,7 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { first_name, last_name, full_name, aliases, status, notes, last_played_date } = body;
+    const { first_name, last_name, full_name, status, notes, last_played_date } = body;
 
     // Build dynamic UPDATE query
     const updates: string[] = [];
@@ -28,10 +28,6 @@ export async function PATCH(
     if (full_name !== undefined) {
       updates.push("full_name = ?");
       args.push(full_name);
-    }
-    if (aliases !== undefined) {
-      updates.push("aliases = ?");
-      args.push(JSON.stringify(aliases));
     }
     if (status !== undefined) {
       updates.push("status = ?");

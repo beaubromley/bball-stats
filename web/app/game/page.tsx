@@ -96,6 +96,11 @@ function GameDetailInner() {
 
   return (
     <div>
+      <div className="mb-4">
+        <Link href="/games" className="text-sm text-gray-500 hover:text-blue-400 transition-colors">
+          &larr; Games
+        </Link>
+      </div>
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-3xl font-bold font-display uppercase tracking-wide">
           {game.game_number ? `Game ${game.game_number}` : "Game Detail"}
@@ -257,7 +262,6 @@ function GameDetailInner() {
                     dataKey="Team B"
                     stroke="#F97316"
                     strokeWidth={2}
-                    strokeDasharray="6 3"
                     dot={false}
                   />
                 </LineChart>
@@ -319,10 +323,11 @@ function GameDetailInner() {
                   />
                   <YAxis
                     domain={[0, 100]}
+                    ticks={[0, 50, 100]}
                     tick={{ fontSize: 11, fill: "#6B7280" }}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={(v) => `${v}%`}
+                    tickFormatter={(v) => v === 100 ? "Team A" : v === 50 ? "50:50" : "Team B"}
                   />
                   <ReferenceLine y={50} stroke="#4B5563" strokeDasharray="4 4" />
                   <Tooltip

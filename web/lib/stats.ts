@@ -19,6 +19,7 @@ export interface PlayerStats {
   plus_minus: number;
   plus_minus_per_game: number;
   streak: string; // e.g. "W3", "L2"
+  mvp_count: number;
 }
 
 export async function getLeaderboard(): Promise<PlayerStats[]> {
@@ -124,6 +125,40 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
     streakMap.set(pid, `${first ? "W" : "L"}${count}`);
   }
 
+  // Compute MVP counts: for each finished game, find the player with highest FP on the winning team
+  const mvpResult = await db.execute(`
+    SELECT
+      r.player_id,
+      p.name,
+      r.game_id,
+      r.team,
+      g.winning_team,
+      COALESCE(SUM(CASE WHEN ge.event_type = 'score' THEN ge.point_value ELSE 0 END), 0)
+        + COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0)
+        + COALESCE(SUM(CASE WHEN ge.event_type = 'steal' THEN 1 ELSE 0 END), 0)
+        + COALESCE(SUM(CASE WHEN ge.event_type = 'block' THEN 1 ELSE 0 END), 0) as fp
+    FROM rosters r
+    JOIN players p ON r.player_id = p.id
+    JOIN games g ON r.game_id = g.id
+    LEFT JOIN game_events ge ON ge.game_id = r.game_id AND ge.player_id = r.player_id
+    WHERE g.status = 'finished' AND g.winning_team IS NOT NULL AND r.team = g.winning_team
+    GROUP BY r.player_id, r.game_id
+  `);
+  // Group by game, pick highest FP per game
+  const gameMaxFP = new Map<string, { player_id: string; fp: number }>();
+  for (const row of mvpResult.rows) {
+    const gameId = row.game_id as string;
+    const fp = Number(row.fp);
+    const current = gameMaxFP.get(gameId);
+    if (!current || fp > current.fp) {
+      gameMaxFP.set(gameId, { player_id: row.player_id as string, fp });
+    }
+  }
+  const mvpCountMap = new Map<string, number>();
+  for (const { player_id } of gameMaxFP.values()) {
+    mvpCountMap.set(player_id, (mvpCountMap.get(player_id) || 0) + 1);
+  }
+
   return result.rows.map((row) => {
     const gamesPlayed = Number(row.games_played) || 1;
     const totalPoints = Number(row.total_points);
@@ -149,6 +184,7 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
       plus_minus: pm,
       plus_minus_per_game: Math.round((pm / gamesPlayed) * 10) / 10,
       streak: streakMap.get(row.id as string) || "-",
+      mvp_count: mvpCountMap.get(row.id as string) || 0,
     };
   });
 }
@@ -244,6 +280,7 @@ export async function getTodayStats(dateStr: string): Promise<TodayStats> {
       plus_minus: 0,
       plus_minus_per_game: 0,
       streak: "-",
+      mvp_count: 0,
     };
   });
 
