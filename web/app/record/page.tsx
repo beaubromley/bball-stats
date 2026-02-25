@@ -350,7 +350,7 @@ export default function RecordPage() {
 
   // Add player from search to expected list (persistent for rest of day)
   const addFromSearch = async (player: KnownPlayer) => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
     try {
       await fetch(`${API_BASE}/players/${player.id}`, {
         method: "PATCH",

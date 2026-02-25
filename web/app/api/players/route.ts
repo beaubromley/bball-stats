@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 
   if (expected) {
     // Get "expected to play" list
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
 
     // Get players who played today
     const playedToday = await db.execute({
