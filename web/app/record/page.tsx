@@ -270,9 +270,19 @@ export default function RecordPage() {
     return () => { if (liveTranscriptTimerRef.current) clearTimeout(liveTranscriptTimerRef.current); };
   }, [interim, transcript]);
 
-  // Known players from GroupMe API (falls back to hardcoded list)
-  const [knownPlayers, setKnownPlayers] = useState<KnownPlayer[]>(DEFAULT_PLAYERS);
-  const [playersSource, setPlayersSource] = useState<"loading" | "groupme" | "fallback">("loading");
+  // Player Registry: Two-tier system
+  const [expectedPlayers, setExpectedPlayers] = useState<KnownPlayer[]>([]);
+  const [fullPlayerList, setFullPlayerList] = useState<KnownPlayer[]>([]);
+  const [playersSource, setPlayersSource] = useState<"loading" | "registry" | "fallback">("loading");
+
+  // Search functionality for full player list
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
+  // Manual add player form
+  const [newPlayerFirst, setNewPlayerFirst] = useState("");
+  const [newPlayerLast, setNewPlayerLast] = useState("");
+
   // Player assignments during setup: name -> "A" | "B" | null
   const [assignments, setAssignments] = useState<Record<string, PlayerAssignment>>({});
 
@@ -293,33 +303,111 @@ export default function RecordPage() {
     refreshDevices();
   }, []);
 
-  // Fetch players from GroupMe on mount
+  // Fetch players from registry on mount
   useEffect(() => {
-    fetch(`${API_BASE}/groupme/members`)
-      .then((res) => {
-        if (!res.ok) throw new Error("GroupMe API error");
-        return res.json();
+    // Fetch expected to play list
+    fetch(`${API_BASE}/players?status=active&expected=true`)
+      .then((res) => res.json())
+      .then((data) => {
+        const players = data.players.map((p: any) => ({
+          id: p.id,
+          name: p.display_name,
+          voiceName: p.first_name?.toLowerCase() || p.display_name.split(" ")[0].toLowerCase(),
+          fullName: p.full_name,
+          aliases: p.aliases || [],
+        }));
+        setExpectedPlayers(players);
+        setPlayersSource("registry");
       })
-      .then((players: { fullName: string; displayName: string; voiceName: string }[]) => {
-        if (players.length > 0) {
-          const gmPlayers = players.map((p) => ({
-            id: p.displayName,
-            name: p.displayName,
-            voiceName: p.voiceName,
-            fullName: p.fullName,
-          }));
-          setKnownPlayers([...gmPlayers, ...EXTRA_PLAYERS]);
-          setPlayersSource("groupme");
-        } else {
-          setPlayersSource("fallback");
-        }
-      })
-      .catch(() => {
+      .catch((err) => {
+        console.error("Failed to fetch expected players:", err);
         setPlayersSource("fallback");
       });
+
+    // Fetch full player list for search
+    fetch(`${API_BASE}/players?status=active`)
+      .then((res) => res.json())
+      .then((data) => {
+        const players = data.players.map((p: any) => ({
+          id: p.id,
+          name: p.display_name,
+          voiceName: p.first_name?.toLowerCase() || p.display_name.split(" ")[0].toLowerCase(),
+          fullName: p.full_name,
+          aliases: p.aliases || [],
+        }));
+        setFullPlayerList(players);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch full player list:", err);
+      });
   }, []);
-  // For adding new player names not in the list
-  const [newPlayerName, setNewPlayerName] = useState("");
+
+  // Search filtered players (exclude already in expected)
+  const filteredPlayers = fullPlayerList.filter((p) =>
+    !expectedPlayers.some((e) => e.id === p.id) &&
+    (searchTerm === "" ||
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.fullName?.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  // Add player from search to expected list (persistent for rest of day)
+  const addFromSearch = async (player: KnownPlayer) => {
+    const today = new Date().toISOString().split("T")[0];
+    try {
+      await fetch(`${API_BASE}/players/${player.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ last_played_date: today }),
+      });
+      setExpectedPlayers([...expectedPlayers, player]);
+      setSearchTerm("");
+      setShowSearchResults(false);
+    } catch (err) {
+      console.error("Failed to add player to expected list:", err);
+    }
+  };
+
+  // Manual add new player (creates in DB + adds to expected)
+  const addNewPlayer = async () => {
+    if (!newPlayerFirst || !newPlayerLast) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/players`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          first_name: newPlayerFirst,
+          last_name: newPlayerLast,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        alert(error.error || "Failed to create player");
+        return;
+      }
+
+      const newPlayer = await res.json();
+      const knownPlayer: KnownPlayer = {
+        id: newPlayer.id,
+        name: newPlayer.display_name,
+        voiceName: newPlayer.first_name.toLowerCase(),
+        fullName: newPlayer.full_name,
+        aliases: newPlayer.aliases || [],
+      };
+
+      // Add to both lists
+      setFullPlayerList([...fullPlayerList, knownPlayer]);
+      setExpectedPlayers([...expectedPlayers, knownPlayer]);
+
+      // Clear form
+      setNewPlayerFirst("");
+      setNewPlayerLast("");
+    } catch (err) {
+      console.error("Failed to create player:", err);
+      alert("Failed to create player");
+    }
+  };
 
   // Ref so startListening always sees current selectedDeviceId
   const selectedDeviceIdRef = useRef(selectedDeviceId);
@@ -468,12 +556,24 @@ export default function RecordPage() {
 
       // Add active player names as keyterms
       const currentGame = gameRef.current;
-      const allPlayers = [...currentGame.teamA, ...currentGame.teamB];
-      for (const displayName of allPlayers) {
-        const player = knownPlayersRef.current.find((p) => p.name === displayName);
+      // Build keywords from current game's players only
+      const allKnownPlayers = [...expectedPlayersRef.current, ...fullPlayerListRef.current];
+      const uniquePlayers = Array.from(new Map(allKnownPlayers.map(p => [p.id, p])).values());
+
+      const allDisplayNames = [...currentGame.teamA, ...currentGame.teamB];
+      for (const displayName of allDisplayNames) {
+        const player = uniquePlayers.find((p) => p.name === displayName);
         const voiceName = player?.voiceName || displayName.split(/\s/)[0].toLowerCase();
         const keyterm = voiceName.charAt(0).toUpperCase() + voiceName.slice(1);
         params.append("keyterm", keyterm);
+
+        // Add aliases as keywords too
+        if (player?.aliases) {
+          for (const alias of player.aliases) {
+            const aliasKeyterm = alias.charAt(0).toUpperCase() + alias.slice(1);
+            params.append("keyterm", aliasKeyterm);
+          }
+        }
       }
 
       // Add basketball vocabulary as keyterms
@@ -898,9 +998,11 @@ export default function RecordPage() {
   const gameRef = useRef<GameState>(game);
   gameRef.current = game;
 
-  // Ref so handleVoiceResult always sees current knownPlayers (not stale closure)
-  const knownPlayersRef = useRef<KnownPlayer[]>(DEFAULT_PLAYERS);
-  knownPlayersRef.current = knownPlayers;
+  // Ref so handleVoiceResult always sees current players (not stale closure)
+  const expectedPlayersRef = useRef<KnownPlayer[]>([]);
+  const fullPlayerListRef = useRef<KnownPlayer[]>([]);
+  expectedPlayersRef.current = expectedPlayers;
+  fullPlayerListRef.current = fullPlayerList;
 
   // --- Voice command handler ---
   const handleVoiceResult = useCallback((text: string) => {
@@ -919,11 +1021,21 @@ export default function RecordPage() {
 
     // Build voice-to-display mapping for the parser
     const allDisplayNames = [...currentGame.teamA, ...currentGame.teamB];
+    const allKnownPlayers = [...expectedPlayersRef.current, ...fullPlayerListRef.current];
+    const uniquePlayers = Array.from(new Map(allKnownPlayers.map(p => [p.id, p])).values());
+
     const voiceToDisplay = new Map<string, string>();
     for (const displayName of allDisplayNames) {
-      const player = knownPlayersRef.current.find((p) => p.name === displayName);
+      const player = uniquePlayers.find((p) => p.name === displayName);
       const voice = player?.voiceName || displayName.toLowerCase();
       voiceToDisplay.set(voice, displayName);
+
+      // Also add aliases if available
+      if (player?.aliases) {
+        for (const alias of player.aliases) {
+          voiceToDisplay.set(alias.toLowerCase(), displayName);
+        }
+      }
     }
     const voiceNames = Array.from(voiceToDisplay.keys());
     const cmd = parseTranscript(text, voiceNames, gameRef.current.scoringMode);
@@ -1175,18 +1287,6 @@ export default function RecordPage() {
     });
   }
 
-  function addNewPlayer() {
-    const name = newPlayerName.trim();
-    if (!name) return;
-    if (knownPlayers.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
-      setError("Player already in list");
-      return;
-    }
-    setKnownPlayers((prev) => [...prev, { id: name, name, voiceName: name.toLowerCase() }]);
-    setAssignments((prev) => ({ ...prev, [name]: "A" }));
-    setNewPlayerName("");
-    setError("");
-  }
 
   // --- Game lifecycle ---
   function startGame(target: number, mode?: ScoringMode) {
@@ -1233,8 +1333,11 @@ export default function RecordPage() {
 
       // Build full_name map from known players
       const fullNames: Record<string, string> = {};
+      const allKnownPlayers = [...expectedPlayersRef.current, ...fullPlayerListRef.current];
+      const uniquePlayers = Array.from(new Map(allKnownPlayers.map(p => [p.id, p])).values());
+
       for (const displayName of [...teamA, ...teamB]) {
-        const player = knownPlayersRef.current.find((p) => p.name === displayName);
+        const player = uniquePlayers.find((p) => p.name === displayName);
         if (player?.fullName) fullNames[displayName] = player.fullName;
       }
 
@@ -1626,18 +1729,20 @@ export default function RecordPage() {
             Tap to assign: <span className="text-blue-400">Team A</span> →{" "}
             <span className="text-orange-400">Team B</span> → unassigned
           </p>
-          {playersSource === "groupme" && (
-            <p className="text-xs text-green-600 text-center">Players from GroupMe (last 2 days)</p>
+          {playersSource === "registry" && (
+            <p className="text-xs text-green-600 text-center">Expected to play today</p>
           )}
           {playersSource === "loading" && (
-            <p className="text-xs text-gray-400 dark:text-gray-600 text-center">Loading players from GroupMe...</p>
+            <p className="text-xs text-gray-400 dark:text-gray-600 text-center">Loading players...</p>
           )}
 
-          {/* Player grid */}
-          <div className="flex flex-wrap gap-2">
-            {knownPlayers.map((player) => (
+          {/* Expected to Play - Player grid */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">EXPECTED TO PLAY</h3>
+            <div className="flex flex-wrap gap-2">
+              {expectedPlayers.map((player) => (
                 <button
-                  key={player.name}
+                  key={player.id}
                   onClick={() => cyclePlayer(player.name)}
                   className={`min-w-[5rem] px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${
                     assignments[player.name] === "A"
@@ -1650,24 +1755,70 @@ export default function RecordPage() {
                   {player.name}
                 </button>
               ))}
+            </div>
           </div>
 
-          {/* Add new player */}
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newPlayerName}
-              onChange={(e) => setNewPlayerName(e.target.value)}
-              placeholder="Add new player..."
-              className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-sm placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
-              onKeyDown={(e) => e.key === "Enter" && addNewPlayer()}
-            />
-            <button
-              onClick={addNewPlayer}
-              className="px-4 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-white text-sm font-semibold rounded-lg transition-colors"
-            >
-              Add
-            </button>
+          {/* Search from Full List */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ADD FROM FULL LIST</h3>
+            <div className="relative">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setShowSearchResults(e.target.value.length > 0);
+                }}
+                onFocus={() => setShowSearchResults(searchTerm.length > 0)}
+                placeholder="Search players..."
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-sm placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
+              />
+              {showSearchResults && filteredPlayers.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {filteredPlayers.slice(0, 20).map((player) => (
+                    <button
+                      key={player.id}
+                      onClick={() => addFromSearch(player)}
+                      className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-900 dark:text-white"
+                    >
+                      {player.name}
+                      {player.fullName && (
+                        <span className="text-gray-500 dark:text-gray-400 ml-2">({player.fullName})</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Add New Player */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ADD NEW PLAYER</h3>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newPlayerFirst}
+                onChange={(e) => setNewPlayerFirst(e.target.value)}
+                placeholder="First name"
+                className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-sm placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
+              />
+              <input
+                type="text"
+                value={newPlayerLast}
+                onChange={(e) => setNewPlayerLast(e.target.value)}
+                placeholder="Last name"
+                className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-sm placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
+                onKeyDown={(e) => e.key === "Enter" && addNewPlayer()}
+              />
+              <button
+                onClick={addNewPlayer}
+                disabled={!newPlayerFirst || !newPlayerLast}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:bg-gray-100 dark:disabled:bg-gray-900 disabled:text-gray-400 text-gray-900 dark:text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                Add
+              </button>
+            </div>
           </div>
 
           {/* Team preview */}

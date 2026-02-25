@@ -79,6 +79,14 @@ export async function recordEvent(
       assistedEventId ?? null,
     ],
   });
+
+  // Update last_played_date for "expected to play" logic
+  const today = new Date().toISOString().split("T")[0];
+  await db.execute({
+    sql: "UPDATE players SET last_played_date = ? WHERE id = ?",
+    args: [today, playerId],
+  });
+
   return Number(result.lastInsertRowid);
 }
 

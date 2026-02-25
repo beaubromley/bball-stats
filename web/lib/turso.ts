@@ -109,6 +109,43 @@ export async function initDb() {
     // Column already exists
   }
 
+  // Migration: add player registry columns for centralized player management
+  try {
+    await db.execute("ALTER TABLE players ADD COLUMN first_name TEXT");
+  } catch {
+    // Column already exists
+  }
+
+  try {
+    await db.execute("ALTER TABLE players ADD COLUMN last_name TEXT");
+  } catch {
+    // Column already exists
+  }
+
+  try {
+    await db.execute("ALTER TABLE players ADD COLUMN status TEXT DEFAULT 'active'");
+  } catch {
+    // Column already exists
+  }
+
+  try {
+    await db.execute("ALTER TABLE players ADD COLUMN aliases TEXT");
+  } catch {
+    // Column already exists
+  }
+
+  try {
+    await db.execute("ALTER TABLE players ADD COLUMN notes TEXT");
+  } catch {
+    // Column already exists
+  }
+
+  try {
+    await db.execute("ALTER TABLE players ADD COLUMN last_played_date TEXT");
+  } catch {
+    // Column already exists
+  }
+
   // Backfill known full names from GroupMe data
   const knownFullNames: Record<string, string> = {
     "Addison P.": "Addison Peiroo",
