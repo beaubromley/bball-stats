@@ -1441,7 +1441,8 @@ export default function RecordPage() {
     setInterim("");
     setAssignments({});
     watchUndoCountRef.current = 0;
-    setNewPlayerName("");
+    setNewPlayerFirst("");
+    setNewPlayerLast("");
     setSaved("idle");
     nextId.current = 1;
   }
