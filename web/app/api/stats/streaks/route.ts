@@ -5,22 +5,21 @@ export async function GET() {
   await initDb();
   const db = getDb();
 
-  // Get last 10 finished games overall (the shared x-axis)
+  // Get ALL finished games (need full history for accurate streaks)
   const gamesResult = await db.execute({
     sql: `SELECT id, start_time FROM games
           WHERE status = 'finished'
-          ORDER BY start_time DESC
-          LIMIT 10`,
+          ORDER BY start_time ASC`,
     args: [],
   });
 
-  const games = gamesResult.rows.reverse(); // oldest first
-  if (games.length === 0) return NextResponse.json({ gameLabels: [], players: [] });
+  const allGames = gamesResult.rows;
+  if (allGames.length === 0) return NextResponse.json({ gameLabels: [], players: [] });
 
-  const gameIds = games.map((g) => g.id as string);
+  const allGameIds = allGames.map((g) => g.id as string);
 
-  // Get all roster entries for these games with W/L result
-  const placeholders = gameIds.map(() => "?").join(",");
+  // Get all roster entries for ALL games with W/L result
+  const placeholders = allGameIds.map(() => "?").join(",");
   const result = await db.execute({
     sql: `SELECT r.player_id, p.name, r.game_id,
                  CASE WHEN g.winning_team = r.team THEN 'W' ELSE 'L' END as result
@@ -29,10 +28,10 @@ export async function GET() {
           JOIN players p ON r.player_id = p.id
           WHERE g.id IN (${placeholders}) AND p.status = 'active'
           ORDER BY p.name, g.start_time ASC`,
-    args: gameIds,
+    args: allGameIds,
   });
 
-  // Build per-player streak data
+  // Build per-player results across ALL games
   const playerMap = new Map<string, { name: string; results: Map<string, string> }>();
   for (const row of result.rows) {
     const pid = row.player_id as string;
@@ -42,23 +41,26 @@ export async function GET() {
     playerMap.get(pid)!.results.set(row.game_id as string, row.result as string);
   }
 
-  // Compute running streak for each player across the 10 games
+  // Compute running streak across ALL games, but only keep last 10 data points
+  const last10Ids = allGameIds.slice(-10);
+
   const players = Array.from(playerMap.entries()).map(([id, { name, results }]) => {
     let streak = 0;
     const data: (number | null)[] = [];
 
-    for (const gId of gameIds) {
+    for (const gId of allGameIds) {
       const r = results.get(gId);
       if (!r) {
-        // Didn't play this game — gap
-        data.push(null);
-        // Don't reset streak; keep it for when they return
+        // Didn't play this game — skip (don't reset streak)
       } else if (r === "W") {
         streak = streak > 0 ? streak + 1 : 1;
-        data.push(streak);
       } else {
         streak = streak < 0 ? streak - 1 : -1;
-        data.push(streak);
+      }
+
+      // Only record data points for the last 10 games
+      if (last10Ids.includes(gId)) {
+        data.push(r ? streak : null);
       }
     }
 
@@ -68,10 +70,11 @@ export async function GET() {
   // Sort by name for consistent legend order
   players.sort((a, b) => a.name.localeCompare(b.name));
 
-  // Format game labels
-  const gameLabels = games.map((g) => {
-    const d = new Date(g.start_time as string);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" });
+  // Label with game numbers
+  const totalGames = allGames.length;
+  const gameLabels = last10Ids.map((_, i) => {
+    const gameNum = totalGames - last10Ids.length + i + 1;
+    return `#${gameNum}`;
   });
 
   return NextResponse.json({ gameLabels, players });
