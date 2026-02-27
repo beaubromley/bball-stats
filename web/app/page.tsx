@@ -273,10 +273,12 @@ export default function Home() {
                     <th className="py-2 pr-3 text-right">GP</th>
                     <th className="py-2 pr-3 text-right">W-L</th>
                     <th className="py-2 pr-3 text-right">PTS</th>
+                    <th className="py-2 pr-3 text-right">PPG</th>
                     <th className="py-2 pr-3 text-right">AST</th>
                     <th className="py-2 pr-3 text-right">STL</th>
                     <th className="py-2 pr-3 text-right">BLK</th>
-                    <th className="py-2 text-right">FP</th>
+                    <th className="py-2 pr-3 text-right">FP</th>
+                    <th className="py-2 text-right">FPG</th>
                     {showAdvanced && <th className="py-2 pl-3 text-right">+/-</th>}
                   </tr>
                 </thead>
@@ -287,10 +289,12 @@ export default function Home() {
                       <td className="py-2 pr-3 text-right tabular-nums">{p.games_played}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.wins}-{p.games_played - p.wins}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.total_points}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.games_played ? r1(p.total_points / p.games_played) : 0}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.assists}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.steals}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.blocks}</td>
-                      <td className="py-2 text-right tabular-nums font-bold text-blue-400">{p.fantasy_points}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums font-bold text-blue-400">{p.fantasy_points}</td>
+                      <td className="py-2 text-right tabular-nums font-bold text-blue-400">{p.games_played ? r1(p.fantasy_points / p.games_played) : 0}</td>
                       {showAdvanced && (
                         <td className={`py-2 pl-3 text-right tabular-nums font-bold ${p.plus_minus > 0 ? "text-green-400" : p.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
                           {p.plus_minus > 0 ? "+" : ""}{p.plus_minus}
