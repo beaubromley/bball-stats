@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "@/app/components/AuthProvider";
 import {
   BarChart,
@@ -73,6 +73,49 @@ function ScatterTooltip({ active, payload }: any) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface TabDef {
+  label: string;
+  data: any[];
+  render: (data: any[]) => React.ReactNode;
+}
+
+function TabbedChart({ title, tabs, color }: { title: string; tabs: TabDef[]; color?: string }) {
+  const [active, setActive] = useState(0);
+  const data = tabs[active].data;
+  return (
+    <div className="mb-8">
+      <div className="flex items-center gap-3 mb-3">
+        <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300">{title}</h3>
+        {tabs.length > 1 && (
+          <div className="flex gap-1">
+            {tabs.map((tab, i) => (
+              <button
+                key={tab.label}
+                onClick={() => setActive(i)}
+                className={`px-2.5 py-0.5 text-xs font-display uppercase tracking-wide rounded-full transition-colors ${
+                  i === active
+                    ? "bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className={`border rounded-lg p-4 bg-white dark:bg-transparent ${color ? "" : "border-gray-200 dark:border-gray-800"}`}
+        style={color ? { borderColor: `${color}30` } : undefined}
+      >
+        <ResponsiveContainer width="100%" height={Math.max(200, data.length * 36)}>
+          {tabs[active].render(data)}
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const { isAdmin, isViewer } = useAuth();
   const showAdvanced = isAdmin || isViewer;
@@ -107,58 +150,78 @@ export default function Home() {
     );
   }
 
-  // Chart data
+  // Chart data — per game versions filter to players with >= 1 game
+  const activePlayers = players.filter((p) => p.games_played >= 1);
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+
+  // Fantasy Points
   const fpData = [...players]
     .sort((a, b) => b.fantasy_points - a.fantasy_points)
     .map((p) => ({ name: p.name, PTS: p.total_points, AST: p.assists, STL: p.steals, BLK: p.blocks, total: p.fantasy_points }));
-
-  const fpPerGameData = [...players]
-    .filter((p) => p.games_played >= 1)
-    .sort((a, b) => {
-      const aFPG = a.fantasy_points / a.games_played;
-      const bFPG = b.fantasy_points / b.games_played;
-      return bFPG - aFPG;
-    })
+  const fpPerGameData = [...activePlayers]
+    .sort((a, b) => b.fantasy_points / b.games_played - a.fantasy_points / a.games_played)
     .map((p) => {
-      const gp = p.games_played || 1;
-      return {
-        name: p.name,
-        PTS: Math.round((p.total_points / gp) * 10) / 10,
-        AST: Math.round((p.assists / gp) * 10) / 10,
-        STL: Math.round((p.steals / gp) * 10) / 10,
-        BLK: Math.round((p.blocks / gp) * 10) / 10,
-        total: Math.round((p.fantasy_points / gp) * 10) / 10,
-      };
+      const gp = p.games_played;
+      return { name: p.name, PTS: r1(p.total_points / gp), AST: r1(p.assists / gp), STL: r1(p.steals / gp), BLK: r1(p.blocks / gp), total: r1(p.fantasy_points / gp) };
     });
 
+  // Points
   const ptsData = [...players]
     .sort((a, b) => b.total_points - a.total_points)
     .map((p) => ({ name: p.name, "1s": p.ones_made, "2s": p.twos_made * 2, total: p.total_points }));
-
-  const ppgData = [...players]
-    .filter((p) => p.games_played >= 1)
+  const ppgData = [...activePlayers]
     .sort((a, b) => b.ppg - a.ppg)
     .map((p) => {
-      const gp = p.games_played || 1;
-      const ones = Math.round((p.ones_made / gp) * 10) / 10;
-      const twos = Math.round((p.twos_made * 2 / gp) * 10) / 10;
-      return { name: p.name, "1s": ones, "2s": twos, total: Math.round((ones + twos) * 10) / 10 };
+      const gp = p.games_played;
+      const ones = r1(p.ones_made / gp);
+      const twos = r1(p.twos_made * 2 / gp);
+      return { name: p.name, "1s": ones, "2s": twos, total: r1(ones + twos) };
     });
 
-  const winData = [...players]
-    .filter((p) => p.games_played >= 1)
+  // Win %
+  const winData = [...activePlayers]
     .sort((a, b) => b.win_pct - a.win_pct)
     .map((p) => ({ name: p.name, "Win%": p.win_pct }));
 
+  // MVPs
   const mvpData = [...players]
     .filter((p) => p.mvp_count > 0)
     .sort((a, b) => b.mvp_count - a.mvp_count)
     .map((p) => ({ name: p.name, MVPs: p.mvp_count }));
 
-  const scatterData = [...players]
-    .filter((p) => p.games_played >= 1)
-    .map((p) => ({ name: p.name, fpg: Math.round((p.fantasy_points / p.games_played) * 10) / 10, winPct: p.win_pct }));
+  // Assists
+  const astData = [...players]
+    .filter((p) => p.assists > 0)
+    .sort((a, b) => b.assists - a.assists)
+    .map((p) => ({ name: p.name, AST: p.assists }));
+  const astPerGameData = [...activePlayers]
+    .filter((p) => p.assists > 0)
+    .sort((a, b) => b.assists / b.games_played - a.assists / a.games_played)
+    .map((p) => ({ name: p.name, AST: r1(p.assists / p.games_played) }));
 
+  // Steals
+  const stlData = [...players]
+    .filter((p) => p.steals > 0)
+    .sort((a, b) => b.steals - a.steals)
+    .map((p) => ({ name: p.name, STL: p.steals }));
+  const stlPerGameData = [...activePlayers]
+    .filter((p) => p.steals > 0)
+    .sort((a, b) => b.steals / b.games_played - a.steals / a.games_played)
+    .map((p) => ({ name: p.name, STL: r1(p.steals / p.games_played) }));
+
+  // Blocks
+  const blkData = [...players]
+    .filter((p) => p.blocks > 0)
+    .sort((a, b) => b.blocks - a.blocks)
+    .map((p) => ({ name: p.name, BLK: p.blocks }));
+  const blkPerGameData = [...activePlayers]
+    .filter((p) => p.blocks > 0)
+    .sort((a, b) => b.blocks / b.games_played - a.blocks / a.games_played)
+    .map((p) => ({ name: p.name, BLK: r1(p.blocks / p.games_played) }));
+
+  // Scatter
+  const scatterData = [...activePlayers]
+    .map((p) => ({ name: p.name, fpg: r1(p.fantasy_points / p.games_played), winPct: p.win_pct }));
   const SCATTER_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#A855F7", "#EC4899", "#06B6D4", "#F97316", "#84CC16", "#6366F1"];
 
   return (
@@ -318,95 +381,72 @@ export default function Home() {
       {/* All-Time Charts */}
       <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">All-Time</h2>
 
-      {/* Two-column layout: Totals vs Per Game */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
-        {/* Fantasy Points — Totals */}
-        <div>
-          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Fantasy Points</h3>
-          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
-            <ResponsiveContainer width="100%" height={Math.max(200, fpData.length * 36)}>
-              <BarChart data={fpData} layout="vertical" margin={{ left: 20, right: 30 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
-                <Legend wrapperStyle={{ fontSize: "11px" }} />
-                <Bar dataKey="PTS" stackId="fp" fill="#10B981" />
-                <Bar dataKey="AST" stackId="fp" fill="#3B82F6" />
-                <Bar dataKey="STL" stackId="fp" fill="#EAB308" />
-                <Bar dataKey="BLK" stackId="fp" fill="#A855F7" radius={[0, 4, 4, 0]}>
-                  <LabelList dataKey="total" position="right" fill="#9CA3AF" fontSize={11} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+      {/* Fantasy Points */}
+      <TabbedChart title="Fantasy Points" tabs={[
+        { label: "Per Game", data: fpPerGameData, render: (data) => (
+          <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+            <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+            <Legend wrapperStyle={{ fontSize: "11px" }} />
+            <Bar dataKey="PTS" stackId="fp" fill="#10B981" />
+            <Bar dataKey="AST" stackId="fp" fill="#3B82F6" />
+            <Bar dataKey="STL" stackId="fp" fill="#EAB308" />
+            <Bar dataKey="BLK" stackId="fp" fill="#A855F7" radius={[0, 4, 4, 0]}>
+              <LabelList dataKey="total" position="right" fill="#9CA3AF" fontSize={11} />
+            </Bar>
+          </BarChart>
+        )},
+        { label: "Total", data: fpData, render: (data) => (
+          <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+            <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+            <Legend wrapperStyle={{ fontSize: "11px" }} />
+            <Bar dataKey="PTS" stackId="fp" fill="#10B981" />
+            <Bar dataKey="AST" stackId="fp" fill="#3B82F6" />
+            <Bar dataKey="STL" stackId="fp" fill="#EAB308" />
+            <Bar dataKey="BLK" stackId="fp" fill="#A855F7" radius={[0, 4, 4, 0]}>
+              <LabelList dataKey="total" position="right" fill="#9CA3AF" fontSize={11} />
+            </Bar>
+          </BarChart>
+        )},
+      ]} />
 
-        {/* Fantasy Points Per Game */}
-        <div>
-          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Fantasy Points Per Game</h3>
-          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
-            <ResponsiveContainer width="100%" height={Math.max(200, fpPerGameData.length * 36)}>
-              <BarChart data={fpPerGameData} layout="vertical" margin={{ left: 20, right: 30 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
-                <Legend wrapperStyle={{ fontSize: "11px" }} />
-                <Bar dataKey="PTS" stackId="fpg" fill="#10B981" />
-                <Bar dataKey="AST" stackId="fpg" fill="#3B82F6" />
-                <Bar dataKey="STL" stackId="fpg" fill="#EAB308" />
-                <Bar dataKey="BLK" stackId="fpg" fill="#A855F7" radius={[0, 4, 4, 0]}>
-                  <LabelList dataKey="total" position="right" fill="#9CA3AF" fontSize={11} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Total Points */}
-        <div>
-          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Total Points</h3>
-          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
-            <ResponsiveContainer width="100%" height={Math.max(200, ptsData.length * 36)}>
-              <BarChart data={ptsData} layout="vertical" margin={{ left: 20, right: 30 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
-                <Legend wrapperStyle={{ fontSize: "11px" }} />
-                <Bar dataKey="1s" stackId="pts" fill="#10B981" />
-                <Bar dataKey="2s" stackId="pts" fill="#3B82F6" radius={[0, 4, 4, 0]}>
-                  <LabelList dataKey="total" position="right" fill="#9CA3AF" fontSize={11} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Points Per Game */}
-        <div>
-          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Points Per Game</h3>
-          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
-            <ResponsiveContainer width="100%" height={Math.max(200, ppgData.length * 36)}>
-              <BarChart data={ppgData} layout="vertical" margin={{ left: 20, right: 30 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
-                <Legend wrapperStyle={{ fontSize: "11px" }} />
-                <Bar dataKey="1s" stackId="ppg" fill="#10B981" />
-                <Bar dataKey="2s" stackId="ppg" fill="#3B82F6" radius={[0, 4, 4, 0]}>
-                  <LabelList dataKey="total" position="right" fill="#9CA3AF" fontSize={11} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
+      {/* Points */}
+      <TabbedChart title="Points" tabs={[
+        { label: "Per Game", data: ppgData, render: (data) => (
+          <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+            <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+            <Legend wrapperStyle={{ fontSize: "11px" }} />
+            <Bar dataKey="1s" stackId="pts" fill="#10B981" />
+            <Bar dataKey="2s" stackId="pts" fill="#3B82F6" radius={[0, 4, 4, 0]}>
+              <LabelList dataKey="total" position="right" fill="#9CA3AF" fontSize={11} />
+            </Bar>
+          </BarChart>
+        )},
+        { label: "Total", data: ptsData, render: (data) => (
+          <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+            <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+            <Legend wrapperStyle={{ fontSize: "11px" }} />
+            <Bar dataKey="1s" stackId="pts" fill="#10B981" />
+            <Bar dataKey="2s" stackId="pts" fill="#3B82F6" radius={[0, 4, 4, 0]}>
+              <LabelList dataKey="total" position="right" fill="#9CA3AF" fontSize={11} />
+            </Bar>
+          </BarChart>
+        )},
+      ]} />
 
       {/* Win % */}
-      <div className="mb-10">
+      <div className="mb-8">
         <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Win %</h3>
         <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
           <ResponsiveContainer width="100%" height={Math.max(200, winData.length * 36)}>
@@ -423,9 +463,9 @@ export default function Home() {
         </div>
       </div>
 
-      {/* MVP Count */}
+      {/* MVP Awards */}
       {mvpData.length > 0 && (
-        <div className="mb-10">
+        <div className="mb-8">
           <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">MVP Awards</h3>
           <div className="border border-yellow-300/30 dark:border-yellow-700/30 rounded-lg p-4 bg-yellow-50/50 dark:bg-yellow-900/5">
             <ResponsiveContainer width="100%" height={Math.max(200, mvpData.length * 36)}>
@@ -443,10 +483,94 @@ export default function Home() {
         </div>
       )}
 
-      {/* PPG vs Win% Scatter */}
+      {/* Assists */}
+      {astData.length > 0 && (
+        <TabbedChart title="Assists" color="#3B82F6" tabs={[
+          { label: "Per Game", data: astPerGameData, render: (data) => (
+            <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+              <Bar dataKey="AST" fill="#3B82F6" radius={[0, 4, 4, 0]}>
+                <LabelList dataKey="AST" position="right" fill="#9CA3AF" fontSize={11} />
+              </Bar>
+            </BarChart>
+          )},
+          { label: "Total", data: astData, render: (data) => (
+            <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+              <Bar dataKey="AST" fill="#3B82F6" radius={[0, 4, 4, 0]}>
+                <LabelList dataKey="AST" position="right" fill="#9CA3AF" fontSize={11} />
+              </Bar>
+            </BarChart>
+          )},
+        ]} />
+      )}
+
+      {/* Steals */}
+      {stlData.length > 0 && (
+        <TabbedChart title="Steals" color="#EAB308" tabs={[
+          { label: "Per Game", data: stlPerGameData, render: (data) => (
+            <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+              <Bar dataKey="STL" fill="#EAB308" radius={[0, 4, 4, 0]}>
+                <LabelList dataKey="STL" position="right" fill="#9CA3AF" fontSize={11} />
+              </Bar>
+            </BarChart>
+          )},
+          { label: "Total", data: stlData, render: (data) => (
+            <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+              <Bar dataKey="STL" fill="#EAB308" radius={[0, 4, 4, 0]}>
+                <LabelList dataKey="STL" position="right" fill="#9CA3AF" fontSize={11} />
+              </Bar>
+            </BarChart>
+          )},
+        ]} />
+      )}
+
+      {/* Blocks */}
+      {blkData.length > 0 && (
+        <TabbedChart title="Blocks" color="#A855F7" tabs={[
+          { label: "Per Game", data: blkPerGameData, render: (data) => (
+            <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+              <Bar dataKey="BLK" fill="#A855F7" radius={[0, 4, 4, 0]}>
+                <LabelList dataKey="BLK" position="right" fill="#9CA3AF" fontSize={11} />
+              </Bar>
+            </BarChart>
+          )},
+          { label: "Total", data: blkData, render: (data) => (
+            <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+              <Bar dataKey="BLK" fill="#A855F7" radius={[0, 4, 4, 0]}>
+                <LabelList dataKey="BLK" position="right" fill="#9CA3AF" fontSize={11} />
+              </Bar>
+            </BarChart>
+          )},
+        ]} />
+      )}
+
+      {/* FPG vs Win% Scatter */}
       {scatterData.length > 0 && (
-        <div className="mb-10">
-          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Fantasy Points Per Game vs Win %</h3>
+        <div className="mb-8">
+          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Fantasy PPG vs Win %</h3>
           <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
             <ResponsiveContainer width="100%" height={350}>
               <ScatterChart margin={{ left: 10, right: 20, top: 20, bottom: 10 }}>
