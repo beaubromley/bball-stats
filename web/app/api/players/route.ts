@@ -32,25 +32,25 @@ export async function GET(request: Request) {
     });
 
     // Get GroupMe active members (last 2 days)
-    let groupMeNames = new Set<string>();
+    let groupMeUserIds = new Set<string>();
     try {
       const baseUrl = request.url.split("/api/")[0];
       const groupMeResponse = await fetch(`${baseUrl}/api/groupme/members`);
       if (groupMeResponse.ok) {
-        const groupMePlayers = await groupMeResponse.json();
-        groupMeNames = new Set(groupMePlayers.map((p: any) => p.displayName));
+        const groupMeMembers: { user_id: string; name: string }[] = await groupMeResponse.json();
+        groupMeUserIds = new Set(groupMeMembers.map((m) => m.user_id));
       }
     } catch (error) {
       console.error("Failed to fetch GroupMe members:", error);
     }
 
-    // Get players from GroupMe list
-    const groupMePlayers = groupMeNames.size > 0
+    // Get players from GroupMe list by groupme_user_id
+    const groupMePlayers = groupMeUserIds.size > 0
       ? await db.execute({
           sql: `SELECT * FROM players
                 WHERE status = 'active'
-                AND name IN (${Array.from(groupMeNames).map(() => "?").join(",")})`,
-          args: Array.from(groupMeNames),
+                AND groupme_user_id IN (${Array.from(groupMeUserIds).map(() => "?").join(",")})`,
+          args: Array.from(groupMeUserIds),
         })
       : { rows: [] };
 
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { first_name, last_name, full_name, status } = body;
+    const { first_name, last_name, full_name, status, groupme_user_id } = body;
 
     if (!first_name || !last_name) {
       return NextResponse.json(
@@ -132,6 +132,7 @@ export async function POST(request: Request) {
         full_name: full_name || `${first_name} ${last_name}`,
         aliases: [],
         status: status || "active",
+        groupme_user_id: groupme_user_id || null,
       });
     }
 
@@ -142,6 +143,7 @@ export async function POST(request: Request) {
       full_name: full_name || `${first_name} ${last_name}`,
       aliases: [],
       status: status || "active",
+      groupme_user_id: groupme_user_id || null,
     });
   } catch (error) {
     console.error("Error creating player:", error);
@@ -156,8 +158,8 @@ async function createPlayer(db: any, data: any) {
   const id = uuid();
 
   await db.execute({
-    sql: `INSERT INTO players (id, name, first_name, last_name, full_name, aliases, status, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    sql: `INSERT INTO players (id, name, first_name, last_name, full_name, aliases, status, groupme_user_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     args: [
       id,
       data.name,
@@ -166,6 +168,7 @@ async function createPlayer(db: any, data: any) {
       data.full_name,
       JSON.stringify(data.aliases),
       data.status,
+      data.groupme_user_id,
     ],
   });
 
@@ -188,6 +191,7 @@ function transformPlayer(row: any) {
     aliases: row.aliases ? JSON.parse(row.aliases) : [],
     status: row.status || "active",
     last_played_date: row.last_played_date,
+    groupme_user_id: row.groupme_user_id || null,
     created_at: row.created_at,
   };
 }

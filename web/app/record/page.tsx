@@ -204,9 +204,7 @@ export default function RecordPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const dgAccumulatorRef = useRef("");
   const dgReconnectCount = useRef(0);
-  // Parse-on-recognition: last scored event ref for bolt-on assists
-  const lastScoredEventRef = useRef<{ id: number; time: number } | null>(null);
-  // Name carry-forward: buffer a bare player name for the next segment
+// Name carry-forward: buffer a bare player name for the next segment
   const pendingNameRef = useRef<{ name: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   // Dual display: last accepted command text (green line)
   const [acceptedCmd, setAcceptedCmd] = useState("");
@@ -1060,11 +1058,15 @@ export default function RecordPage() {
       }
     }
 
-    // --- Bolt-on assist: attach to last score within 5 seconds ---
+    // --- Bolt-on assist: attach to most recent unassisted score ---
     if (cmd.type === "assist" && cmd.playerName) {
-      const last = lastScoredEventRef.current;
-      if (last && Date.now() - last.time < 5000) {
-        // Retroactively add assist to the last scored event
+      // Find most recent score that doesn't already have an assist and wasn't scored by the assister
+      const assistName = cmd.playerName!.toLowerCase();
+      const scores = currentGame.events
+        .filter((e) => e.type === "score" && !e.undone && !e.assistBy && e.playerName.toLowerCase() !== assistName);
+      const target = scores[scores.length - 1];
+
+      if (target) {
         if (currentGame.gameId) {
           fetch(`${API_BASE}/games/${currentGame.gameId}/events`, {
             method: "POST",
@@ -1074,19 +1076,19 @@ export default function RecordPage() {
               event_type: "assist",
               point_value: 0,
               raw_transcript: text,
-              assisted_event_id: last.id,
+              assisted_event_id: target.apiId || target.id,
             }),
           }).catch(() => {});
         }
         setGame((prev) => {
           const events = prev.events.map((e) =>
-            e.id === last.id ? { ...e, assistBy: cmd.playerName } : e
+            e.id === target.id ? { ...e, assistBy: cmd.playerName } : e
           );
           return { ...prev, events };
         });
-        showAcceptedCmd(`${cmd.playerName} AST`);
+        showAcceptedCmd(`${cmd.playerName} AST → ${target.playerName}`);
       } else {
-        showRetryAlert("No recent score to attach assist to");
+        showRetryAlert("No unassisted score to attach assist to");
       }
       return;
     }
@@ -1143,15 +1145,8 @@ export default function RecordPage() {
     // Pure state update
     setGame((prev) => {
       switch (cmd.type) {
-        case "score": {
-          const newState = addScore(prev, cmd, text);
-          // Track last scored event for bolt-on assists
-          const lastEvt = newState.events[newState.events.length - 1];
-          if (lastEvt && lastEvt.type === "score") {
-            lastScoredEventRef.current = { id: lastEvt.id, time: lastEvt.time };
-          }
-          return newState;
-        }
+        case "score":
+          return addScore(prev, cmd, text);
         case "steal":
           return addSteal(prev, cmd, text);
         case "block":

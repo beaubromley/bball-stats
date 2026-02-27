@@ -339,13 +339,21 @@ export function parseTranscript(
       ? (scoringMode === "2s3s" ? 3 : 2)
       : (scoringMode === "2s3s" ? 2 : 1);
 
-    // Check for assist mentioned alongside the score (e.g., "Tyler bucket assist Joe")
+    // Check for assist mentioned alongside the score
+    // Supports: "Tyler bucket assist Joe", "Tyler bucket Joe assist", "Tyler bucket from Joe"
     let assistBy: string | undefined;
     let playerName: string | undefined;
 
-    const assistInScore = text.match(/\bassists?\s+(?:to\s+|by\s+)?(\w+)/);
-    if (assistInScore && !SCORING_WORDS.has(assistInScore[1])) {
-      assistBy = resolvePlayer(assistInScore[1], knownPlayers);
+    // Pattern 1: "assist [name]" — e.g., "Tyler bucket assist Beau"
+    const assistAfter = text.match(/\bassists?\s+(?:to\s+|by\s+)?(\w+)/);
+    // Pattern 2: "[name] assist" — e.g., "Tyler bucket Beau assist"
+    const assistBefore = text.match(/(\w+)\s+assists?(?:\s|$)/);
+
+    if (assistAfter && !SCORING_WORDS.has(assistAfter[1])) {
+      assistBy = resolvePlayer(assistAfter[1], knownPlayers);
+      playerName = findPlayerName(text, knownPlayers, [assistBy]);
+    } else if (assistBefore && !SCORING_WORDS.has(assistBefore[1])) {
+      assistBy = resolvePlayer(assistBefore[1], knownPlayers);
       playerName = findPlayerName(text, knownPlayers, [assistBy]);
     } else {
       playerName = findPlayerName(text, knownPlayers);

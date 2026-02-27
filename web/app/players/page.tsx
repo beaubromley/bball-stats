@@ -12,6 +12,7 @@ interface Player {
   first_name: string | null;
   last_name: string | null;
   full_name: string | null;
+  groupme_user_id: string | null;
   status: string;
   notes: string | null;
   created_at: string;
@@ -23,8 +24,8 @@ export default function PlayersPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", full_name: "", status: "", notes: "" });
-  const [addForm, setAddForm] = useState({ first_name: "", last_name: "", full_name: "" });
+  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", full_name: "", groupme_user_id: "", status: "", notes: "" });
+  const [addForm, setAddForm] = useState({ first_name: "", last_name: "", full_name: "", groupme_user_id: "" });
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,6 +66,7 @@ export default function PlayersPage() {
           first_name: addForm.first_name.trim(),
           last_name: addForm.last_name.trim(),
           full_name: addForm.full_name.trim() || undefined,
+          groupme_user_id: addForm.groupme_user_id.trim() || undefined,
         }),
       });
       if (!res.ok) {
@@ -72,7 +74,7 @@ export default function PlayersPage() {
         setError(data.error || "Failed to add player");
         return;
       }
-      setAddForm({ first_name: "", last_name: "", full_name: "" });
+      setAddForm({ first_name: "", last_name: "", full_name: "", groupme_user_id: "" });
       setShowAdd(false);
       fetchPlayers();
     } catch {
@@ -86,6 +88,7 @@ export default function PlayersPage() {
       first_name: player.first_name || "",
       last_name: player.last_name || "",
       full_name: player.full_name || "",
+      groupme_user_id: player.groupme_user_id || "",
       status: player.status,
       notes: player.notes || "",
     });
@@ -102,6 +105,7 @@ export default function PlayersPage() {
           first_name: editForm.first_name.trim(),
           last_name: editForm.last_name.trim(),
           full_name: editForm.full_name.trim() || null,
+          groupme_user_id: editForm.groupme_user_id.trim() || null,
           status: editForm.status,
           notes: editForm.notes.trim() || null,
         }),
@@ -160,7 +164,7 @@ export default function PlayersPage() {
       {showAdd && (
         <form onSubmit={handleAdd} className="mb-6 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
           <h2 className="text-sm font-bold font-display uppercase tracking-wide text-gray-500 mb-3">New Player</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <input
               type="text"
               placeholder="First name *"
@@ -181,6 +185,13 @@ export default function PlayersPage() {
               value={addForm.full_name}
               onChange={(e) => setAddForm({ ...addForm, full_name: e.target.value })}
               className="px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+            />
+            <input
+              type="text"
+              placeholder="GroupMe user_id (optional)"
+              value={addForm.groupme_user_id}
+              onChange={(e) => setAddForm({ ...addForm, groupme_user_id: e.target.value })}
+              className="px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-mono focus:outline-none focus:border-blue-500"
             />
           </div>
           <button
@@ -204,6 +215,7 @@ export default function PlayersPage() {
                 <th className="py-2 pr-3">First</th>
                 <th className="py-2 pr-3">Last</th>
                 <th className="py-2 pr-3">Full Name</th>
+                <th className="py-2 pr-3">GroupMe</th>
                 <th className="py-2 pr-3">Status</th>
                 <th className="py-2 pr-3">Notes</th>
                 <th className="py-2 text-right">Actions</th>
@@ -240,6 +252,15 @@ export default function PlayersPage() {
                           value={editForm.full_name}
                           onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
                           className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                        />
+                      </td>
+                      <td className="py-2 pr-3">
+                        <input
+                          type="text"
+                          value={editForm.groupme_user_id}
+                          onChange={(e) => setEditForm({ ...editForm, groupme_user_id: e.target.value })}
+                          className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm font-mono focus:outline-none focus:border-blue-500"
+                          placeholder="user_id"
                         />
                       </td>
                       <td className="py-2 pr-3">
@@ -281,6 +302,7 @@ export default function PlayersPage() {
                       <td className="py-2 pr-3 text-gray-400">{player.first_name || "—"}</td>
                       <td className="py-2 pr-3 text-gray-400">{player.last_name || "—"}</td>
                       <td className="py-2 pr-3 text-gray-400">{player.full_name || "—"}</td>
+                      <td className="py-2 pr-3 text-gray-500 text-xs font-mono">{player.groupme_user_id || "—"}</td>
                       <td className="py-2 pr-3">
                         <span className={`text-xs px-2 py-0.5 rounded-full ${player.status === "active" ? "bg-green-900/30 text-green-400" : "bg-gray-800 text-gray-500"}`}>
                           {player.status}

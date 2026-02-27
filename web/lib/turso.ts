@@ -153,6 +153,13 @@ export async function initDb() {
     // Column already exists
   }
 
+  // Migration: add groupme_user_id column for stable GroupMe matching
+  try {
+    await db.execute("ALTER TABLE players ADD COLUMN groupme_user_id TEXT");
+  } catch {
+    // Column already exists
+  }
+
   // Backfill known full names from GroupMe data
   const knownFullNames: Record<string, string> = {
     "Addison P.": "Addison Peiroo",

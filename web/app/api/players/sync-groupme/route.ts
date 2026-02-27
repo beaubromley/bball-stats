@@ -17,10 +17,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const groupMePlayers = await groupMeResponse.json();
+    const groupMeMembers: { user_id: string; name: string }[] = await groupMeResponse.json();
 
     // Get all existing players
-    const existingPlayers = await db.execute("SELECT name, full_name FROM players");
+    const existingPlayers = await db.execute("SELECT name, full_name, groupme_user_id FROM players");
     const existingNames = new Set(
       existingPlayers.rows.map((p: any) => p.name.toLowerCase())
     );
@@ -29,35 +29,42 @@ export async function POST(request: Request) {
         .filter((p: any) => p.full_name)
         .map((p: any) => p.full_name.toLowerCase())
     );
+    const existingGroupMeIds = new Set(
+      existingPlayers.rows
+        .filter((p: any) => p.groupme_user_id)
+        .map((p: any) => p.groupme_user_id)
+    );
 
     const existing: string[] = [];
     const suggested: Array<{
-      fullName: string;
-      suggestedDisplay: string;
+      groupme_user_id: string;
+      groupme_name: string;
       suggestedFirst: string;
       suggestedLast: string;
     }> = [];
 
-    for (const player of groupMePlayers) {
-      const { displayName, fullName } = player;
-
-      // Check if already in registry by display name or full name
-      if (
-        existingNames.has(displayName.toLowerCase()) ||
-        existingFullNames.has(fullName.toLowerCase())
-      ) {
-        existing.push(displayName);
+    for (const member of groupMeMembers) {
+      // Check if already linked by groupme_user_id
+      if (existingGroupMeIds.has(member.user_id)) {
+        existing.push(member.name);
         continue;
       }
 
-      // Parse full name for suggestion
-      const parts = fullName.split(/\s+/);
+      // Check by name/full_name as fallback
+      if (existingNames.has(member.name.toLowerCase()) ||
+          existingFullNames.has(member.name.toLowerCase())) {
+        existing.push(member.name);
+        continue;
+      }
+
+      // Parse name for suggestion
+      const parts = member.name.split(/\s+/);
       const first = parts[0];
       const last = parts.slice(1).join(" ") || first;
 
       suggested.push({
-        fullName,
-        suggestedDisplay: displayName,
+        groupme_user_id: member.user_id,
+        groupme_name: member.name,
         suggestedFirst: first,
         suggestedLast: last,
       });
