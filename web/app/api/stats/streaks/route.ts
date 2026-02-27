@@ -42,10 +42,15 @@ export async function GET() {
   }
 
   // Compute running streak across ALL games, but only keep last 10 data points
+  // Also track all-time max win/loss streaks
   const last10Ids = allGameIds.slice(-10);
+  let allTimeMaxWin = { value: 0, player: "" };
+  let allTimeMaxLoss = { value: 0, player: "" };
 
   const players = Array.from(playerMap.entries()).map(([id, { name, results }]) => {
     let streak = 0;
+    let maxWin = 0;
+    let maxLoss = 0;
     const data: (number | null)[] = [];
 
     for (const gId of allGameIds) {
@@ -54,14 +59,23 @@ export async function GET() {
         // Didn't play this game — skip (don't reset streak)
       } else if (r === "W") {
         streak = streak > 0 ? streak + 1 : 1;
+        if (streak > maxWin) maxWin = streak;
       } else {
         streak = streak < 0 ? streak - 1 : -1;
+        if (streak < maxLoss) maxLoss = streak;
       }
 
       // Only record data points for the last 10 games
       if (last10Ids.includes(gId)) {
         data.push(r ? streak : null);
       }
+    }
+
+    if (maxWin > allTimeMaxWin.value) {
+      allTimeMaxWin = { value: maxWin, player: name };
+    }
+    if (maxLoss < allTimeMaxLoss.value) {
+      allTimeMaxLoss = { value: maxLoss, player: name };
     }
 
     return { id, name, data };
@@ -80,5 +94,5 @@ export async function GET() {
     return `#${gameNum} (${date})`;
   });
 
-  return NextResponse.json({ gameLabels, players });
+  return NextResponse.json({ gameLabels, players, allTimeMaxWin, allTimeMaxLoss });
 }

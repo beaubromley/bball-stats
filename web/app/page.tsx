@@ -51,6 +51,8 @@ interface TodayData {
 interface StreakData {
   gameLabels: string[];
   players: { id: string; name: string; data: (number | null)[] }[];
+  allTimeMaxWin: { value: number; player: string };
+  allTimeMaxLoss: { value: number; player: string };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -652,6 +654,22 @@ export default function Home() {
                   <XAxis dataKey="game" tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} allowDecimals={false} />
                   <ReferenceLine y={0} stroke="#4B5563" strokeDasharray="3 3" />
+                  {streakData.allTimeMaxWin.value > 0 && (
+                    <ReferenceLine
+                      y={streakData.allTimeMaxWin.value}
+                      stroke="#10B981"
+                      strokeDasharray="6 3"
+                      label={{ value: `Best: ${streakData.allTimeMaxWin.player} (W${streakData.allTimeMaxWin.value})`, position: "insideTopRight", fill: "#10B981", fontSize: 11 }}
+                    />
+                  )}
+                  {streakData.allTimeMaxLoss.value < 0 && (
+                    <ReferenceLine
+                      y={streakData.allTimeMaxLoss.value}
+                      stroke="#EF4444"
+                      strokeDasharray="6 3"
+                      label={{ value: `Worst: ${streakData.allTimeMaxLoss.player} (L${Math.abs(streakData.allTimeMaxLoss.value)})`, position: "insideBottomRight", fill: "#EF4444", fontSize: 11 }}
+                    />
+                  )}
                   <Tooltip
                     contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151", borderRadius: "8px", fontSize: "12px" }}
                     labelStyle={{ color: "#9CA3AF", fontWeight: "bold", marginBottom: "4px" }}
