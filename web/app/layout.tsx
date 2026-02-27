@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Bebas_Neue } from "next/font/google";
+import { Analytics } from "@vercel/analytics/react";
 import SpaRedirect from "./spa-redirect";
 import RegisterSW from "./register-sw";
 import { AuthProvider } from "./components/AuthProvider";
@@ -51,6 +52,7 @@ export default function RootLayout({
             <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
           </AuthProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
