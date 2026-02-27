@@ -70,11 +70,14 @@ export async function GET() {
   // Sort by name for consistent legend order
   players.sort((a, b) => a.name.localeCompare(b.name));
 
-  // Label with game numbers
+  // Label with game number + date
   const totalGames = allGames.length;
-  const gameLabels = last10Ids.map((_, i) => {
-    const gameNum = totalGames - last10Ids.length + i + 1;
-    return `#${gameNum}`;
+  const last10Games = allGames.slice(-10);
+  const gameLabels = last10Games.map((g, i) => {
+    const gameNum = totalGames - last10Games.length + i + 1;
+    const d = new Date(g.start_time as string);
+    const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" });
+    return `#${gameNum} (${date})`;
   });
 
   return NextResponse.json({ gameLabels, players });
