@@ -49,7 +49,7 @@ interface TodayData {
 }
 
 interface StreakData {
-  gameLabels: string[];
+  gameLabels: { gameNum: number; date: string; label: string }[];
   players: { id: string; name: string; data: (number | null)[] }[];
   allTimeMaxWin: { value: number; player: string };
   allTimeMaxLoss: { value: number; player: string };
@@ -637,11 +637,17 @@ export default function Home() {
         ];
         // Build chart data: one object per game with each player as a key
         const chartData = streakData.gameLabels.map((label, gi) => {
-          const point: Record<string, string | number | null> = { game: label };
+          const point: Record<string, string | number | null> = { game: label.label, gameNum: label.gameNum, date: label.date };
           for (const p of streakData.players) {
             point[p.name] = p.data[gi];
           }
           return point;
+        });
+        // Track which date indices should show the date label (first game of each date)
+        const dateFirstIndex = new Set<number>();
+        let prevDate = "";
+        chartData.forEach((d, i) => {
+          if (d.date !== prevDate) { dateFirstIndex.add(i); prevDate = d.date as string; }
         });
 
         return (
@@ -649,9 +655,25 @@ export default function Home() {
             <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Win Streaks (Last 10 Games)</h3>
             <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
               <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={chartData} margin={{ left: 10, right: 10, top: 10, bottom: 10 }}>
+                <LineChart data={chartData} margin={{ left: 10, right: 10, top: 10, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
-                  <XAxis dataKey="game" tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                  <XAxis
+                    dataKey="gameNum"
+                    axisLine={false}
+                    tickLine={false}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    tick={(props: any) => {
+                      const { x, y, index, payload } = props;
+                      const showDate = dateFirstIndex.has(index);
+                      const date = chartData[index]?.date as string;
+                      return (
+                        <g transform={`translate(${x},${y})`}>
+                          <text x={0} y={0} dy={12} textAnchor="middle" fill="#9CA3AF" fontSize={11}>#{payload.value}</text>
+                          {showDate && <text x={0} y={0} dy={26} textAnchor="middle" fill="#6B7280" fontSize={10}>{date}</text>}
+                        </g>
+                      );
+                    }}
+                  />
                   <YAxis tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} allowDecimals={false} domain={[streakData.allTimeMaxLoss.value - 2, streakData.allTimeMaxWin.value + 2]} />
                   <ReferenceLine y={0} stroke="#4B5563" strokeDasharray="3 3" />
                   {streakData.allTimeMaxWin.value > 0 && (

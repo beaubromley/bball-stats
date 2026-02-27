@@ -91,7 +91,7 @@ export async function GET() {
     const gameNum = totalGames - last10Games.length + i + 1;
     const d = new Date(g.start_time as string);
     const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" });
-    return `#${gameNum} (${date})`;
+    return { gameNum, date, label: `#${gameNum} (${date})` };
   });
 
   return NextResponse.json({ gameLabels, players, allTimeMaxWin, allTimeMaxLoss });
