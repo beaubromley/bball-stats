@@ -652,23 +652,27 @@ export default function Home() {
                 <LineChart data={chartData} margin={{ left: 10, right: 10, top: 10, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
                   <XAxis dataKey="game" tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <YAxis tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} allowDecimals={false} domain={[streakData.allTimeMaxLoss.value - 2, streakData.allTimeMaxWin.value + 2]} />
                   <ReferenceLine y={0} stroke="#4B5563" strokeDasharray="3 3" />
                   {streakData.allTimeMaxWin.value > 0 && (
-                    <ReferenceLine
-                      y={streakData.allTimeMaxWin.value}
-                      stroke="#10B981"
-                      strokeDasharray="6 3"
-                      label={{ value: `Best: ${streakData.allTimeMaxWin.player} (W${streakData.allTimeMaxWin.value})`, position: "insideTopLeft", fill: "#10B981", fontSize: 11 }}
-                    />
+                    <>
+                      <ReferenceLine y={streakData.allTimeMaxWin.value} stroke="#10B981" strokeDasharray="6 3" />
+                      <ReferenceLine
+                        y={streakData.allTimeMaxWin.value + 1}
+                        stroke="transparent"
+                        label={{ value: `Best: ${streakData.allTimeMaxWin.player} (W${streakData.allTimeMaxWin.value})`, position: "insideLeft", fill: "#10B981", fontSize: 11 }}
+                      />
+                    </>
                   )}
                   {streakData.allTimeMaxLoss.value < 0 && (
-                    <ReferenceLine
-                      y={streakData.allTimeMaxLoss.value}
-                      stroke="#EF4444"
-                      strokeDasharray="6 3"
-                      label={{ value: `Worst: ${streakData.allTimeMaxLoss.player} (L${Math.abs(streakData.allTimeMaxLoss.value)})`, position: "insideBottomLeft", fill: "#EF4444", fontSize: 11 }}
-                    />
+                    <>
+                      <ReferenceLine y={streakData.allTimeMaxLoss.value} stroke="#EF4444" strokeDasharray="6 3" />
+                      <ReferenceLine
+                        y={streakData.allTimeMaxLoss.value - 1}
+                        stroke="transparent"
+                        label={{ value: `Worst: ${streakData.allTimeMaxLoss.player} (L${Math.abs(streakData.allTimeMaxLoss.value)})`, position: "insideLeft", fill: "#EF4444", fontSize: 11 }}
+                      />
+                    </>
                   )}
                   <Tooltip
                     contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151", borderRadius: "8px", fontSize: "12px" }}
