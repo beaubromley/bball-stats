@@ -16,6 +16,9 @@ import {
   ScatterChart,
   Scatter,
   Cell,
+  LineChart,
+  Line,
+  ReferenceLine,
 } from "recharts";
 
 const API_BASE = "/api";
@@ -43,6 +46,11 @@ interface PlayerRow {
 interface TodayData {
   games_today: number;
   players: PlayerRow[];
+}
+
+interface StreakData {
+  gameLabels: string[];
+  players: { id: string; name: string; data: (number | null)[] }[];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -121,6 +129,7 @@ export default function Home() {
   const showAdvanced = isAdmin || isViewer;
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [todayStats, setTodayStats] = useState<TodayData | null>(null);
+  const [streakData, setStreakData] = useState<StreakData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -128,10 +137,12 @@ export default function Home() {
     Promise.all([
       fetch(`${API_BASE}/players`).then((r) => r.json()),
       fetch(`${API_BASE}/stats/today?date=${today}`).then((r) => r.json()).catch(() => null),
+      fetch(`${API_BASE}/stats/streaks`).then((r) => r.json()).catch(() => null),
     ])
-      .then(([allPlayers, today]) => {
+      .then(([allPlayers, today, streaks]) => {
         setPlayers(allPlayers);
         setTodayStats(today);
+        setStreakData(streaks);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -324,14 +335,15 @@ export default function Home() {
               <th className="py-3 pr-4">#</th>
               <th className="py-3 pr-4">Player</th>
               <th className="py-3 pr-4 text-right">GP</th>
-              <th className="py-3 pr-4 text-right">W</th>
+              <th className="py-3 pr-4 text-right">W-L</th>
               <th className="py-3 pr-4 text-right">Win%</th>
               <th className="py-3 pr-4 text-right">PTS</th>
               <th className="py-3 pr-4 text-right">PPG</th>
               <th className="py-3 pr-4 text-right">AST</th>
               <th className="py-3 pr-4 text-right">STL</th>
               <th className="py-3 pr-4 text-right">BLK</th>
-              <th className="py-3 text-right">FP</th>
+              <th className="py-3 pr-4 text-right">FP</th>
+              <th className="py-3 text-right">FPG</th>
               {showAdvanced && <th className="py-3 pl-4 text-right">+/-</th>}
               {showAdvanced && <th className="py-3 pl-4 text-right">+/-PG</th>}
               {showAdvanced && <th className="py-3 pl-4 text-right">STK</th>}
@@ -353,14 +365,15 @@ export default function Home() {
                   </Link>
                 </td>
                 <td className="py-3 pr-4 text-right tabular-nums">{player.games_played}</td>
-                <td className="py-3 pr-4 text-right tabular-nums">{player.wins}</td>
+                <td className="py-3 pr-4 text-right tabular-nums">{player.wins}-{player.games_played - player.wins}</td>
                 <td className="py-3 pr-4 text-right tabular-nums">{player.win_pct}%</td>
                 <td className="py-3 pr-4 text-right tabular-nums">{player.total_points}</td>
                 <td className="py-3 pr-4 text-right tabular-nums">{player.ppg}</td>
                 <td className="py-3 pr-4 text-right tabular-nums">{player.assists}</td>
                 <td className="py-3 pr-4 text-right tabular-nums">{player.steals}</td>
                 <td className="py-3 pr-4 text-right tabular-nums">{player.blocks}</td>
-                <td className="py-3 text-right tabular-nums font-bold text-blue-400">{player.fantasy_points}</td>
+                <td className="py-3 pr-4 text-right tabular-nums font-bold text-blue-400">{player.fantasy_points}</td>
+                <td className="py-3 text-right tabular-nums font-bold text-blue-400">{player.games_played ? r1(player.fantasy_points / player.games_played) : 0}</td>
                 {showAdvanced && (
                   <td className={`py-3 pl-4 text-right tabular-nums font-bold ${player.plus_minus > 0 ? "text-green-400" : player.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
                     {player.plus_minus > 0 ? "+" : ""}{player.plus_minus}
@@ -610,6 +623,58 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Win Streak Chart (login required) */}
+      {showAdvanced && streakData && streakData.players.length > 0 && (() => {
+        const LINE_COLORS = [
+          "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#A855F7",
+          "#EC4899", "#06B6D4", "#F97316", "#84CC16", "#6366F1",
+          "#14B8A6", "#E11D48", "#8B5CF6", "#D97706", "#059669",
+          "#7C3AED", "#DC2626", "#2563EB", "#CA8A04", "#0891B2",
+          "#DB2777", "#4F46E5",
+        ];
+        // Build chart data: one object per game with each player as a key
+        const chartData = streakData.gameLabels.map((label, gi) => {
+          const point: Record<string, string | number | null> = { game: label };
+          for (const p of streakData.players) {
+            point[p.name] = p.data[gi];
+          }
+          return point;
+        });
+
+        return (
+          <div className="mb-8">
+            <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Win Streaks (Last 10 Games)</h3>
+            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={chartData} margin={{ left: 10, right: 10, top: 10, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
+                  <XAxis dataKey="game" tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <ReferenceLine y={0} stroke="#4B5563" strokeDasharray="3 3" />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151", borderRadius: "8px", fontSize: "12px" }}
+                    labelStyle={{ color: "#9CA3AF", fontWeight: "bold", marginBottom: "4px" }}
+                    itemSorter={(item) => -(item.value as number ?? 0)}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "12px" }} />
+                  {streakData.players.map((p, i) => (
+                    <Line
+                      key={p.id}
+                      type="monotone"
+                      dataKey={p.name}
+                      stroke={LINE_COLORS[i % LINE_COLORS.length]}
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      connectNulls={false}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
