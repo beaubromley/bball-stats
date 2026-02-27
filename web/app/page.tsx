@@ -659,7 +659,7 @@ export default function Home() {
                       y={streakData.allTimeMaxWin.value}
                       stroke="#10B981"
                       strokeDasharray="6 3"
-                      label={{ value: `Best: ${streakData.allTimeMaxWin.player} (W${streakData.allTimeMaxWin.value})`, position: "insideTopRight", fill: "#10B981", fontSize: 11 }}
+                      label={{ value: `Best: ${streakData.allTimeMaxWin.player} (W${streakData.allTimeMaxWin.value})`, position: "insideTopLeft", fill: "#10B981", fontSize: 11 }}
                     />
                   )}
                   {streakData.allTimeMaxLoss.value < 0 && (
@@ -667,7 +667,7 @@ export default function Home() {
                       y={streakData.allTimeMaxLoss.value}
                       stroke="#EF4444"
                       strokeDasharray="6 3"
-                      label={{ value: `Worst: ${streakData.allTimeMaxLoss.player} (L${Math.abs(streakData.allTimeMaxLoss.value)})`, position: "insideBottomRight", fill: "#EF4444", fontSize: 11 }}
+                      label={{ value: `Worst: ${streakData.allTimeMaxLoss.player} (L${Math.abs(streakData.allTimeMaxLoss.value)})`, position: "insideBottomLeft", fill: "#EF4444", fontSize: 11 }}
                     />
                   )}
                   <Tooltip
