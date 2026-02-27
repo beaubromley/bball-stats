@@ -144,6 +144,7 @@ function transformPlayer(row: any) {
     status: row.status || "active",
     last_played_date: row.last_played_date,
     groupme_user_id: row.groupme_user_id || null,
+    groupme_name: row.groupme_name || null,
     notes: row.notes,
     created_at: row.created_at,
   };

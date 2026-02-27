@@ -13,6 +13,7 @@ interface Player {
   last_name: string | null;
   full_name: string | null;
   groupme_user_id: string | null;
+  groupme_name: string | null;
   status: string;
   notes: string | null;
   created_at: string;
@@ -28,7 +29,6 @@ export default function PlayersPage() {
   const [addForm, setAddForm] = useState({ first_name: "", last_name: "", full_name: "", groupme_user_id: "" });
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [groupMeNames, setGroupMeNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -39,21 +39,8 @@ export default function PlayersPage() {
   useEffect(() => {
     if (isAdmin) {
       fetchPlayers();
-      fetchGroupMeMembers();
     }
   }, [isAdmin]);
-
-  async function fetchGroupMeMembers() {
-    try {
-      const res = await fetch(`${API_BASE}/groupme/members`);
-      if (res.ok) {
-        const members: { user_id: string; name: string }[] = await res.json();
-        const map: Record<string, string> = {};
-        for (const m of members) map[m.user_id] = m.name;
-        setGroupMeNames(map);
-      }
-    } catch { /* ignore */ }
-  }
 
   async function fetchPlayers() {
     try {
@@ -321,8 +308,7 @@ export default function PlayersPage() {
                       <td className="py-2 pr-3 text-xs">
                         {player.groupme_user_id ? (
                           <>
-                            <span className="text-gray-400">{groupMeNames[player.groupme_user_id] || ""}</span>
-                            {groupMeNames[player.groupme_user_id] && <br />}
+                            {player.groupme_name && <><span className="text-gray-400">{player.groupme_name}</span><br /></>}
                             <span className="text-gray-600 font-mono">{player.groupme_user_id}</span>
                           </>
                         ) : "—"}
