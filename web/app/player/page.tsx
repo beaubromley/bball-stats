@@ -29,6 +29,8 @@ interface PlayerStats {
 interface LeaderboardPlayer {
   id: string;
   ppg: number;
+  ones_made: number;
+  twos_made: number;
   assists: number;
   steals: number;
   blocks: number;
@@ -127,13 +129,22 @@ function PlayerDetailInner() {
   const gp = stats.games_played || 1;
   const playerPerGame = {
     ppg: stats.ppg,
+    tpg: Math.round((stats.twos_made / gp) * 10) / 10,
     apg: Math.round((stats.assists / gp) * 10) / 10,
     spg: Math.round((stats.steals / gp) * 10) / 10,
     bpg: Math.round((stats.blocks / gp) * 10) / 10,
   };
+  const fgpg = Math.round((stats.ones_made / gp) * 10) / 10;
 
   const leagueAvg = computeLeagueAvg(leaderboard);
   const { comp, scaledStats } = computeNBAComp(playerPerGame, leagueAvg);
+
+  // Scale FG (ones_made) separately for display only
+  const qualified = leaderboard.filter((p) => p.games_played >= 2);
+  const leagueAvgFg = qualified.length > 0
+    ? qualified.reduce((s, p) => s + (p.ones_made || 0) / (p.games_played || 1), 0) / qualified.length
+    : 1;
+  const scaledFgpg = Math.round((leagueAvgFg > 0 ? fgpg * (5.0 / leagueAvgFg) : 0) * 10) / 10;
 
   return (
     <div>
@@ -143,9 +154,11 @@ function PlayerDetailInner() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4">
           <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Per-Game Averages</h2>
-          <div className="grid grid-cols-4 gap-2 text-center">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
             {[
               { label: "PPG", value: playerPerGame.ppg },
+              { label: "FG", value: fgpg },
+              { label: "3PT", value: playerPerGame.tpg },
               { label: "APG", value: playerPerGame.apg },
               { label: "SPG", value: playerPerGame.spg },
               { label: "BPG", value: playerPerGame.bpg },
@@ -159,9 +172,11 @@ function PlayerDetailInner() {
         </div>
         <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4">
           <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">NBA Scaled Stats</h2>
-          <div className="grid grid-cols-4 gap-2 text-center">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
             {[
               { label: "PPG", value: scaledStats.ppg },
+              { label: "FG", value: scaledFgpg },
+              { label: "3PT", value: scaledStats.tpg },
               { label: "APG", value: scaledStats.apg },
               { label: "SPG", value: scaledStats.spg },
               { label: "BPG", value: scaledStats.bpg },
@@ -181,8 +196,9 @@ function PlayerDetailInner() {
         <div className="mb-3">
           <span className="text-2xl font-bold font-display">{comp.name}</span>
         </div>
-        <div className="flex gap-6 text-sm">
+        <div className="flex gap-6 text-sm flex-wrap">
           <div><span className="font-bold tabular-nums">{comp.ppg}</span> <span className="text-gray-500">PPG</span></div>
+          <div><span className="font-bold tabular-nums">{comp.tpg}</span> <span className="text-gray-500">3PT</span></div>
           <div><span className="font-bold tabular-nums">{comp.apg}</span> <span className="text-gray-500">APG</span></div>
           <div><span className="font-bold tabular-nums">{comp.spg}</span> <span className="text-gray-500">SPG</span></div>
           <div><span className="font-bold tabular-nums">{comp.bpg}</span> <span className="text-gray-500">BPG</span></div>
