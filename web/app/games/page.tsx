@@ -69,13 +69,13 @@ export default function GamesPage() {
         </div>
       ) : (
         <div className="space-y-8">
-          {groupBySeason(games).map(({ season, games: seasonGames }) => (
-            <div key={season.key}>
+          {groupBySeason([...games].reverse()).reverse().map(({ season, games: seasonGames }) => (
+            <div key={season.number}>
               <h2 className="text-lg font-bold text-gray-700 dark:text-gray-300 mb-3 border-b border-gray-200 dark:border-gray-800 pb-2">
                 {season.label}
               </h2>
               <div className="space-y-4">
-                {seasonGames.map((game) => (
+                {[...seasonGames].reverse().map((game) => (
                   <div
                     key={game.id}
                     className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 hover:border-gray-400 dark:hover:border-gray-600 transition-colors"

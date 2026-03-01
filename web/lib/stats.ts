@@ -1,5 +1,6 @@
 import { getDb } from "./turso";
 import { calculateFantasyPoints } from "./fantasy";
+import { getGameRangeForSeason, getSeasonInfo } from "./seasons";
 
 export interface PlayerStats {
   id: string;
@@ -22,91 +23,140 @@ export interface PlayerStats {
   mvp_count: number;
 }
 
-export async function getLeaderboard(): Promise<PlayerStats[]> {
+export interface SeasonMeta {
+  totalGames: number;
+  totalSeasons: number;
+  currentSeason: number;
+  gamesInSeason: number;
+}
+
+export async function getSeasonGameIds(season: number): Promise<{ gameIds: string[]; meta: SeasonMeta }> {
+  const db = getDb();
+  const result = await db.execute(
+    "SELECT id FROM games WHERE status = 'finished' ORDER BY start_time ASC"
+  );
+  const allIds = result.rows.map((r) => r.id as string);
+  const totalGames = allIds.length;
+  const { currentSeason, totalSeasons } = getSeasonInfo(totalGames);
+  const { startGame, endGame } = getGameRangeForSeason(season);
+  const seasonIds = allIds.slice(startGame - 1, Math.min(endGame, totalGames));
+
+  return {
+    gameIds: seasonIds,
+    meta: { totalGames, totalSeasons, currentSeason, gamesInSeason: seasonIds.length },
+  };
+}
+
+export async function getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]> {
   const db = getDb();
 
-  const result = await db.execute(`
-    SELECT
-      p.id,
-      p.name,
-      COUNT(DISTINCT r.game_id) as games_played,
-      COALESCE(SUM(CASE
-        WHEN g.status = 'finished' AND g.winning_team = r.team THEN 1
-        ELSE 0
-      END), 0) as wins,
-      COALESCE(SUM(CASE
-        WHEN g.status = 'finished' AND g.winning_team IS NOT NULL AND g.winning_team != r.team THEN 1
-        ELSE 0
-      END), 0) as losses,
-      COALESCE(scoring.total_points, 0) as total_points,
-      COALESCE(scoring.ones_made, 0) as ones_made,
-      COALESCE(scoring.twos_made, 0) as twos_made,
-      COALESCE(scoring.assists, 0) as assists,
-      COALESCE(scoring.steals, 0) as steals,
-      COALESCE(scoring.blocks, 0) as blocks
-    FROM players p
-    JOIN rosters r ON p.id = r.player_id
-    JOIN games g ON r.game_id = g.id
-    LEFT JOIN (
-      SELECT
-        player_id,
-        SUM(point_value) as total_points,
-        SUM(CASE WHEN event_type = 'score' AND point_value = 1
-          AND id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL)
-          THEN 1 ELSE 0 END) as ones_made,
-        SUM(CASE WHEN event_type = 'score' AND point_value = 2
-          AND id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL)
-          THEN 1 ELSE 0 END) as twos_made,
-        SUM(CASE WHEN event_type = 'assist' THEN 1 ELSE 0 END) as assists,
-        SUM(CASE WHEN event_type = 'steal' THEN 1 ELSE 0 END) as steals,
-        SUM(CASE WHEN event_type = 'block' THEN 1 ELSE 0 END) as blocks
-      FROM game_events
-      GROUP BY player_id
-    ) scoring ON p.id = scoring.player_id
-    GROUP BY p.id
-    ORDER BY wins DESC, total_points DESC
-  `);
+  // If filtering to an empty set of games, return empty
+  if (gameIds && gameIds.length === 0) return [];
 
-  // Compute +/- per player: for each finished game, team score minus opponent score
-  const pmResult = await db.execute(`
-    SELECT
-      r.player_id,
-      SUM(
-        CASE WHEN r.team = 'A' THEN COALESCE(sa.score, 0) - COALESCE(sb.score, 0)
-             ELSE COALESCE(sb.score, 0) - COALESCE(sa.score, 0)
-        END
-      ) as plus_minus
-    FROM rosters r
-    JOIN games g ON r.game_id = g.id AND g.status = 'finished'
-    LEFT JOIN (
-      SELECT ge.game_id, SUM(ge.point_value) as score
-      FROM game_events ge
-      JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id AND r2.team = 'A'
-      GROUP BY ge.game_id
-    ) sa ON r.game_id = sa.game_id
-    LEFT JOIN (
-      SELECT ge.game_id, SUM(ge.point_value) as score
-      FROM game_events ge
-      JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id AND r2.team = 'B'
-      GROUP BY ge.game_id
-    ) sb ON r.game_id = sb.game_id
-    GROUP BY r.player_id
-  `);
+  const filtering = gameIds && gameIds.length > 0;
+  const ph = filtering ? gameIds.map(() => "?").join(",") : "";
+  const gameClause = filtering ? `AND g.id IN (${ph})` : "";
+  const eventClause = filtering ? `WHERE ge.game_id IN (${ph})` : "";
+
+  const mainArgs: string[] = [];
+  if (filtering) mainArgs.push(...gameIds); // for gameClause
+  if (filtering) mainArgs.push(...gameIds); // for eventClause
+
+  const result = await db.execute({
+    sql: `
+      SELECT
+        p.id,
+        p.name,
+        COUNT(DISTINCT r.game_id) as games_played,
+        COALESCE(SUM(CASE
+          WHEN g.status = 'finished' AND g.winning_team = r.team THEN 1
+          ELSE 0
+        END), 0) as wins,
+        COALESCE(SUM(CASE
+          WHEN g.status = 'finished' AND g.winning_team IS NOT NULL AND g.winning_team != r.team THEN 1
+          ELSE 0
+        END), 0) as losses,
+        COALESCE(scoring.total_points, 0) as total_points,
+        COALESCE(scoring.ones_made, 0) as ones_made,
+        COALESCE(scoring.twos_made, 0) as twos_made,
+        COALESCE(scoring.assists, 0) as assists,
+        COALESCE(scoring.steals, 0) as steals,
+        COALESCE(scoring.blocks, 0) as blocks
+      FROM players p
+      JOIN rosters r ON p.id = r.player_id
+      JOIN games g ON r.game_id = g.id ${gameClause}
+      LEFT JOIN (
+        SELECT
+          player_id,
+          SUM(point_value) as total_points,
+          SUM(CASE WHEN event_type = 'score' AND point_value = 1
+            AND id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL)
+            THEN 1 ELSE 0 END) as ones_made,
+          SUM(CASE WHEN event_type = 'score' AND point_value = 2
+            AND id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL)
+            THEN 1 ELSE 0 END) as twos_made,
+          SUM(CASE WHEN event_type = 'assist' THEN 1 ELSE 0 END) as assists,
+          SUM(CASE WHEN event_type = 'steal' THEN 1 ELSE 0 END) as steals,
+          SUM(CASE WHEN event_type = 'block' THEN 1 ELSE 0 END) as blocks
+        FROM game_events ge
+        ${eventClause}
+        GROUP BY player_id
+      ) scoring ON p.id = scoring.player_id
+      GROUP BY p.id
+      ORDER BY wins DESC, total_points DESC
+    `,
+    args: mainArgs,
+  });
+
+  // Compute +/- per player
+  const pmArgs: string[] = filtering ? [...gameIds] : [];
+  const pmGameClause = filtering ? `AND g.id IN (${ph})` : "";
+  const pmResult = await db.execute({
+    sql: `
+      SELECT
+        r.player_id,
+        SUM(
+          CASE WHEN r.team = 'A' THEN COALESCE(sa.score, 0) - COALESCE(sb.score, 0)
+               ELSE COALESCE(sb.score, 0) - COALESCE(sa.score, 0)
+          END
+        ) as plus_minus
+      FROM rosters r
+      JOIN games g ON r.game_id = g.id AND g.status = 'finished' ${pmGameClause}
+      LEFT JOIN (
+        SELECT ge.game_id, SUM(ge.point_value) as score
+        FROM game_events ge
+        JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id AND r2.team = 'A'
+        GROUP BY ge.game_id
+      ) sa ON r.game_id = sa.game_id
+      LEFT JOIN (
+        SELECT ge.game_id, SUM(ge.point_value) as score
+        FROM game_events ge
+        JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id AND r2.team = 'B'
+        GROUP BY ge.game_id
+      ) sb ON r.game_id = sb.game_id
+      GROUP BY r.player_id
+    `,
+    args: pmArgs,
+  });
   const pmMap = new Map<string, number>();
   for (const row of pmResult.rows) {
     pmMap.set(row.player_id as string, Number(row.plus_minus));
   }
 
-  // Compute win/loss streaks: for each player, get their recent game results in order
-  const streakResult = await db.execute(`
-    SELECT r.player_id, g.winning_team, r.team, g.start_time
-    FROM rosters r
-    JOIN games g ON r.game_id = g.id
-    WHERE g.status = 'finished' AND g.winning_team IS NOT NULL
-    ORDER BY g.start_time DESC
-  `);
-  // Group by player, compute streak from most recent games
-  const playerGames = new Map<string, boolean[]>(); // true = win
+  // Compute win/loss streaks
+  const streakArgs: string[] = filtering ? [...gameIds] : [];
+  const streakGameClause = filtering ? `AND g.id IN (${ph})` : "";
+  const streakResult = await db.execute({
+    sql: `
+      SELECT r.player_id, g.winning_team, r.team, g.start_time
+      FROM rosters r
+      JOIN games g ON r.game_id = g.id
+      WHERE g.status = 'finished' AND g.winning_team IS NOT NULL ${streakGameClause}
+      ORDER BY g.start_time DESC
+    `,
+    args: streakArgs,
+  });
+  const playerGames = new Map<string, boolean[]>();
   for (const row of streakResult.rows) {
     const pid = row.player_id as string;
     const won = row.winning_team === row.team;
@@ -116,7 +166,7 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
   const streakMap = new Map<string, string>();
   for (const [pid, games] of playerGames) {
     if (games.length === 0) { streakMap.set(pid, "-"); continue; }
-    const first = games[0]; // most recent
+    const first = games[0];
     let count = 1;
     for (let i = 1; i < games.length; i++) {
       if (games[i] === first) count++;
@@ -125,26 +175,30 @@ export async function getLeaderboard(): Promise<PlayerStats[]> {
     streakMap.set(pid, `${first ? "W" : "L"}${count}`);
   }
 
-  // Compute MVP counts: for each finished game, find the player with highest FP on the winning team
-  const mvpResult = await db.execute(`
-    SELECT
-      r.player_id,
-      p.name,
-      r.game_id,
-      r.team,
-      g.winning_team,
-      COALESCE(SUM(CASE WHEN ge.event_type = 'score' THEN ge.point_value ELSE 0 END), 0)
-        + COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0)
-        + COALESCE(SUM(CASE WHEN ge.event_type = 'steal' THEN 1 ELSE 0 END), 0)
-        + COALESCE(SUM(CASE WHEN ge.event_type = 'block' THEN 1 ELSE 0 END), 0) as fp
-    FROM rosters r
-    JOIN players p ON r.player_id = p.id
-    JOIN games g ON r.game_id = g.id
-    LEFT JOIN game_events ge ON ge.game_id = r.game_id AND ge.player_id = r.player_id
-    WHERE g.status = 'finished' AND g.winning_team IS NOT NULL AND r.team = g.winning_team
-    GROUP BY r.player_id, r.game_id
-  `);
-  // Group by game, pick highest FP per game
+  // Compute MVP counts
+  const mvpArgs: string[] = filtering ? [...gameIds] : [];
+  const mvpGameClause = filtering ? `AND g.id IN (${ph})` : "";
+  const mvpResult = await db.execute({
+    sql: `
+      SELECT
+        r.player_id,
+        p.name,
+        r.game_id,
+        r.team,
+        g.winning_team,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'score' THEN ge.point_value ELSE 0 END), 0)
+          + COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0)
+          + COALESCE(SUM(CASE WHEN ge.event_type = 'steal' THEN 1 ELSE 0 END), 0)
+          + COALESCE(SUM(CASE WHEN ge.event_type = 'block' THEN 1 ELSE 0 END), 0) as fp
+      FROM rosters r
+      JOIN players p ON r.player_id = p.id
+      JOIN games g ON r.game_id = g.id
+      LEFT JOIN game_events ge ON ge.game_id = r.game_id AND ge.player_id = r.player_id
+      WHERE g.status = 'finished' AND g.winning_team IS NOT NULL AND r.team = g.winning_team ${mvpGameClause}
+      GROUP BY r.player_id, r.game_id
+    `,
+    args: mvpArgs,
+  });
   const gameMaxFP = new Map<string, { player_id: string; fp: number }>();
   for (const row of mvpResult.rows) {
     const gameId = row.game_id as string;

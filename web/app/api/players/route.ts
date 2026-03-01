@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { initDb, getDb } from "@/lib/turso";
-import { getLeaderboard } from "@/lib/stats";
+import { getLeaderboard, getSeasonGameIds } from "@/lib/stats";
 import { v4 as uuid } from "uuid";
 
 export async function GET(request: Request) {
@@ -13,6 +13,16 @@ export async function GET(request: Request) {
 
   // Legacy leaderboard endpoint
   if (leaderboard || (!searchParams.has("status") && !searchParams.has("expected"))) {
+    const seasonParam = searchParams.get("season");
+    if (seasonParam) {
+      const season = parseInt(seasonParam, 10);
+      if (isNaN(season) || season < 1) {
+        return NextResponse.json({ error: "Invalid season parameter" }, { status: 400 });
+      }
+      const { gameIds, meta } = await getSeasonGameIds(season);
+      const leaderboardData = await getLeaderboard(gameIds);
+      return NextResponse.json({ data: leaderboardData, season: meta });
+    }
     const leaderboardData = await getLeaderboard();
     return NextResponse.json(leaderboardData);
   }

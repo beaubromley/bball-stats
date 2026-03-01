@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { initDb, getDb } from "@/lib/turso";
+import { getSeasonGameIds } from "@/lib/stats";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   await initDb();
   const db = getDb();
 
@@ -16,10 +17,33 @@ export async function GET() {
   const allGames = gamesResult.rows;
   if (allGames.length === 0) return NextResponse.json({ gameLabels: [], players: [] });
 
-  const allGameIds = allGames.map((g) => g.id as string);
+  // Determine which games to include based on season param
+  const seasonParam = req.nextUrl.searchParams.get("season");
+  let targetGameIds: string[];
+  let targetGames: typeof allGames;
 
-  // Get all roster entries for ALL games with W/L result
-  const placeholders = allGameIds.map(() => "?").join(",");
+  if (seasonParam) {
+    const season = parseInt(seasonParam, 10);
+    if (!isNaN(season) && season >= 1) {
+      const { gameIds } = await getSeasonGameIds(season);
+      const idSet = new Set(gameIds);
+      targetGameIds = gameIds;
+      targetGames = allGames.filter((g) => idSet.has(g.id as string));
+    } else {
+      targetGameIds = allGames.map((g) => g.id as string);
+      targetGames = allGames;
+    }
+  } else {
+    targetGameIds = allGames.map((g) => g.id as string);
+    targetGames = allGames;
+  }
+
+  if (targetGameIds.length === 0) {
+    return NextResponse.json({ gameLabels: [], players: [], allTimeMaxWin: { value: 0, player: "" }, allTimeMaxLoss: { value: 0, player: "" } });
+  }
+
+  // Get all roster entries for target games with W/L result
+  const placeholders = targetGameIds.map(() => "?").join(",");
   const result = await db.execute({
     sql: `SELECT r.player_id, p.name, r.game_id,
                  CASE WHEN g.winning_team = r.team THEN 'W' ELSE 'L' END as result
@@ -28,10 +52,10 @@ export async function GET() {
           JOIN players p ON r.player_id = p.id
           WHERE g.id IN (${placeholders}) AND p.status = 'active'
           ORDER BY p.name, g.start_time ASC`,
-    args: allGameIds,
+    args: targetGameIds,
   });
 
-  // Build per-player results across ALL games
+  // Build per-player results across target games
   const playerMap = new Map<string, { name: string; results: Map<string, string> }>();
   for (const row of result.rows) {
     const pid = row.player_id as string;
@@ -41,9 +65,8 @@ export async function GET() {
     playerMap.get(pid)!.results.set(row.game_id as string, row.result as string);
   }
 
-  // Compute running streak across ALL games, but only keep last 10 data points
-  // Also track all-time max win/loss streaks
-  const last10Ids = allGameIds.slice(-10);
+  // Compute running streak across target games, keep last 10 data points
+  const last10Ids = targetGameIds.slice(-10);
   let allTimeMaxWin = { value: 0, player: "" };
   let allTimeMaxLoss = { value: 0, player: "" };
 
@@ -53,7 +76,7 @@ export async function GET() {
     let maxLoss = 0;
     const data: (number | null)[] = [];
 
-    for (const gId of allGameIds) {
+    for (const gId of targetGameIds) {
       const r = results.get(gId);
       if (!r) {
         // Didn't play this game — skip (don't reset streak)
@@ -85,8 +108,8 @@ export async function GET() {
   players.sort((a, b) => a.name.localeCompare(b.name));
 
   // Label with game number + date
-  const totalGames = allGames.length;
-  const last10Games = allGames.slice(-10);
+  const totalGames = targetGames.length;
+  const last10Games = targetGames.slice(-10);
   const gameLabels = last10Games.map((g, i) => {
     const gameNum = totalGames - last10Games.length + i + 1;
     const d = new Date(g.start_time as string);

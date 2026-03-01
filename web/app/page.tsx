@@ -133,17 +133,51 @@ export default function Home() {
   const [todayStats, setTodayStats] = useState<TodayData | null>(null);
   const [streakData, setStreakData] = useState<StreakData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<"season" | "all-time">("season");
+  const [currentSeason, setCurrentSeason] = useState(1);
+  const [totalSeasons, setTotalSeasons] = useState(1);
+  const [gamesInSeason, setGamesInSeason] = useState(0);
+  const [switching, setSwitching] = useState(false);
+
+  function fetchLeaderboard(mode: "season" | "all-time", season?: number) {
+    setSwitching(true);
+    const seasonParam = mode === "season" && season ? `?season=${season}` : "";
+    const streakParam = mode === "season" && season ? `?season=${season}` : "";
+    Promise.all([
+      fetch(`${API_BASE}/players${seasonParam}`).then((r) => r.json()),
+      fetch(`${API_BASE}/stats/streaks${streakParam}`).then((r) => r.json()).catch(() => null),
+    ])
+      .then(([leaderboardRes, streaks]) => {
+        if (mode === "season") {
+          setPlayers(leaderboardRes.data);
+          setGamesInSeason(leaderboardRes.season.gamesInSeason);
+        } else {
+          setPlayers(leaderboardRes);
+        }
+        setStreakData(streaks);
+      })
+      .catch(() => {})
+      .finally(() => setSwitching(false));
+  }
 
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
     Promise.all([
-      fetch(`${API_BASE}/players`).then((r) => r.json()),
+      fetch(`${API_BASE}/stats/seasons`).then((r) => r.json()),
       fetch(`${API_BASE}/stats/today?date=${today}`).then((r) => r.json()).catch(() => null),
-      fetch(`${API_BASE}/stats/streaks`).then((r) => r.json()).catch(() => null),
     ])
-      .then(([allPlayers, today, streaks]) => {
-        setPlayers(allPlayers);
-        setTodayStats(today);
+      .then(([seasonInfo, todayData]) => {
+        setCurrentSeason(seasonInfo.currentSeason);
+        setTotalSeasons(seasonInfo.totalSeasons);
+        setTodayStats(todayData);
+        return Promise.all([
+          fetch(`${API_BASE}/players?season=${seasonInfo.currentSeason}`).then((r) => r.json()),
+          fetch(`${API_BASE}/stats/streaks?season=${seasonInfo.currentSeason}`).then((r) => r.json()).catch(() => null),
+        ]);
+      })
+      .then(([leaderboardRes, streaks]) => {
+        setPlayers(leaderboardRes.data);
+        setGamesInSeason(leaderboardRes.season.gamesInSeason);
         setStreakData(streaks);
       })
       .catch(() => {})
@@ -328,8 +362,38 @@ export default function Home() {
         </div>
       )}
 
+      {/* Season Toggle */}
+      <div className="flex items-center gap-2 mb-6">
+        <button
+          onClick={() => { setViewMode("season"); fetchLeaderboard("season", currentSeason); }}
+          className={`px-4 py-1.5 text-sm font-display uppercase tracking-wide rounded-full transition-colors ${
+            viewMode === "season"
+              ? "bg-blue-600 text-white"
+              : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-700"
+          }`}
+        >
+          Season {currentSeason}
+        </button>
+        <button
+          onClick={() => { setViewMode("all-time"); fetchLeaderboard("all-time"); }}
+          className={`px-4 py-1.5 text-sm font-display uppercase tracking-wide rounded-full transition-colors ${
+            viewMode === "all-time"
+              ? "bg-blue-600 text-white"
+              : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-700"
+          }`}
+        >
+          All-Time
+        </button>
+        {viewMode === "season" && (
+          <span className="text-xs text-gray-500 ml-2">{gamesInSeason} / 82 games</span>
+        )}
+        {switching && <span className="text-xs text-gray-500 ml-2">Loading...</span>}
+      </div>
+
       {/* Leaderboard Table */}
-      <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">Leaderboard</h2>
+      <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">
+        {viewMode === "season" ? `Season ${currentSeason} Leaderboard` : "All-Time Leaderboard"}
+      </h2>
       <div className="overflow-x-auto mb-10">
         <table className="w-full text-left">
           <thead>
@@ -397,8 +461,10 @@ export default function Home() {
         </table>
       </div>
 
-      {/* All-Time Charts */}
-      <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">All-Time</h2>
+      {/* Charts */}
+      <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">
+        {viewMode === "season" ? `Season ${currentSeason}` : "All-Time"}
+      </h2>
 
       {/* Fantasy Points */}
       <TabbedChart title="Fantasy Points" tabs={[
