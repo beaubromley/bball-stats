@@ -139,21 +139,6 @@ function PlayerDetailInner() {
     <div>
       <h1 className="text-3xl font-bold font-display tracking-wide mb-6">{stats.name}</h1>
 
-      {/* NBA Player Comp */}
-      <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 mb-6 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900/50 dark:to-transparent">
-        <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">NBA Player Comp</h2>
-        <div className="flex items-baseline justify-between mb-3">
-          <span className="text-2xl font-bold font-display">{comp.name}</span>
-          <span className="text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">{comp.team}</span>
-        </div>
-        <div className="flex gap-6 text-sm">
-          <div><span className="font-bold tabular-nums">{comp.ppg}</span> <span className="text-gray-500">PPG</span></div>
-          <div><span className="font-bold tabular-nums">{comp.apg}</span> <span className="text-gray-500">APG</span></div>
-          <div><span className="font-bold tabular-nums">{comp.spg}</span> <span className="text-gray-500">SPG</span></div>
-          <div><span className="font-bold tabular-nums">{comp.bpg}</span> <span className="text-gray-500">BPG</span></div>
-        </div>
-      </div>
-
       {/* Per-Game Averages & NBA Scaled Stats side by side */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4">
@@ -187,6 +172,20 @@ function PlayerDetailInner() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* NBA Player Comp */}
+      <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 mb-6 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900/50 dark:to-transparent">
+        <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">NBA Player Comp</h2>
+        <div className="mb-3">
+          <span className="text-2xl font-bold font-display">{comp.name}</span>
+        </div>
+        <div className="flex gap-6 text-sm">
+          <div><span className="font-bold tabular-nums">{comp.ppg}</span> <span className="text-gray-500">PPG</span></div>
+          <div><span className="font-bold tabular-nums">{comp.apg}</span> <span className="text-gray-500">APG</span></div>
+          <div><span className="font-bold tabular-nums">{comp.spg}</span> <span className="text-gray-500">SPG</span></div>
+          <div><span className="font-bold tabular-nums">{comp.bpg}</span> <span className="text-gray-500">BPG</span></div>
         </div>
       </div>
 
