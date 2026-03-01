@@ -209,8 +209,10 @@ export default function RecordPage() {
   // Dual display: last accepted command text (green line)
   const [acceptedCmd, setAcceptedCmd] = useState("");
   const acceptedCmdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Green flash on new play
-  const [flashGreen, setFlashGreen] = useState(false);
+  // Color flash on new play (color string or null)
+  const [flashColor, setFlashColor] = useState<string | null>(null);
+  // Last accepted play for fullscreen scoreboard
+  const [lastPlay, setLastPlay] = useState<{ text: string; color: string } | null>(null);
   // Fullscreen scoreboard modal
   const [showScoreboard, setShowScoreboard] = useState(false);
   const [debugLog, setDebugLog] = useState<string[]>([]);
@@ -219,13 +221,13 @@ export default function RecordPage() {
     const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     setDebugLog((prev) => [`[${ts}] ${msg}`, ...prev].slice(0, 50));
   }, []);
-  const showAcceptedCmd = useCallback((msg: string) => {
+  const showAcceptedCmd = useCallback((msg: string, color: string) => {
     if (acceptedCmdTimerRef.current) clearTimeout(acceptedCmdTimerRef.current);
     setAcceptedCmd(msg);
     acceptedCmdTimerRef.current = setTimeout(() => setAcceptedCmd(""), 3000);
-    // Single green flash
-    setFlashGreen(true);
-    setTimeout(() => setFlashGreen(false), 1000);
+    setFlashColor(color);
+    setTimeout(() => setFlashColor(null), 1000);
+    setLastPlay({ text: msg, color });
   }, []);
   const nextId = useRef(1);
   const watchUndoCountRef = useRef(0);
@@ -1086,7 +1088,7 @@ export default function RecordPage() {
           );
           return { ...prev, events };
         });
-        showAcceptedCmd(`${cmd.playerName} AST → ${target.playerName}`);
+        showAcceptedCmd(`${cmd.playerName} AST → ${target.playerName}`, "rgba(59,130,246,1)");
       } else {
         showRetryAlert("No unassisted score to attach assist to");
       }
@@ -1101,17 +1103,17 @@ export default function RecordPage() {
         postFailedTranscript(currentGame.gameId, null);
         actedOn = `${cmd.playerName} +${cmd.points}`;
         if (cmd.assistBy) actedOn += ` (${cmd.assistBy} AST)`;
-        showAcceptedCmd(actedOn);
+        showAcceptedCmd(actedOn, cmd.assistBy ? "rgba(59,130,246,1)" : "rgba(34,197,94,1)");
       } else if (cmd.type === "steal" && cmd.playerName) {
         postStealToApi(currentGame.gameId, cmd.playerName, text);
         postFailedTranscript(currentGame.gameId, null);
         actedOn = `${cmd.playerName} STL`;
-        showAcceptedCmd(actedOn);
+        showAcceptedCmd(actedOn, "rgba(234,179,8,1)");
       } else if (cmd.type === "block" && cmd.playerName) {
         postBlockToApi(currentGame.gameId, cmd.playerName, text);
         postFailedTranscript(currentGame.gameId, null);
         actedOn = `${cmd.playerName} BLK`;
-        showAcceptedCmd(actedOn);
+        showAcceptedCmd(actedOn, "rgba(168,85,247,1)");
       } else if (cmd.type === "correction") {
         const lastScore = [...currentGame.events].reverse().find((e) => e.type === "score" && !e.undone);
         if (lastScore) {
@@ -1129,7 +1131,7 @@ export default function RecordPage() {
           }).catch(() => {});
         }
         actedOn = "UNDO";
-        showAcceptedCmd(actedOn);
+        showAcceptedCmd(actedOn, "rgba(239,68,68,1)");
       } else if (cmd.type === "unknown") {
         postFailedTranscript(currentGame.gameId, text);
       }
@@ -1437,12 +1439,12 @@ export default function RecordPage() {
 
   return (
     <div className="max-w-lg mx-auto relative">
-      {/* Green flash overlay */}
-      {flashGreen && (
+      {/* Play-type color flash overlay */}
+      {flashColor && (
         <div
           className="fixed inset-0 pointer-events-none z-50"
           style={{
-            background: "rgba(34, 197, 94, 1)",
+            background: flashColor,
             animation: "flashFade 1000ms ease-out forwards",
           }}
         />
@@ -1469,8 +1471,15 @@ export default function RecordPage() {
               <div className="text-sm text-gray-500 mt-3">{game.teamB.join(", ")}</div>
             </div>
           </div>
+          {lastPlay && (
+            <div className="mt-8 text-center">
+              <div className="text-2xl font-display tracking-wider" style={{ color: lastPlay.color }}>
+                {lastPlay.text}
+              </div>
+            </div>
+          )}
           {game.status === "active" && (
-            <div className="text-red-400 text-lg font-display tracking-widest mt-8 animate-pulse">LIVE</div>
+            <div className="text-red-400 text-lg font-display tracking-widest mt-4 animate-pulse">LIVE</div>
           )}
         </div>
       )}
