@@ -20,14 +20,14 @@ const bebasNeue = Bebas_Neue({
 });
 
 export const metadata: Metadata = {
-  title: "Bball Stats",
+  title: "YBA Stats",
   description: "Pickup basketball stats tracker",
   manifest: "/manifest.json",
   themeColor: "#030712",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Bball Stats",
+    title: "YBA Stats",
   },
 };
 

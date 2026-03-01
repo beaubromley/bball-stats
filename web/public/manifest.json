@@ -1,6 +1,6 @@
 {
-  "name": "Bball Stats",
-  "short_name": "Bball",
+  "name": "YBA Stats",
+  "short_name": "YBA",
   "description": "Pickup basketball stats tracker",
   "start_url": "/record",
   "display": "standalone",

@@ -64,7 +64,7 @@ export default function Nav() {
       <div className="max-w-5xl mx-auto flex items-center justify-between">
         {/* Logo — always visible */}
         <Link href="/" onClick={() => setMenuOpen(false)}>
-          <img src="/logo.png" alt="Rankin YMCA Stats" width={120} height={40} />
+          <img src="/logo.png" alt="YBA Stats" width={120} height={40} />
         </Link>
 
         {/* Desktop nav */}
