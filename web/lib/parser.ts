@@ -57,6 +57,7 @@ const ALIASES: Record<string, string> = {
   thai: "ty",
   jesse: "jc",
   jaycee: "jc",
+  "j c": "jc",
   don: "jon",
   bison: "bryson",
   brian: "ryan",
@@ -140,17 +141,18 @@ function detectPoints(text: string, scoringMode: ScoringMode = "1s2s"): number {
   return TWO_RE.test(text) ? 2 : 1;
 }
 
-/** Resolve a captured word against the known players list */
-function resolvePlayer(word: string, knownPlayers: string[]): string {
+/** Resolve a captured word against the known players list.
+ *  Returns undefined if not a known player. */
+function resolvePlayer(word: string, knownPlayers: string[]): string | undefined {
   const lower = word.toLowerCase();
   for (const player of knownPlayers) {
     if (player.toLowerCase() === lower) return player;
   }
-  // Capitalize first letter for unknown names
-  return word.charAt(0).toUpperCase() + word.slice(1);
+  return undefined;
 }
 
-/** Find any known player name mentioned in the text */
+/** Find any known player name mentioned in the text.
+ *  Only returns names that match a known player — never creates ghost players. */
 function findPlayerName(
   text: string,
   knownPlayers: string[],
@@ -165,13 +167,6 @@ function findPlayerName(
     if (lower.includes(pLower)) return player;
   }
 
-  // Fallback: first non-scoring word that looks like a name
-  const words = text.split(/\s+/);
-  for (const word of words) {
-    if (word.length > 1 && !SCORING_WORDS.has(word) && !excluded.has(word)) {
-      return word.charAt(0).toUpperCase() + word.slice(1);
-    }
-  }
   return undefined;
 }
 
@@ -251,15 +246,17 @@ export function parseTranscript(
   if (stealAssistMatch) {
     const stealer = resolvePlayer(stealAssistMatch[1], knownPlayers);
     const scorer = resolvePlayer(stealAssistMatch[2], knownPlayers);
-    return {
-      ...result,
-      type: "score",
-      stealBy: stealer,
-      assistBy: stealer,
-      playerName: scorer,
-      points: detectPoints(text, scoringMode),
-      confidence: 0.85,
-    };
+    if (stealer && scorer) {
+      return {
+        ...result,
+        type: "score",
+        stealBy: stealer,
+        assistBy: stealer,
+        playerName: scorer,
+        points: detectPoints(text, scoringMode),
+        confidence: 0.85,
+      };
+    }
   }
 
   // --- Compound: [name] assist [name] [shot] (with optional "to") ---
@@ -267,28 +264,32 @@ export function parseTranscript(
   if (assistMatch && !SCORING_WORDS.has(assistMatch[1]) && !SCORING_WORDS.has(assistMatch[2])) {
     const assister = resolvePlayer(assistMatch[1], knownPlayers);
     const scorer = resolvePlayer(assistMatch[2], knownPlayers);
-    return {
-      ...result,
-      type: "score",
-      assistBy: assister,
-      playerName: scorer,
-      points: detectPoints(text, scoringMode),
-      confidence: 0.85,
-    };
+    if (assister && scorer) {
+      return {
+        ...result,
+        type: "score",
+        assistBy: assister,
+        playerName: scorer,
+        points: detectPoints(text, scoringMode),
+        confidence: 0.85,
+      };
+    }
   }
 
   // --- Compound: [name] steal and [shot] ---
   const stealScoreMatch = text.match(/(\w+)\s+steals?\s+and\s+/);
   if (stealScoreMatch && (TWO_RE.test(text) || ONE_RE.test(text))) {
     const player = resolvePlayer(stealScoreMatch[1], knownPlayers);
-    return {
-      ...result,
-      type: "score",
-      stealBy: player,
-      playerName: player,
-      points: detectPoints(text, scoringMode),
-      confidence: 0.85,
-    };
+    if (player) {
+      return {
+        ...result,
+        type: "score",
+        stealBy: player,
+        playerName: player,
+        points: detectPoints(text, scoringMode),
+        confidence: 0.85,
+      };
+    }
   }
 
   // "steal and [shot]" without naming stealer — require a name
@@ -297,23 +298,29 @@ export function parseTranscript(
   // --- Standalone steal ---
   const stealMatch = text.match(/(\w+)\s+steals?(?:\s|$)/);
   if (stealMatch && !SCORING_WORDS.has(stealMatch[1])) {
-    return {
-      ...result,
-      type: "steal",
-      playerName: resolvePlayer(stealMatch[1], knownPlayers),
-      confidence: 0.8,
-    };
+    const stealPlayer = resolvePlayer(stealMatch[1], knownPlayers);
+    if (stealPlayer) {
+      return {
+        ...result,
+        type: "steal",
+        playerName: stealPlayer,
+        confidence: 0.8,
+      };
+    }
   }
 
   // --- Standalone block ---
   const blockMatch = text.match(/(\w+)\s+blocks?(?:\s|$)/);
   if (blockMatch && !SCORING_WORDS.has(blockMatch[1])) {
-    return {
-      ...result,
-      type: "block",
-      playerName: resolvePlayer(blockMatch[1], knownPlayers),
-      confidence: 0.8,
-    };
+    const blockPlayer = resolvePlayer(blockMatch[1], knownPlayers);
+    if (blockPlayer) {
+      return {
+        ...result,
+        type: "block",
+        playerName: blockPlayer,
+        confidence: 0.8,
+      };
+    }
   }
 
   // --- Assist-only (no scoring word) ---
@@ -357,10 +364,10 @@ export function parseTranscript(
 
     if (assistAfter && !SCORING_WORDS.has(assistAfter[1])) {
       assistBy = resolvePlayer(assistAfter[1], knownPlayers);
-      playerName = findPlayerName(text, knownPlayers, [assistBy]);
+      playerName = findPlayerName(text, knownPlayers, assistBy ? [assistBy] : []);
     } else if (assistBefore && !SCORING_WORDS.has(assistBefore[1])) {
       assistBy = resolvePlayer(assistBefore[1], knownPlayers);
-      playerName = findPlayerName(text, knownPlayers, [assistBy]);
+      playerName = findPlayerName(text, knownPlayers, assistBy ? [assistBy] : []);
     } else {
       playerName = findPlayerName(text, knownPlayers);
     }

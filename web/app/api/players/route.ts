@@ -31,17 +31,17 @@ export async function GET(request: Request) {
 
   if (expected) {
     // Get "expected to play" list
-    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+    const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
 
-    // Get players who played today
-    const playedToday = await db.execute({
+    // Get players who played in the last 14 days
+    const playedRecently = await db.execute({
       sql: `SELECT * FROM players
             WHERE status = 'active'
-            AND last_played_date = ?`,
-      args: [today],
+            AND last_played_date >= ?`,
+      args: [cutoff],
     });
 
-    // Get GroupMe active members (last 2 days)
+    // Get GroupMe active members (last 14 days)
     let groupMeUserIds = new Set<string>();
     try {
       const baseUrl = request.url.split("/api/")[0];
@@ -66,7 +66,7 @@ export async function GET(request: Request) {
 
     // Combine and deduplicate
     const playerMap = new Map();
-    for (const player of [...playedToday.rows, ...groupMePlayers.rows]) {
+    for (const player of [...playedRecently.rows, ...groupMePlayers.rows]) {
       playerMap.set(player.id, player);
     }
 

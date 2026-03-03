@@ -277,7 +277,8 @@ export default function RecordPage() {
 
   // Search functionality for full player list
   const [searchTerm, setSearchTerm] = useState("");
-  const [showSearchResults, setShowSearchResults] = useState(false);
+  // Mid-game add player search
+  const [midGameSearch, setMidGameSearch] = useState("");
 
   // Manual add player form
   const [newPlayerFirst, setNewPlayerFirst] = useState("");
@@ -348,6 +349,16 @@ export default function RecordPage() {
       p.fullName?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  // Mid-game filtered players (exclude already on a team)
+  const midGameFilteredPlayers = fullPlayerList.filter((p) => {
+    const inGame = game.teamA.some((n) => n.toLowerCase() === p.name.toLowerCase())
+      || game.teamB.some((n) => n.toLowerCase() === p.name.toLowerCase());
+    if (inGame) return false;
+    if (!midGameSearch) return true;
+    const q = midGameSearch.toLowerCase();
+    return p.name.toLowerCase().includes(q) || (p.fullName?.toLowerCase().includes(q) ?? false);
+  });
+
   // Add player from search to expected list (persistent for rest of day)
   const addFromSearch = async (player: KnownPlayer) => {
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
@@ -359,7 +370,6 @@ export default function RecordPage() {
       });
       setExpectedPlayers([...expectedPlayers, player]);
       setSearchTerm("");
-      setShowSearchResults(false);
     } catch (err) {
       console.error("Failed to add player to expected list:", err);
     }
@@ -1796,33 +1806,29 @@ export default function RecordPage() {
           {/* Search from Full List */}
           <div>
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ADD FROM FULL LIST</h3>
-            <div className="relative">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setShowSearchResults(e.target.value.length > 0);
-                }}
-                onFocus={() => setShowSearchResults(searchTerm.length > 0)}
-                placeholder="Search players..."
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-sm placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
-              />
-              {showSearchResults && filteredPlayers.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {filteredPlayers.slice(0, 20).map((player) => (
-                    <button
-                      key={player.id}
-                      onClick={() => addFromSearch(player)}
-                      className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-900 dark:text-white"
-                    >
-                      {player.name}
-                      {player.fullName && (
-                        <span className="text-gray-500 dark:text-gray-400 ml-2">({player.fullName})</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search players..."
+              className="w-full px-3 py-2 mb-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-sm placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
+            />
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-800">
+              {filteredPlayers.length > 0 ? (
+                filteredPlayers.map((player) => (
+                  <button
+                    key={player.id}
+                    onClick={() => addFromSearch(player)}
+                    className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800 last:border-b-0"
+                  >
+                    {player.name}
+                    {player.fullName && (
+                      <span className="text-gray-500 dark:text-gray-400 ml-2">({player.fullName})</span>
+                    )}
+                  </button>
+                ))
+              ) : (
+                <p className="px-3 py-2 text-sm text-gray-500">No players found</p>
               )}
             </div>
           </div>
@@ -2036,27 +2042,58 @@ export default function RecordPage() {
                   ))}
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="mt-1">
+                <div className="text-xs text-gray-500 font-semibold mb-1">Add Player</div>
                 <input
                   type="text"
-                  placeholder="Add player..."
-                  className="flex-1 px-2 py-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const name = (e.target as HTMLInputElement).value.trim();
-                      if (!name) return;
-                      setGame((prev) => ({ ...prev, teamA: [...prev.teamA, name] }));
-                      if (game.gameId) {
-                        fetch(`${API_BASE}/games/${game.gameId}/roster`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ player_name: name, new_team: "A" }),
-                        }).catch(() => {});
-                      }
-                      (e.target as HTMLInputElement).value = "";
-                    }
-                  }}
+                  value={midGameSearch}
+                  onChange={(e) => setMidGameSearch(e.target.value)}
+                  placeholder="Search players..."
+                  className="w-full px-2 py-1 mb-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-500"
                 />
+                {midGameFilteredPlayers.length > 0 && (
+                  <div className="max-h-32 overflow-y-auto rounded border border-gray-200 dark:border-gray-800">
+                    {midGameFilteredPlayers.slice(0, 20).map((player) => (
+                      <div key={player.id} className="flex items-center justify-between px-2 py-1 border-b border-gray-100 dark:border-gray-800 last:border-b-0 text-sm">
+                        <span className="text-gray-900 dark:text-white">{player.name}</span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => {
+                              setGame((prev) => ({ ...prev, teamA: [...prev.teamA, player.name] }));
+                              if (game.gameId) {
+                                fetch(`${API_BASE}/games/${game.gameId}/roster`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ player_name: player.name, new_team: "A" }),
+                                }).catch(() => {});
+                              }
+                              setMidGameSearch("");
+                            }}
+                            className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-600/20 text-blue-400 hover:bg-blue-600/40"
+                          >
+                            + A
+                          </button>
+                          <button
+                            onClick={() => {
+                              setGame((prev) => ({ ...prev, teamB: [...prev.teamB, player.name] }));
+                              if (game.gameId) {
+                                fetch(`${API_BASE}/games/${game.gameId}/roster`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ player_name: player.name, new_team: "B" }),
+                                }).catch(() => {});
+                              }
+                              setMidGameSearch("");
+                            }}
+                            className="px-2 py-0.5 text-xs font-semibold rounded bg-orange-600/20 text-orange-400 hover:bg-orange-600/40"
+                          >
+                            + B
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </details>

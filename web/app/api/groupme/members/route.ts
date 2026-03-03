@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 const GROUP_ID = "95603942";
-const DAYS = 2;
+const DAYS = 14;
 const BASE_URL = "https://api.groupme.com/v3";
 
 interface GroupMeMessage {
