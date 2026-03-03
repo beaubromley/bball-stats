@@ -127,6 +127,14 @@ export async function deleteEvent(gameId: string, eventId: number) {
   });
 }
 
+export async function deleteCorrectionFor(gameId: string, correctedEventId: number) {
+  const db = getDb();
+  await db.execute({
+    sql: "DELETE FROM game_events WHERE game_id = ? AND event_type = 'correction' AND corrected_event_id = ?",
+    args: [gameId, correctedEventId],
+  });
+}
+
 export async function swapEventOrder(gameId: string, eventIdA: number, eventIdB: number) {
   const db = getDb();
   const result = await db.execute({

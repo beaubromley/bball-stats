@@ -1,6 +1,7 @@
 export type CommandType =
   | "score"
   | "correction"
+  | "redo"
   | "new_game"
   | "end_game"
   | "set_teams"
@@ -190,6 +191,11 @@ export function parseTranscript(
     rawTranscript: transcript,
     confidence: 0,
   };
+
+  // --- Redo (undo an undo) ---
+  if (/\b(redo|re ?do|put it back|bring it back)\b/.test(text)) {
+    return { ...result, type: "redo", confidence: 0.9 };
+  }
 
   // --- Corrections ---
   if (

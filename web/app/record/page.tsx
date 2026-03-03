@@ -567,7 +567,7 @@ export default function RecordPage() {
 
       // Add basketball vocabulary as keyterms
       const basketballTerms = [
-        "bucket", "layup", "three", "steal", "block", "assist", "undo", "stat",
+        "bucket", "layup", "three", "steal", "block", "assist", "undo", "redo", "stat",
       ];
       for (const term of basketballTerms) {
         params.append("keyterm", term);
@@ -1132,6 +1132,20 @@ export default function RecordPage() {
         }
         actedOn = "UNDO";
         showAcceptedCmd(actedOn, "rgba(239,68,68,1)");
+      } else if (cmd.type === "redo") {
+        // Find the most recently undone score event and re-apply it
+        const lastUndone = [...currentGame.events].reverse().find((e) => e.type === "score" && e.undone);
+        if (lastUndone) {
+          const scoreApiId = lastUndone.apiId || lastUndone.id;
+          // Delete the correction that references this score
+          fetch(`${API_BASE}/games/${currentGame.gameId}/events/redo`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ corrected_event_id: scoreApiId }),
+          }).catch(() => {});
+        }
+        actedOn = "REDO";
+        showAcceptedCmd(actedOn, "rgba(255,255,255,1)");
       } else if (cmd.type === "unknown") {
         postFailedTranscript(currentGame.gameId, text);
       }
@@ -1155,6 +1169,8 @@ export default function RecordPage() {
           return addBlock(prev, cmd, text);
         case "correction":
           return undoLast(prev, text);
+        case "redo":
+          return redoLast(prev);
         case "end_game":
           if (cmd.winningTeam)
             return { ...prev, status: "finished", winningTeam: cmd.winningTeam };
@@ -1248,6 +1264,28 @@ export default function RecordPage() {
     const allEvents = [...events, correction];
     const newState = { ...state, events: allEvents };
     const scores = calcScores(allEvents, newState);
+    return { ...newState, ...scores };
+  }
+
+  function redoLast(state: GameState): GameState {
+    const lastUndone = [...state.events]
+      .reverse()
+      .find((e) => e.type === "score" && e.undone);
+    if (!lastUndone) return state;
+    // Un-mark the score as undone
+    let events = state.events.map((e) =>
+      e.id === lastUndone.id ? { ...e, undone: false } : e
+    );
+    // Remove the correction event for this score
+    const corrIdx = [...events].reverse().findIndex(
+      (e) => e.type === "correction" && e.playerName === lastUndone.playerName && e.points === -lastUndone.points
+    );
+    if (corrIdx >= 0) {
+      const actualIdx = events.length - 1 - corrIdx;
+      events = events.filter((_, i) => i !== actualIdx);
+    }
+    const newState = { ...state, events };
+    const scores = calcScores(events, newState);
     return { ...newState, ...scores };
   }
 

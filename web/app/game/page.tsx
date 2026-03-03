@@ -130,12 +130,38 @@ function GameDetailInner() {
       </div>
       <p className="text-gray-500 text-sm mb-6">
         {formatFullCT(game.start_time)}
-        {game.status === "finished" && (
-          <span className="ml-2 text-gray-500 dark:text-gray-400">
-            — Team {game.winning_team} wins
-          </span>
-        )}
       </p>
+
+      {/* Big score display */}
+      {(() => {
+        const correctedIds = new Set<number>();
+        for (const event of events) {
+          if (event.event_type === "correction" && event.corrected_event_id != null) {
+            correctedIds.add(event.corrected_event_id);
+          }
+        }
+        const teamASet = new Set(game.team_a.map((n) => n.toLowerCase()));
+        let a = 0, b = 0;
+        for (const event of events) {
+          if (event.event_type === "score" && event.point_value !== 0 && !correctedIds.has(event.id)) {
+            if (teamASet.has(event.player_name.toLowerCase())) a += event.point_value;
+            else b += event.point_value;
+          }
+        }
+        return (
+          <div className="flex items-center justify-center gap-6 mb-8">
+            <div className="text-center">
+              <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Team A</div>
+              <div className={`text-5xl font-bold font-display tabular-nums ${game.winning_team === "A" ? "text-green-400" : ""}`}>{a}</div>
+            </div>
+            <div className="text-2xl text-gray-600 font-bold">—</div>
+            <div className="text-center">
+              <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Team B</div>
+              <div className={`text-5xl font-bold font-display tabular-nums ${game.winning_team === "B" ? "text-green-400" : ""}`}>{b}</div>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-2 gap-4 mb-8">
         <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4">

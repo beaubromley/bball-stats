@@ -423,14 +423,18 @@ export async function getBoxScore(gameId: string): Promise<BoxScoreResult | null
         r.player_id,
         p.name as player_name,
         r.team,
-        COALESCE(SUM(CASE WHEN ge.event_type = 'score' THEN ge.point_value ELSE 0 END), 0) as points,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'score'
+          AND ge.id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL AND game_id = ?)
+          THEN ge.point_value ELSE 0 END), 0) as points,
         COALESCE(SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 1
           AND ge.id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL AND game_id = ?)
           THEN 1 ELSE 0 END), 0) as ones_made,
         COALESCE(SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 2
           AND ge.id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL AND game_id = ?)
           THEN 1 ELSE 0 END), 0) as twos_made,
-        COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0) as assists,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'assist'
+          AND (ge.assisted_event_id IS NULL OR ge.assisted_event_id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL AND game_id = ?))
+          THEN 1 ELSE 0 END), 0) as assists,
         COALESCE(SUM(CASE WHEN ge.event_type = 'steal' THEN 1 ELSE 0 END), 0) as steals,
         COALESCE(SUM(CASE WHEN ge.event_type = 'block' THEN 1 ELSE 0 END), 0) as blocks
       FROM rosters r
@@ -440,7 +444,7 @@ export async function getBoxScore(gameId: string): Promise<BoxScoreResult | null
       GROUP BY r.player_id, p.name, r.team
       ORDER BY r.team, points DESC
     `,
-    args: [gameId, gameId, gameId],
+    args: [gameId, gameId, gameId, gameId, gameId],
   });
 
   const players: BoxScorePlayer[] = result.rows.map((row) => {
