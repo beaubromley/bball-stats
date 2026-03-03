@@ -134,16 +134,10 @@ function GameDetailInner() {
 
       {/* Big score display */}
       {(() => {
-        const correctedIds = new Set<number>();
-        for (const event of events) {
-          if (event.event_type === "correction" && event.corrected_event_id != null) {
-            correctedIds.add(event.corrected_event_id);
-          }
-        }
         const teamASet = new Set(game.team_a.map((n) => n.toLowerCase()));
         let a = 0, b = 0;
         for (const event of events) {
-          if (event.event_type === "score" && event.point_value !== 0 && !correctedIds.has(event.id)) {
+          if ((event.event_type === "score" || event.event_type === "correction") && event.point_value !== 0) {
             if (teamASet.has(event.player_name.toLowerCase())) a += event.point_value;
             else b += event.point_value;
           }
@@ -255,18 +249,6 @@ function GameDetailInner() {
 
       {/* Game Flow Chart */}
       {(() => {
-        // Build set of corrected event IDs to exclude undone plays
-        const correctedIds = new Set<number>();
-        for (const event of events) {
-          if (event.event_type === "correction" && event.corrected_event_id != null) {
-            correctedIds.add(event.corrected_event_id);
-          }
-        }
-        // Filter out corrections and the original events they corrected
-        const cleanEvents = events.filter(
-          (e) => e.event_type !== "correction" && !correctedIds.has(e.id)
-        );
-
         const teamASet = new Set(game.team_a.map((n) => n.toLowerCase()));
         let a = 0;
         let b = 0;
@@ -277,8 +259,8 @@ function GameDetailInner() {
         let leadChanges = 0;
         let prevLeader: "A" | "B" | "tie" = "tie";
 
-        for (const event of cleanEvents) {
-          if (event.event_type === "score" && event.point_value !== 0) {
+        for (const event of events) {
+          if ((event.event_type === "score" || event.event_type === "correction") && event.point_value !== 0) {
             const isTeamA = teamASet.has(event.player_name.toLowerCase());
             if (isTeamA) a += event.point_value;
             else b += event.point_value;

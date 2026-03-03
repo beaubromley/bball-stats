@@ -910,6 +910,17 @@ export default function RecordPage() {
         raw_transcript: raw,
       }),
     }).then((res) => res.json()).then((data) => {
+      if (data.id) {
+        // Store the API-assigned ID back into local state so undo uses the correct ID
+        setGame((prev) => {
+          const events = prev.events.map((e) =>
+            e.type === "score" && e.playerName === cmd.playerName && e.points === cmd.points && !e.apiId
+              ? { ...e, apiId: data.id }
+              : e
+          );
+          return { ...prev, events };
+        });
+      }
       if (cmd.assistBy && data.id) {
         fetch(`${API_BASE}/games/${gameId}/events`, {
           method: "POST",
