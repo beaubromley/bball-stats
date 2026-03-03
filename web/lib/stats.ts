@@ -10,7 +10,7 @@ export interface PlayerStats {
   losses: number;
   win_pct: number;
   total_points: number;
-  ppg: number;
+  ppg: number;  // normalized to game-to-11
   ones_made: number;
   twos_made: number;
   assists: number;
@@ -18,9 +18,16 @@ export interface PlayerStats {
   blocks: number;
   fantasy_points: number;
   plus_minus: number;
-  plus_minus_per_game: number;
+  plus_minus_per_game: number;  // normalized to game-to-11
   streak: string; // e.g. "W3", "L2"
   mvp_count: number;
+  // Normalized per-game fields (game-to-11)
+  apg: number;
+  spg: number;
+  bpg: number;
+  fpg: number;
+  ones_pg: number;
+  twos_pg: number;
 }
 
 export interface SeasonMeta {
@@ -58,9 +65,15 @@ export async function getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]>
   const gameClause = filtering ? `AND g.id IN (${ph})` : "";
   const eventClause = filtering ? `WHERE ge.game_id IN (${ph})` : "";
 
+  // Effective games subquery: game-to-22 counts as 2 effective games, game-to-11 counts as 1
+  const egGameClause = filtering ? `AND g_eg.id IN (${ph})` : "";
+  const egEventClause = filtering ? `WHERE ge2.game_id IN (${ph})` : "";
+
   const mainArgs: string[] = [];
   if (filtering) mainArgs.push(...gameIds); // for gameClause
-  if (filtering) mainArgs.push(...gameIds); // for eventClause
+  if (filtering) mainArgs.push(...gameIds); // for eventClause (scoring)
+  if (filtering) mainArgs.push(...gameIds); // for egGameClause
+  if (filtering) mainArgs.push(...gameIds); // for egEventClause (inside gws)
 
   const result = await db.execute({
     sql: `
@@ -81,32 +94,50 @@ export async function getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]>
         COALESCE(scoring.twos_made, 0) as twos_made,
         COALESCE(scoring.assists, 0) as assists,
         COALESCE(scoring.steals, 0) as steals,
-        COALESCE(scoring.blocks, 0) as blocks
+        COALESCE(scoring.blocks, 0) as blocks,
+        COALESCE(eg.effective_games, 1.0) as effective_games
       FROM players p
       JOIN rosters r ON p.id = r.player_id
       JOIN games g ON r.game_id = g.id ${gameClause}
       LEFT JOIN (
         SELECT
-          player_id,
-          SUM(point_value) as total_points,
-          SUM(CASE WHEN event_type = 'score' AND point_value = 1 THEN 1 ELSE 0 END)
-            - SUM(CASE WHEN event_type = 'correction' AND point_value = -1 THEN 1 ELSE 0 END) as ones_made,
-          SUM(CASE WHEN event_type = 'score' AND point_value = 2 THEN 1 ELSE 0 END)
-            - SUM(CASE WHEN event_type = 'correction' AND point_value = -2 THEN 1 ELSE 0 END) as twos_made,
-          SUM(CASE WHEN event_type = 'assist' THEN 1 ELSE 0 END) as assists,
-          SUM(CASE WHEN event_type = 'steal' THEN 1 ELSE 0 END) as steals,
-          SUM(CASE WHEN event_type = 'block' THEN 1 ELSE 0 END) as blocks
+          ge.player_id,
+          SUM(ge.point_value) as total_points,
+          SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 1 THEN 1 ELSE 0 END)
+            - SUM(CASE WHEN ge.event_type = 'correction' AND ge.point_value = -1 THEN 1 ELSE 0 END) as ones_made,
+          SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 2 THEN 1 ELSE 0 END)
+            - SUM(CASE WHEN ge.event_type = 'correction' AND ge.point_value = -2 THEN 1 ELSE 0 END) as twos_made,
+          SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END) as assists,
+          SUM(CASE WHEN ge.event_type = 'steal' THEN 1 ELSE 0 END) as steals,
+          SUM(CASE WHEN ge.event_type = 'block' THEN 1 ELSE 0 END) as blocks
         FROM game_events ge
         ${eventClause}
-        GROUP BY player_id
+        GROUP BY ge.player_id
       ) scoring ON p.id = scoring.player_id
+      LEFT JOIN (
+        SELECT r_eg.player_id, SUM(COALESCE(gws.winning_score, 11) / 11.0) as effective_games
+        FROM rosters r_eg
+        JOIN games g_eg ON r_eg.game_id = g_eg.id AND g_eg.status = 'finished' ${egGameClause}
+        LEFT JOIN (
+          SELECT ts.game_id, MAX(ts.team_score) as winning_score
+          FROM (
+            SELECT r2.game_id, r2.team, SUM(ge2.point_value) as team_score
+            FROM game_events ge2
+            JOIN rosters r2 ON ge2.game_id = r2.game_id AND ge2.player_id = r2.player_id
+            ${egEventClause}
+            GROUP BY r2.game_id, r2.team
+          ) ts
+          GROUP BY ts.game_id
+        ) gws ON r_eg.game_id = gws.game_id
+        GROUP BY r_eg.player_id
+      ) eg ON p.id = eg.player_id
       GROUP BY p.id
       ORDER BY wins DESC, total_points DESC
     `,
     args: mainArgs,
   });
 
-  // Compute +/- per player
+  // Compute raw +/- per player
   const pmArgs: string[] = filtering ? [...gameIds] : [];
   const pmGameClause = filtering ? `AND g.id IN (${ph})` : "";
   const pmResult = await db.execute({
@@ -211,9 +242,14 @@ export async function getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]>
     mvpCountMap.set(player_id, (mvpCountMap.get(player_id) || 0) + 1);
   }
 
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+
   return result.rows.map((row) => {
     const gamesPlayed = Number(row.games_played) || 1;
+    const effectiveGames = Number(row.effective_games) || 1;
     const totalPoints = Number(row.total_points);
+    const onesMade = Number(row.ones_made);
+    const twosMade = Number(row.twos_made);
     const assists = Number(row.assists);
     const steals = Number(row.steals);
     const blocks = Number(row.blocks);
@@ -226,17 +262,23 @@ export async function getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]>
       losses: Number(row.losses),
       win_pct: Math.round((Number(row.wins) / gamesPlayed) * 100),
       total_points: totalPoints,
-      ppg: Math.round((totalPoints / gamesPlayed) * 10) / 10,
-      ones_made: Number(row.ones_made),
-      twos_made: Number(row.twos_made),
+      ppg: r1(totalPoints / effectiveGames),
+      ones_made: onesMade,
+      twos_made: twosMade,
       assists,
       steals,
       blocks,
       fantasy_points: calculateFantasyPoints({ points: totalPoints, assists, steals, blocks }),
       plus_minus: pm,
-      plus_minus_per_game: Math.round((pm / gamesPlayed) * 10) / 10,
+      plus_minus_per_game: r1(pm / effectiveGames),
       streak: streakMap.get(row.id as string) || "-",
       mvp_count: mvpCountMap.get(row.id as string) || 0,
+      apg: r1(assists / effectiveGames),
+      spg: r1(steals / effectiveGames),
+      bpg: r1(blocks / effectiveGames),
+      fpg: r1((totalPoints + assists + steals + blocks) / effectiveGames),
+      ones_pg: r1(onesMade / effectiveGames),
+      twos_pg: r1(twosMade / effectiveGames),
     };
   });
 }
@@ -278,7 +320,8 @@ export async function getTodayStats(dateStr: string): Promise<TodayStats> {
         COALESCE(scoring.twos_made, 0) as twos_made,
         COALESCE(scoring.assists, 0) as assists,
         COALESCE(scoring.steals, 0) as steals,
-        COALESCE(scoring.blocks, 0) as blocks
+        COALESCE(scoring.blocks, 0) as blocks,
+        COALESCE(eg.effective_games, 1.0) as effective_games
       FROM players p
       JOIN rosters r ON p.id = r.player_id
       JOIN games g ON r.game_id = g.id
@@ -301,16 +344,38 @@ export async function getTodayStats(dateStr: string): Promise<TodayStats> {
         WHERE date(g2.start_time, '-6 hours') = ?
         GROUP BY ge.player_id
       ) scoring ON p.id = scoring.player_id
+      LEFT JOIN (
+        SELECT r_eg.player_id, SUM(COALESCE(gws.winning_score, 11) / 11.0) as effective_games
+        FROM rosters r_eg
+        JOIN games g_eg ON r_eg.game_id = g_eg.id AND g_eg.status = 'finished'
+        LEFT JOIN (
+          SELECT ts.game_id, MAX(ts.team_score) as winning_score
+          FROM (
+            SELECT r3.game_id, r3.team, SUM(ge3.point_value) as team_score
+            FROM game_events ge3
+            JOIN rosters r3 ON ge3.game_id = r3.game_id AND ge3.player_id = r3.player_id
+            GROUP BY r3.game_id, r3.team
+          ) ts
+          GROUP BY ts.game_id
+        ) gws ON r_eg.game_id = gws.game_id
+        WHERE date(g_eg.start_time, '-6 hours') = ?
+        GROUP BY r_eg.player_id
+      ) eg ON p.id = eg.player_id
       WHERE date(g.start_time, '-6 hours') = ?
       GROUP BY p.id
       ORDER BY total_points DESC
     `,
-    args: [dateStr, dateStr],
+    args: [dateStr, dateStr, dateStr],
   });
 
-  const players = result.rows.map((row) => {
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+
+  const players: PlayerStats[] = result.rows.map((row) => {
     const gamesPlayed = Number(row.games_played) || 1;
+    const effectiveGames = Number(row.effective_games) || 1;
     const totalPoints = Number(row.total_points);
+    const onesMade = Number(row.ones_made);
+    const twosMade = Number(row.twos_made);
     const assists = Number(row.assists);
     const steals = Number(row.steals);
     const blocks = Number(row.blocks);
@@ -322,9 +387,9 @@ export async function getTodayStats(dateStr: string): Promise<TodayStats> {
       losses: Number(row.losses),
       win_pct: Math.round((Number(row.wins) / gamesPlayed) * 100),
       total_points: totalPoints,
-      ppg: Math.round((totalPoints / gamesPlayed) * 10) / 10,
-      ones_made: Number(row.ones_made),
-      twos_made: Number(row.twos_made),
+      ppg: r1(totalPoints / effectiveGames),
+      ones_made: onesMade,
+      twos_made: twosMade,
       assists,
       steals,
       blocks,
@@ -333,10 +398,16 @@ export async function getTodayStats(dateStr: string): Promise<TodayStats> {
       plus_minus_per_game: 0,
       streak: "-",
       mvp_count: 0,
+      apg: r1(assists / effectiveGames),
+      spg: r1(steals / effectiveGames),
+      bpg: r1(blocks / effectiveGames),
+      fpg: r1((totalPoints + assists + steals + blocks) / effectiveGames),
+      ones_pg: r1(onesMade / effectiveGames),
+      twos_pg: r1(twosMade / effectiveGames),
     };
   });
 
-  // Compute +/- for today's games
+  // Compute raw +/- for today's games
   const pmResult = await db.execute({
     sql: `
       SELECT
@@ -368,8 +439,10 @@ export async function getTodayStats(dateStr: string): Promise<TodayStats> {
   for (const row of pmResult.rows) {
     const p = players.find((pl) => pl.id === row.player_id);
     if (p) {
-      p.plus_minus = Number(row.plus_minus);
-      p.plus_minus_per_game = Math.round((p.plus_minus / (p.games_played || 1)) * 10) / 10;
+      const pm = Number(row.plus_minus);
+      const eg = Number(p.games_played > 0 ? result.rows.find((r) => r.id === p.id)?.effective_games : 1) || 1;
+      p.plus_minus = pm;
+      p.plus_minus_per_game = r1(pm / eg);
     }
   }
 

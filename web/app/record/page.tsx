@@ -2140,9 +2140,39 @@ export default function RecordPage() {
                         setMidGameNewLast("");
                       } catch { alert("Failed to create player"); }
                     }}
-                    className="px-2 py-1 text-xs font-semibold rounded bg-green-600/20 text-green-400 hover:bg-green-600/40 disabled:opacity-30 disabled:hover:bg-green-600/20"
+                    className="px-2 py-1 text-xs font-semibold rounded bg-blue-600/20 text-blue-400 hover:bg-blue-600/40 disabled:opacity-30 disabled:hover:bg-blue-600/20"
                   >
                     + A
+                  </button>
+                  <button
+                    disabled={!midGameNewFirst || !midGameNewLast}
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`${API_BASE}/players`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ first_name: midGameNewFirst, last_name: midGameNewLast }),
+                        });
+                        if (!res.ok) { const err = await res.json(); alert(err.error || "Failed"); return; }
+                        const np = await res.json();
+                        const displayName = np.display_name;
+                        const knownPlayer: KnownPlayer = { id: np.id, name: displayName, voiceName: np.first_name.toLowerCase(), fullName: np.full_name };
+                        setFullPlayerList((prev) => [...prev, knownPlayer]);
+                        setGame((prev) => ({ ...prev, teamB: [...prev.teamB, displayName] }));
+                        if (game.gameId) {
+                          fetch(`${API_BASE}/games/${game.gameId}/roster`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ player_name: displayName, new_team: "B" }),
+                          }).catch(() => {});
+                        }
+                        setMidGameNewFirst("");
+                        setMidGameNewLast("");
+                      } catch { alert("Failed to create player"); }
+                    }}
+                    className="px-2 py-1 text-xs font-semibold rounded bg-orange-600/20 text-orange-400 hover:bg-orange-600/40 disabled:opacity-30 disabled:hover:bg-orange-600/20"
+                  >
+                    + B
                   </button>
                 </div>
               </div>

@@ -24,6 +24,12 @@ interface PlayerStats {
   steals: number;
   blocks: number;
   fantasy_points: number;
+  apg: number;
+  spg: number;
+  bpg: number;
+  fpg: number;
+  ones_pg: number;
+  twos_pg: number;
 }
 
 interface LeaderboardPlayer {
@@ -35,6 +41,10 @@ interface LeaderboardPlayer {
   steals: number;
   blocks: number;
   games_played: number;
+  apg: number;
+  spg: number;
+  bpg: number;
+  twos_pg: number;
 }
 
 interface RecentGame {
@@ -45,6 +55,7 @@ interface RecentGame {
   assists: number;
   steals: number;
   blocks: number;
+  winning_score: number;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -97,20 +108,26 @@ function PlayerDetailInner() {
     );
   }
 
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+
+  // Normalize stats to game-to-11
+  const norm = (raw: number, ws: number) => raw * 11 / Math.max(ws, 1);
+
   const chartData = games
     .slice()
     .reverse()
     .map((g) => ({
       date: formatShortDateCT(g.start_time),
-      pts: Number(g.points_scored),
+      pts: r1(norm(Number(g.points_scored), Number(g.winning_score))),
     }));
 
-  // Per-game stat arrays for distribution charts
+  // Per-game stat arrays for distribution charts (normalized to game-to-11)
   const perGame = games.map((g) => {
-    const pts = Number(g.points_scored);
-    const ast = Number(g.assists);
-    const stl = Number(g.steals);
-    const blk = Number(g.blocks);
+    const ws = Number(g.winning_score) || 11;
+    const pts = Math.round(norm(Number(g.points_scored), ws));
+    const ast = Math.round(norm(Number(g.assists), ws));
+    const stl = Math.round(norm(Number(g.steals), ws));
+    const blk = Math.round(norm(Number(g.blocks), ws));
     return { pts, ast, stl, blk, fp: pts + ast + stl + blk };
   });
 
@@ -125,14 +142,13 @@ function PlayerDetailInner() {
       .map(([val, count]) => ({ bucket: String(val), count, value: val }));
   }
 
-  // ── Per-game averages & NBA comp ──
-  const gp = stats.games_played || 1;
+  // ── Per-game averages & NBA comp (all normalized to game-to-11) ──
   const playerPerGame = {
     ppg: stats.ppg,
-    tpg: Math.round((stats.twos_made / gp) * 10) / 10,
-    apg: Math.round((stats.assists / gp) * 10) / 10,
-    spg: Math.round((stats.steals / gp) * 10) / 10,
-    bpg: Math.round((stats.blocks / gp) * 10) / 10,
+    tpg: stats.twos_pg,
+    apg: stats.apg,
+    spg: stats.spg,
+    bpg: stats.bpg,
   };
   const leagueAvg = computeLeagueAvg(leaderboard);
   const { comp, scaledStats } = computeNBAComp(playerPerGame, leagueAvg);

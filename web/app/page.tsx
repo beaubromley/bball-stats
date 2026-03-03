@@ -41,6 +41,12 @@ interface PlayerRow {
   plus_minus_per_game: number;
   streak: string;
   mvp_count: number;
+  apg: number;
+  spg: number;
+  bpg: number;
+  fpg: number;
+  ones_pg: number;
+  twos_pg: number;
 }
 
 interface TodayData {
@@ -206,11 +212,8 @@ export default function Home() {
     .sort((a, b) => b.fantasy_points - a.fantasy_points)
     .map((p) => ({ name: p.name, PTS: p.total_points, AST: p.assists, STL: p.steals, BLK: p.blocks, total: p.fantasy_points }));
   const fpPerGameData = [...activePlayers]
-    .sort((a, b) => b.fantasy_points / b.games_played - a.fantasy_points / a.games_played)
-    .map((p) => {
-      const gp = p.games_played;
-      return { name: p.name, PTS: r1(p.total_points / gp), AST: r1(p.assists / gp), STL: r1(p.steals / gp), BLK: r1(p.blocks / gp), total: r1(p.fantasy_points / gp) };
-    });
+    .sort((a, b) => b.fpg - a.fpg)
+    .map((p) => ({ name: p.name, PTS: p.ppg, AST: p.apg, STL: p.spg, BLK: p.bpg, total: p.fpg }));
 
   // Points
   const ptsData = [...players]
@@ -219,10 +222,9 @@ export default function Home() {
   const ppgData = [...activePlayers]
     .sort((a, b) => b.ppg - a.ppg)
     .map((p) => {
-      const gp = p.games_played;
-      const ones = r1(p.ones_made / gp);
-      const twos = r1(p.twos_made * 2 / gp);
-      return { name: p.name, "1s": ones, "2s": twos, total: r1(ones + twos) };
+      const ones = p.ones_pg;
+      const twos = r1(p.twos_pg * 2);
+      return { name: p.name, "1s": ones, "2s": twos, total: p.ppg };
     });
 
   // Win %
@@ -243,8 +245,8 @@ export default function Home() {
     .map((p) => ({ name: p.name, AST: p.assists }));
   const astPerGameData = [...activePlayers]
     .filter((p) => p.assists > 0)
-    .sort((a, b) => b.assists / b.games_played - a.assists / a.games_played)
-    .map((p) => ({ name: p.name, AST: r1(p.assists / p.games_played) }));
+    .sort((a, b) => b.apg - a.apg)
+    .map((p) => ({ name: p.name, AST: p.apg }));
 
   // Steals
   const stlData = [...players]
@@ -253,8 +255,8 @@ export default function Home() {
     .map((p) => ({ name: p.name, STL: p.steals }));
   const stlPerGameData = [...activePlayers]
     .filter((p) => p.steals > 0)
-    .sort((a, b) => b.steals / b.games_played - a.steals / a.games_played)
-    .map((p) => ({ name: p.name, STL: r1(p.steals / p.games_played) }));
+    .sort((a, b) => b.spg - a.spg)
+    .map((p) => ({ name: p.name, STL: p.spg }));
 
   // Blocks
   const blkData = [...players]
@@ -263,12 +265,12 @@ export default function Home() {
     .map((p) => ({ name: p.name, BLK: p.blocks }));
   const blkPerGameData = [...activePlayers]
     .filter((p) => p.blocks > 0)
-    .sort((a, b) => b.blocks / b.games_played - a.blocks / a.games_played)
-    .map((p) => ({ name: p.name, BLK: r1(p.blocks / p.games_played) }));
+    .sort((a, b) => b.bpg - a.bpg)
+    .map((p) => ({ name: p.name, BLK: p.bpg }));
 
   // Scatter
   const scatterData = [...activePlayers]
-    .map((p) => ({ name: p.name, fpg: r1(p.fantasy_points / p.games_played), winPct: p.win_pct }));
+    .map((p) => ({ name: p.name, fpg: p.fpg, winPct: p.win_pct }));
   const SCATTER_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#A855F7", "#EC4899", "#06B6D4", "#F97316", "#84CC16", "#6366F1"];
 
   return (
@@ -336,12 +338,12 @@ export default function Home() {
                       <td className="py-2 pr-3 text-right tabular-nums">{p.games_played}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.wins}-{p.games_played - p.wins}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.total_points}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{p.games_played ? r1(p.total_points / p.games_played) : 0}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{p.ppg}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.assists}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.steals}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.blocks}</td>
                       <td className="py-2 pr-3 text-right tabular-nums font-bold text-blue-400">{p.fantasy_points}</td>
-                      <td className="py-2 text-right tabular-nums font-bold text-blue-400">{p.games_played ? r1(p.fantasy_points / p.games_played) : 0}</td>
+                      <td className="py-2 text-right tabular-nums font-bold text-blue-400">{p.fpg}</td>
                       {showAdvanced && (
                         <td className={`py-2 pl-3 text-right tabular-nums font-bold ${p.plus_minus > 0 ? "text-green-400" : p.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
                           {p.plus_minus > 0 ? "+" : ""}{p.plus_minus}
@@ -439,7 +441,7 @@ export default function Home() {
                 <td className="py-3 pr-4 text-right tabular-nums">{player.steals}</td>
                 <td className="py-3 pr-4 text-right tabular-nums">{player.blocks}</td>
                 <td className="py-3 pr-4 text-right tabular-nums font-bold text-blue-400">{player.fantasy_points}</td>
-                <td className="py-3 text-right tabular-nums font-bold text-blue-400">{player.games_played ? r1(player.fantasy_points / player.games_played) : 0}</td>
+                <td className="py-3 text-right tabular-nums font-bold text-blue-400">{player.fpg}</td>
                 {showAdvanced && (
                   <td className={`py-3 pl-4 text-right tabular-nums font-bold ${player.plus_minus > 0 ? "text-green-400" : player.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
                     {player.plus_minus > 0 ? "+" : ""}{player.plus_minus}

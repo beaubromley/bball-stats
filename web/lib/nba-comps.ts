@@ -128,26 +128,27 @@ export interface NBACompResult {
 }
 
 export function computeLeagueAvg(
-  players: { ppg: number; ones_made?: number; twos_made?: number; assists: number; steals: number; blocks: number; games_played: number }[]
+  players: { ppg: number; twos_pg?: number; apg?: number; spg?: number; bpg?: number; ones_made?: number; twos_made?: number; assists: number; steals: number; blocks: number; games_played: number }[]
 ): PerGameStats {
   // Filter to players with at least 2 games for stable averages
   const qualified = players.filter((p) => p.games_played >= 2);
   if (qualified.length === 0) {
-    const all = players.length > 0 ? players : [{ ppg: 1, ones_made: 0, twos_made: 0, assists: 0, steals: 0, blocks: 0, games_played: 1 }];
+    const all = players.length > 0 ? players : [{ ppg: 1, twos_pg: 0, apg: 0, spg: 0, bpg: 0, ones_made: 0, twos_made: 0, assists: 0, steals: 0, blocks: 0, games_played: 1 }];
     return avgOf(all);
   }
   return avgOf(qualified);
 }
 
 function avgOf(
-  players: { ppg: number; ones_made?: number; twos_made?: number; assists: number; steals: number; blocks: number; games_played: number }[]
+  players: { ppg: number; twos_pg?: number; apg?: number; spg?: number; bpg?: number; ones_made?: number; twos_made?: number; assists: number; steals: number; blocks: number; games_played: number }[]
 ): PerGameStats {
   const n = players.length;
   const sumPpg = players.reduce((s, p) => s + p.ppg, 0);
-  const sumTpg = players.reduce((s, p) => s + (p.twos_made || 0) / (p.games_played || 1), 0);
-  const sumApg = players.reduce((s, p) => s + p.assists / (p.games_played || 1), 0);
-  const sumSpg = players.reduce((s, p) => s + p.steals / (p.games_played || 1), 0);
-  const sumBpg = players.reduce((s, p) => s + p.blocks / (p.games_played || 1), 0);
+  // Use pre-computed normalized per-game fields if available, otherwise fall back to raw division
+  const sumTpg = players.reduce((s, p) => s + (p.twos_pg ?? (p.twos_made || 0) / (p.games_played || 1)), 0);
+  const sumApg = players.reduce((s, p) => s + (p.apg ?? p.assists / (p.games_played || 1)), 0);
+  const sumSpg = players.reduce((s, p) => s + (p.spg ?? p.steals / (p.games_played || 1)), 0);
+  const sumBpg = players.reduce((s, p) => s + (p.bpg ?? p.blocks / (p.games_played || 1)), 0);
   return {
     ppg: sumPpg / n,
     tpg: sumTpg / n,
