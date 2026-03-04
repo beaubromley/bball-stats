@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 
-const API_BASE = "https://bball-stats-web.vercel.app/api";
+const API_BASE = "https://bball-stats-vert.vercel.app/api";
 
 let authToken: string | null = null;
 
