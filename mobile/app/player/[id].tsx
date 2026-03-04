@@ -109,7 +109,7 @@ export default function PlayerDetailScreen() {
                 {g.won ? "W" : "L"}
               </Text>
               <Text style={styles.gameScore}>
-                {g.team_a_score}-{g.team_b_score}
+                {new Date(g.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" })}
               </Text>
             </View>
             <View style={styles.gameStats}>

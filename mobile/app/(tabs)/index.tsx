@@ -11,8 +11,10 @@ import {
 import { router } from "expo-router";
 import { colors } from "../../src/lib/colors";
 import * as api from "../../src/services/api";
+import { useAuth } from "../../src/context/AuthContext";
 
 export default function StatsScreen() {
+  const { isAuthenticated } = useAuth();
   const [players, setPlayers] = useState<api.Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,6 +64,16 @@ export default function StatsScreen() {
       style={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
     >
+      {/* Login button */}
+      {!isAuthenticated && (
+        <TouchableOpacity
+          style={{ backgroundColor: colors.accent, padding: 12, margin: 12, borderRadius: 8, alignItems: "center" }}
+          onPress={() => router.push("/login")}
+        >
+          <Text style={{ color: "#fff", fontWeight: "bold" }}>Log In to Record Games</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Season Toggle */}
       {seasonInfo && (
         <View style={styles.seasonRow}>

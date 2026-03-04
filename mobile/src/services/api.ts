@@ -103,9 +103,13 @@ export interface Player {
   twos_pg: number;
 }
 
-export function getPlayers(season?: number) {
+export async function getPlayers(season?: number): Promise<Player[]> {
   const params = season ? `?season=${season}` : "";
-  return request<Player[]>(`/players${params}`);
+  // With season param, API wraps response as { data: [...], season: {...} }
+  // Without season param, API returns Player[] directly
+  const res = await request<Player[] | { data: Player[] }>(`/players${params}`);
+  if (!Array.isArray(res)) return res.data;
+  return res;
 }
 
 export function getPlayerStats(playerId: string) {
@@ -128,8 +132,24 @@ export interface PlayerGame {
   winning_score: number;
 }
 
-export function getPlayerGames(playerId: string) {
-  return request<PlayerGame[]>(`/players/${playerId}/games`);
+export async function getPlayerGames(playerId: string): Promise<PlayerGame[]> {
+  // API returns { id, result ("W"/"L"), ... } — map to mobile interface
+  const rows = await request<Record<string, unknown>[]>(`/players/${playerId}/games`);
+  return rows.map((r) => ({
+    game_id: r.id as string,
+    start_time: r.start_time as string,
+    status: r.status as string,
+    team: r.team as string,
+    winning_team: (r.winning_team as string) || null,
+    won: r.result === "W",
+    points_scored: Number(r.points_scored),
+    assists: Number(r.assists),
+    steals: Number(r.steals),
+    blocks: Number(r.blocks),
+    team_a_score: 0, // Not returned by API
+    team_b_score: 0,
+    winning_score: Number(r.winning_score),
+  }));
 }
 
 // --- Games ---
@@ -252,7 +272,7 @@ export interface SeasonInfo {
   totalGames: number;
   totalSeasons: number;
   currentSeason: number;
-  gamesInSeason: number;
+  gamesPerSeason: number;
 }
 
 export function getSeasons() {
