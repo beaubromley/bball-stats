@@ -24,7 +24,7 @@ export function useSpeechRecognition(onResult: (result: SpeechResult) => void) {
     if (result) {
       onResult({
         transcript: result.transcript,
-        isFinal: result.isFinal,
+        isFinal: (result as unknown as { isFinal?: boolean }).isFinal ?? !event.isFinal === false,
       });
     }
   });

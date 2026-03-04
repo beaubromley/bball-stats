@@ -2,6 +2,7 @@
   "expo": {
     "name": "Bball Stats",
     "slug": "bball-stats",
+    "scheme": "bballstats",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -27,7 +28,9 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.bballstats.app",
-      "permissions": ["RECORD_AUDIO"]
+      "permissions": [
+        "RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -39,7 +42,8 @@
           "microphonePermission": "Bball Stats needs microphone access to listen for score calls during games.",
           "speechRecognitionPermission": "Bball Stats uses speech recognition to track basketball scores via voice commands."
         }
-      ]
+      ],
+      "expo-router"
     ]
   }
 }
