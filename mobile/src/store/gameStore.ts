@@ -1,5 +1,6 @@
-import { useCallback, useReducer } from "react";
+import { useCallback, useReducer, useRef } from "react";
 import * as api from "../services/api";
+import type { ScoringMode } from "../services/parser";
 
 export interface ScoringEvent {
   id: number;
@@ -12,6 +13,7 @@ export interface ScoringEvent {
   stealBy?: string;
   rawTranscript: string;
   timestamp: number;
+  undone?: boolean;
 }
 
 export type TargetScore = number;
@@ -20,6 +22,7 @@ export interface GameState {
   gameId: string | null;
   status: "idle" | "setup" | "active" | "finished";
   targetScore: TargetScore;
+  scoringMode: ScoringMode;
 
   teamA: string[];
   teamB: string[];
@@ -39,6 +42,7 @@ export interface GameState {
 
 type GameAction =
   | { type: "SET_TARGET"; targetScore: TargetScore }
+  | { type: "SET_SCORING_MODE"; scoringMode: ScoringMode }
   | { type: "SET_STATUS"; status: GameState["status"] }
   | { type: "SET_GAME_ID"; gameId: string }
   | { type: "SET_TEAMS"; teamA: string[]; teamB: string[] }
@@ -54,9 +58,11 @@ type GameAction =
   | { type: "BLOCK"; playerName: string; rawTranscript: string }
   | { type: "ASSIST"; playerName: string; rawTranscript: string }
   | { type: "UNDO"; rawTranscript: string }
+  | { type: "REDO" }
   | { type: "SET_API_ID"; localId: number; apiId: string }
   | { type: "END_GAME"; winningTeam: "A" | "B" }
   | { type: "RESET" }
+  | { type: "RESUME_GAME"; gameId: string; teamA: string[]; teamB: string[]; teamAScore: number; teamBScore: number; targetScore: number; events: ScoringEvent[] }
   | { type: "ADD_TRANSCRIPT"; text: string }
   | { type: "SET_LAST_COMMAND"; text: string | null }
   | { type: "SET_FLASH"; color: string | null };
@@ -76,6 +82,7 @@ function recalcScores(events: ScoringEvent[], state: GameState) {
   let teamBScore = 0;
 
   for (const event of events) {
+    if (event.undone) continue;
     if (event.eventType !== "score" && event.eventType !== "correction") continue;
     const team = getTeamForPlayer(state, event.playerName);
     if (team === "A") teamAScore += event.points;
@@ -89,6 +96,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "SET_TARGET":
       return { ...state, targetScore: action.targetScore };
+
+    case "SET_SCORING_MODE":
+      return { ...state, scoringMode: action.scoringMode };
 
     case "SET_STATUS":
       return { ...state, status: action.status };
@@ -179,8 +189,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "UNDO": {
       const lastScore = [...state.events]
         .reverse()
-        .find((e) => e.eventType === "score");
+        .find((e) => e.eventType === "score" && !e.undone);
       if (!lastScore) return state;
+
+      // Mark the score as undone
+      const markedEvents = state.events.map((e) =>
+        e.id === lastScore.id ? { ...e, undone: true } : e
+      );
 
       const correctionEvent: ScoringEvent = {
         id: state.nextEventId,
@@ -191,7 +206,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         rawTranscript: action.rawTranscript,
         timestamp: Date.now(),
       };
-      const events = [...state.events, correctionEvent];
+      const events = [...markedEvents, correctionEvent];
       const newState = {
         ...state,
         events,
@@ -199,6 +214,33 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       };
       const scores = recalcScores(events, newState);
       return { ...newState, ...scores, status: "active", winningTeam: null };
+    }
+
+    case "REDO": {
+      // Find the last undone score event
+      const lastUndone = [...state.events]
+        .reverse()
+        .find((e) => e.eventType === "score" && e.undone);
+      if (!lastUndone) return state;
+
+      // Un-mark the score as undone
+      let events = state.events.map((e) =>
+        e.id === lastUndone.id ? { ...e, undone: false } : e
+      );
+      // Remove the correction event for this score
+      const corrIdx = [...events].reverse().findIndex(
+        (e) =>
+          e.eventType === "correction" &&
+          e.playerName === lastUndone.playerName &&
+          e.points === -lastUndone.points
+      );
+      if (corrIdx >= 0) {
+        const actualIdx = events.length - 1 - corrIdx;
+        events = events.filter((_, i) => i !== actualIdx);
+      }
+      const newState = { ...state, events };
+      const scores = recalcScores(events, newState);
+      return { ...newState, ...scores };
     }
 
     case "SET_API_ID":
@@ -214,6 +256,21 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
     case "RESET":
       return initialState;
+
+    case "RESUME_GAME":
+      return {
+        ...state,
+        gameId: action.gameId,
+        status: "active",
+        teamA: action.teamA,
+        teamB: action.teamB,
+        teamAScore: action.teamAScore,
+        teamBScore: action.teamBScore,
+        targetScore: action.targetScore,
+        events: action.events,
+        nextEventId: action.events.length + 1,
+        winningTeam: null,
+      };
 
     case "ADD_TRANSCRIPT":
       return {
@@ -239,6 +296,7 @@ const initialState: GameState = {
   gameId: null,
   status: "idle",
   targetScore: 11,
+  scoringMode: "1s2s",
   teamA: [],
   teamB: [],
   teamAScore: 0,
@@ -254,9 +312,19 @@ const initialState: GameState = {
 export function useGameStore() {
   const [state, dispatch] = useReducer(gameReducer, initialState);
 
+  // Refs to avoid stale closures in async callbacks
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const setTarget = useCallback(
     (targetScore: TargetScore) =>
       dispatch({ type: "SET_TARGET", targetScore }),
+    []
+  );
+
+  const setScoringMode = useCallback(
+    (scoringMode: ScoringMode) =>
+      dispatch({ type: "SET_SCORING_MODE", scoringMode }),
     []
   );
 
@@ -273,15 +341,18 @@ export function useGameStore() {
 
   const startGame = useCallback(
     async (teamA: string[], teamB: string[]) => {
+      const s = stateRef.current;
       try {
-        const { id } = await api.createGame();
+        const { id } = await api.createGame({
+          target_score: s.targetScore,
+          scoring_mode: s.scoringMode,
+        });
         dispatch({ type: "SET_GAME_ID", gameId: id });
         dispatch({ type: "SET_TEAMS", teamA, teamB });
         await api.setRoster(id, { team_a: teamA, team_b: teamB });
         dispatch({ type: "SET_STATUS", status: "active" });
       } catch (e) {
         console.error("Failed to start game:", e);
-        // Start locally even if API fails
         dispatch({ type: "SET_TEAMS", teamA, teamB });
         dispatch({ type: "SET_STATUS", status: "active" });
       }
@@ -289,13 +360,37 @@ export function useGameStore() {
     []
   );
 
+  const resumeGame = useCallback(
+    (data: {
+      gameId: string;
+      teamA: string[];
+      teamB: string[];
+      teamAScore: number;
+      teamBScore: number;
+      targetScore: number;
+      events: ScoringEvent[];
+    }) => {
+      dispatch({
+        type: "RESUME_GAME",
+        gameId: data.gameId,
+        teamA: data.teamA,
+        teamB: data.teamB,
+        teamAScore: data.teamAScore,
+        teamBScore: data.teamBScore,
+        targetScore: data.targetScore,
+        events: data.events,
+      });
+    },
+    []
+  );
+
   const score = useCallback(
     async (playerName: string, points: number, rawTranscript: string, assistBy?: string, stealBy?: string) => {
+      const s = stateRef.current;
       dispatch({ type: "SCORE", playerName, points, rawTranscript, assistBy, stealBy });
 
-      // Post steal event first if compound
-      if (stealBy && state.gameId) {
-        api.recordEvent(state.gameId, {
+      if (stealBy && s.gameId) {
+        api.recordEvent(s.gameId, {
           player_name: stealBy,
           event_type: "steal",
           point_value: 0,
@@ -303,36 +398,36 @@ export function useGameStore() {
         }).catch(console.error);
       }
 
-      // Post score event to API
-      if (state.gameId) {
-        api.recordEvent(state.gameId, {
+      if (s.gameId) {
+        api.recordEvent(s.gameId, {
           player_name: playerName,
           event_type: "score",
           point_value: points,
           raw_transcript: rawTranscript,
         }).then((data) => {
-          dispatch({ type: "SET_API_ID", localId: state.nextEventId, apiId: data.id });
+          dispatch({ type: "SET_API_ID", localId: s.nextEventId, apiId: data.id });
 
-          // Post assist event if compound
           if (assistBy) {
-            api.recordEvent(state.gameId!, {
+            api.recordEvent(s.gameId!, {
               player_name: assistBy,
               event_type: "assist",
               point_value: 0,
               raw_transcript: rawTranscript,
+              assisted_event_id: data.id,
             }).catch(console.error);
           }
         }).catch(console.error);
       }
     },
-    [state.gameId, state.nextEventId]
+    []
   );
 
   const recordSteal = useCallback(
     async (playerName: string, rawTranscript: string) => {
+      const s = stateRef.current;
       dispatch({ type: "STEAL", playerName, rawTranscript });
-      if (state.gameId) {
-        api.recordEvent(state.gameId, {
+      if (s.gameId) {
+        api.recordEvent(s.gameId, {
           player_name: playerName,
           event_type: "steal",
           point_value: 0,
@@ -340,14 +435,15 @@ export function useGameStore() {
         }).catch(console.error);
       }
     },
-    [state.gameId]
+    []
   );
 
   const recordBlock = useCallback(
     async (playerName: string, rawTranscript: string) => {
+      const s = stateRef.current;
       dispatch({ type: "BLOCK", playerName, rawTranscript });
-      if (state.gameId) {
-        api.recordEvent(state.gameId, {
+      if (s.gameId) {
+        api.recordEvent(s.gameId, {
           player_name: playerName,
           event_type: "block",
           point_value: 0,
@@ -355,14 +451,15 @@ export function useGameStore() {
         }).catch(console.error);
       }
     },
-    [state.gameId]
+    []
   );
 
   const recordAssist = useCallback(
     async (playerName: string, rawTranscript: string) => {
+      const s = stateRef.current;
       dispatch({ type: "ASSIST", playerName, rawTranscript });
-      if (state.gameId) {
-        api.recordEvent(state.gameId, {
+      if (s.gameId) {
+        api.recordEvent(s.gameId, {
           player_name: playerName,
           event_type: "assist",
           point_value: 0,
@@ -370,18 +467,19 @@ export function useGameStore() {
         }).catch(console.error);
       }
     },
-    [state.gameId]
+    []
   );
 
   const undo = useCallback(
     async (rawTranscript: string) => {
-      const lastScore = [...state.events].reverse().find((e) => e.eventType === "score");
+      const s = stateRef.current;
+      const lastScore = [...s.events].reverse().find((e) => e.eventType === "score" && !e.undone);
       if (!lastScore) return;
 
       dispatch({ type: "UNDO", rawTranscript });
 
-      if (state.gameId) {
-        api.recordEvent(state.gameId, {
+      if (s.gameId) {
+        api.recordEvent(s.gameId, {
           player_name: lastScore.playerName,
           event_type: "correction",
           point_value: -lastScore.points,
@@ -390,17 +488,45 @@ export function useGameStore() {
         }).catch(console.error);
       }
     },
-    [state.gameId, state.events]
+    []
+  );
+
+  const redo = useCallback(
+    async (rawTranscript: string) => {
+      const s = stateRef.current;
+      const lastUndone = [...s.events].reverse().find((e) => e.eventType === "score" && e.undone);
+      if (!lastUndone) return;
+
+      dispatch({ type: "REDO" });
+
+      if (s.gameId) {
+        const scoreApiId = lastUndone.apiId || String(lastUndone.id);
+        api.redoEvent(s.gameId, scoreApiId).catch(console.error);
+      }
+    },
+    []
+  );
+
+  const changeTargetScore = useCallback(
+    async (newTarget: number) => {
+      const s = stateRef.current;
+      dispatch({ type: "SET_TARGET", targetScore: newTarget });
+      if (s.gameId) {
+        api.changeTargetScore(s.gameId, newTarget).catch(console.error);
+      }
+    },
+    []
   );
 
   const endGame = useCallback(
     async (winningTeam: "A" | "B") => {
+      const s = stateRef.current;
       dispatch({ type: "END_GAME", winningTeam });
-      if (state.gameId) {
-        api.endGame(state.gameId, winningTeam).catch(console.error);
+      if (s.gameId) {
+        api.endGame(s.gameId, winningTeam).catch(console.error);
       }
     },
-    [state.gameId]
+    []
   );
 
   const reset = useCallback(() => dispatch({ type: "RESET" }), []);
@@ -426,14 +552,18 @@ export function useGameStore() {
   return {
     state,
     setTarget,
+    setScoringMode,
     setTeams,
     startSetup,
     startGame,
+    resumeGame,
     score,
     recordSteal,
     recordBlock,
     recordAssist,
     undo,
+    redo,
+    changeTargetScore,
     endGame,
     reset,
     addTranscript,

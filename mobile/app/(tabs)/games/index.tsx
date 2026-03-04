@@ -26,13 +26,17 @@ export default function GamesScreen() {
   const [games, setGames] = useState<api.Game[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchGames = useCallback(async () => {
     try {
+      setError(null);
       const data = await api.getGames();
       setGames(data);
-    } catch (e) {
-      console.error("Failed to fetch games:", e);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("Failed to fetch games:", msg);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -110,8 +114,20 @@ export default function GamesScreen() {
           );
         }}
         ListEmptyComponent={
+          error ? (
+            <View style={{ padding: 20, alignItems: "center" }}>
+              <Text style={{ color: colors.flashUndo, fontWeight: "bold", marginBottom: 4 }}>Failed to load games</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 12 }}>{error}</Text>
+              <TouchableOpacity
+                style={{ backgroundColor: colors.accent, padding: 10, borderRadius: 6, paddingHorizontal: 20 }}
+                onPress={() => { setLoading(true); fetchGames(); }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
           <Text style={styles.empty}>No games yet</Text>
-        }
+          )}
       />
     </>
   );

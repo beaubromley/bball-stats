@@ -12,7 +12,8 @@ export async function POST(req: NextRequest) {
   }
 
   const token = await createSession(role);
-  const res = NextResponse.json({ ok: true, role });
+  // Return token in body for mobile clients (can't read HttpOnly Set-Cookie)
+  const res = NextResponse.json({ ok: true, role, token });
   res.headers.set("Set-Cookie", sessionCookie(token));
   return res;
 }

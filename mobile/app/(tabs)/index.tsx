@@ -20,9 +20,11 @@ export default function StatsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [season, setSeason] = useState<number | null>(null);
   const [seasonInfo, setSeasonInfo] = useState<api.SeasonInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
+      setError(null);
       const [playersData, seasonsData] = await Promise.all([
         api.getPlayers(season ?? undefined),
         api.getSeasons(),
@@ -34,8 +36,10 @@ export default function StatsScreen() {
       if (season === null) {
         setSeason(seasonsData.currentSeason);
       }
-    } catch (e) {
-      console.error("Failed to fetch stats:", e);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("Failed to fetch stats:", msg);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -64,6 +68,20 @@ export default function StatsScreen() {
       style={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
     >
+      {/* Error display */}
+      {error && (
+        <View style={{ backgroundColor: "#4a2a2e", padding: 12, margin: 12, borderRadius: 8 }}>
+          <Text style={{ color: colors.flashUndo, fontWeight: "bold", marginBottom: 4 }}>Failed to load</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{error}</Text>
+          <TouchableOpacity
+            style={{ marginTop: 8, backgroundColor: colors.accent, padding: 8, borderRadius: 6, alignItems: "center" }}
+            onPress={() => { setLoading(true); fetchData(); }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "bold" }}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Login button */}
       {!isAuthenticated && (
         <TouchableOpacity

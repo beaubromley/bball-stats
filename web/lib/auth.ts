@@ -58,6 +58,13 @@ export async function getRole(req: NextRequest): Promise<Role | null> {
   const apiKey = req.headers.get("x-api-key");
   if (apiKey && apiKey === process.env.ADMIN_API_KEY) return "admin";
 
+  // Support Bearer token auth for mobile clients
+  const authHeader = req.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    try { return await verifyToken(token); } catch { /* fall through */ }
+  }
+
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return null;
   try { return await verifyToken(token); } catch { return null; }

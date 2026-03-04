@@ -2,18 +2,18 @@ import * as SecureStore from "expo-secure-store";
 
 const API_BASE = "https://bball-stats-web.vercel.app/api";
 
-let sessionCookie: string | null = null;
+let authToken: string | null = null;
 
 export async function loadSessionCookie() {
-  sessionCookie = await SecureStore.getItemAsync("session_cookie");
+  authToken = await SecureStore.getItemAsync("auth_token");
 }
 
-export async function setSessionCookie(cookie: string | null) {
-  sessionCookie = cookie;
-  if (cookie) {
-    await SecureStore.setItemAsync("session_cookie", cookie);
+export async function setAuthToken(token: string | null) {
+  authToken = token;
+  if (token) {
+    await SecureStore.setItemAsync("auth_token", token);
   } else {
-    await SecureStore.deleteItemAsync("session_cookie");
+    await SecureStore.deleteItemAsync("auth_token");
   }
 }
 
@@ -22,8 +22,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
-  if (sessionCookie) {
-    headers["Cookie"] = sessionCookie;
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
   }
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   if (!res.ok) {
@@ -33,34 +33,24 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
-// Extract set-cookie header from response (for login)
-async function requestWithCookie<T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<{ data: T; cookie: string | null }> {
+// --- Auth ---
+
+export async function login(password: string) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(options.headers as Record<string, string>),
   };
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ password }),
+  });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API ${res.status}: ${body}`);
   }
-  const cookie = res.headers.get("set-cookie");
-  const data = await res.json();
-  return { data, cookie };
-}
-
-// --- Auth ---
-
-export async function login(password: string) {
-  const { data, cookie } = await requestWithCookie<{ ok: boolean; role: string }>(
-    "/auth/login",
-    { method: "POST", body: JSON.stringify({ password }) }
-  );
-  if (data.ok && cookie) {
-    await setSessionCookie(cookie);
+  const data = await res.json() as { ok: boolean; role: string; token?: string };
+  if (data.ok && data.token) {
+    await setAuthToken(data.token);
   }
   return data;
 }
@@ -70,8 +60,7 @@ export async function checkAuth() {
 }
 
 export async function logout() {
-  await request("/auth/logout", { method: "POST" });
-  await setSessionCookie(null);
+  await setAuthToken(null);
 }
 
 // --- Players ---
@@ -221,10 +210,14 @@ export function getGameEvents(gameId: string) {
 
 // --- Game Recording ---
 
-export function createGame(location?: string) {
+export function createGame(opts?: { location?: string; target_score?: number; scoring_mode?: string }) {
   return request<{ id: string }>("/games", {
     method: "POST",
-    body: JSON.stringify({ location }),
+    body: JSON.stringify({
+      location: opts?.location ?? "Pickup",
+      target_score: opts?.target_score,
+      scoring_mode: opts?.scoring_mode,
+    }),
   });
 }
 
@@ -245,7 +238,7 @@ export function recordEvent(
     event_type: string;
     point_value: number;
     corrected_event_id?: string;
-    assisted_by?: string;
+    assisted_event_id?: string;
     raw_transcript?: string;
   }
 ) {
@@ -262,8 +255,53 @@ export function endGame(gameId: string, winningTeam: "A" | "B") {
   });
 }
 
+export interface ActiveGameData {
+  game_id: string | null;
+  game_status: "active" | "finished" | "idle";
+  team_a_names: string[];
+  team_b_names: string[];
+  team_a_score: number;
+  team_b_score: number;
+  target_score: number | null;
+}
+
 export function getActiveGame() {
-  return request<{ id: string; status: string } | null>("/games/active");
+  return request<ActiveGameData>("/games/active");
+}
+
+export function redoEvent(gameId: string, correctedEventId: string) {
+  return request(`/games/${gameId}/events/redo`, {
+    method: "POST",
+    body: JSON.stringify({ corrected_event_id: correctedEventId }),
+  });
+}
+
+export function changeTargetScore(gameId: string, targetScore: number) {
+  return request(`/games/${gameId}/target-score`, {
+    method: "POST",
+    body: JSON.stringify({ target_score: targetScore }),
+  });
+}
+
+export function saveTranscript(gameId: string, rawText: string, actedOn: string | null) {
+  return request(`/games/${gameId}/transcripts`, {
+    method: "POST",
+    body: JSON.stringify({ raw_text: rawText, acted_on: actedOn }),
+  });
+}
+
+export function logFailedTranscript(gameId: string, text: string | null) {
+  return request(`/games/${gameId}/failed-transcript`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
+export function createPlayer(firstName: string, lastName: string) {
+  return request<{ id: string; display_name: string; first_name: string; full_name: string }>("/players", {
+    method: "POST",
+    body: JSON.stringify({ first_name: firstName, last_name: lastName }),
+  });
 }
 
 // --- Stats ---
