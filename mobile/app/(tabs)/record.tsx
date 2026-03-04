@@ -55,7 +55,7 @@ function SetupScreen({
     (async () => {
       try {
         const res = await fetch(
-          "https://bball-stats-web.vercel.app/api/players?status=active&expected=true"
+          "https://bball-stats-vert.vercel.app/api/players?status=active&expected=true"
         );
         const data = await res.json();
         const expectedPlayers = (data.players || []).map((p: { id: string; name: string }) => ({
@@ -66,7 +66,7 @@ function SetupScreen({
         setPlayers(expectedPlayers);
 
         const allRes = await fetch(
-          "https://bball-stats-web.vercel.app/api/players?status=active"
+          "https://bball-stats-vert.vercel.app/api/players?status=active"
         );
         const allData = await allRes.json();
         setAllPlayers(
@@ -282,6 +282,9 @@ function ActiveGameScreen({
   const triggerWordRef = useRef(false);
   triggerWordRef.current = triggerWord;
 
+  // Interim transcript display
+  const [interimText, setInterimText] = useState("");
+
   // Debug log
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const [showDebug, setShowDebug] = useState(false);
@@ -296,14 +299,98 @@ function ActiveGameScreen({
   // Name carry-forward
   const pendingNameRef = useRef<{ name: string; timer: ReturnType<typeof setTimeout> } | null>(null);
 
+  // Edit Teams state
+  const [showEditTeams, setShowEditTeams] = useState(false);
+  const [editSearch, setEditSearch] = useState("");
+  const [allPlayersList, setAllPlayersList] = useState<{ id: string; name: string }[]>([]);
+  const [editNewFirst, setEditNewFirst] = useState("");
+  const [editNewLast, setEditNewLast] = useState("");
+  const [editCreating, setEditCreating] = useState(false);
+
+  // Fetch all players when Edit Teams is opened
+  useEffect(() => {
+    if (showEditTeams && allPlayersList.length === 0) {
+      fetch("https://bball-stats-vert.vercel.app/api/players?status=active")
+        .then((res) => res.json())
+        .then((data) => {
+          setAllPlayersList(
+            (data.players || []).map((p: { id: string; name: string }) => ({
+              id: p.id,
+              name: p.name,
+            }))
+          );
+        })
+        .catch(console.error);
+    }
+  }, [showEditTeams, allPlayersList.length]);
+
   const knownPlayers = useMemo(
     () => [...state.teamA, ...state.teamB],
     [state.teamA, state.teamB]
   );
 
+  const movePlayer = (name: string, toTeam: "A" | "B") => {
+    const fromTeam = state.teamA.includes(name) ? "A" : "B";
+    if (fromTeam === toTeam) return;
+    const newA = toTeam === "A"
+      ? [...state.teamA, name]
+      : state.teamA.filter((n) => n !== name);
+    const newB = toTeam === "B"
+      ? [...state.teamB, name]
+      : state.teamB.filter((n) => n !== name);
+    store.setTeams(newA, newB);
+    if (state.gameId) {
+      api.setRoster(state.gameId, { team_a: newA, team_b: newB }).catch(console.error);
+    }
+  };
+
+  const addPlayerToTeam = (name: string, team: "A" | "B") => {
+    const newA = team === "A" ? [...state.teamA, name] : state.teamA;
+    const newB = team === "B" ? [...state.teamB, name] : state.teamB;
+    store.setTeams(newA, newB);
+    if (state.gameId) {
+      api.setRoster(state.gameId, { team_a: newA, team_b: newB }).catch(console.error);
+    }
+    setEditSearch("");
+  };
+
+  const createAndAddPlayer = async (team: "A" | "B") => {
+    if (!editNewFirst.trim() || !editNewLast.trim()) return;
+    setEditCreating(true);
+    try {
+      const result = await api.createPlayer(editNewFirst.trim(), editNewLast.trim());
+      setAllPlayersList((prev) => [...prev, { id: result.id, name: result.display_name }]);
+      addPlayerToTeam(result.display_name, team);
+      setEditNewFirst("");
+      setEditNewLast("");
+    } catch (e) {
+      Alert.alert("Error", "Failed to create player");
+      console.error(e);
+    } finally {
+      setEditCreating(false);
+    }
+  };
+
+  const editSearchResults = editSearch.length > 0
+    ? allPlayersList
+        .filter(
+          (p) =>
+            !knownPlayers.some((k) => k.toLowerCase() === p.name.toLowerCase()) &&
+            p.name.toLowerCase().includes(editSearch.toLowerCase())
+        )
+        .slice(0, 8)
+    : [];
+
   const handleSpeechResult = useCallback(
     (result: SpeechResult) => {
-      if (!result.isFinal) return;
+      // Show interim transcripts in real-time
+      if (!result.isFinal) {
+        setInterimText(result.transcript);
+        return;
+      }
+
+      // Clear interim on final result
+      setInterimText("");
 
       const rawText = result.transcript;
       addTranscript(rawText);
@@ -313,7 +400,10 @@ function ActiveGameScreen({
       let text = rawText;
       const lower = text.toLowerCase().trim();
       const hasStatPrefix = lower.startsWith("stat ") || lower === "stat";
-      if (triggerWordRef.current && !hasStatPrefix) return;
+      if (triggerWordRef.current && !hasStatPrefix) {
+        addDebugLog(`Rejected (no STAT prefix): "${rawText}"`);
+        return;
+      }
       if (hasStatPrefix) {
         text = text.replace(/^stat\s*/i, "").trim();
         if (!text) return;
@@ -325,9 +415,11 @@ function ActiveGameScreen({
         clearTimeout(pending.timer);
         pendingNameRef.current = null;
         text = pending.name + " " + text;
+        addDebugLog(`Prepended buffered name: "${text}"`);
       }
 
       const command = parseTranscript(text, knownPlayers, state.scoringMode);
+      addDebugLog(`Parsed: type=${command.type}, player=${command.playerName || "none"}, pts=${command.points || 0}`);
 
       // Name carry-forward: buffer bare player name
       if (command.type === "unknown" && text.trim().split(/\s+/).length <= 2) {
@@ -356,7 +448,7 @@ function ActiveGameScreen({
           if (command.playerName && command.points) {
             score(command.playerName, command.points, rawText, command.assistBy, command.stealBy);
             const label = command.assistBy
-              ? `${command.playerName} +${command.points} (ast: ${command.assistBy})`
+              ? `${command.playerName} +${command.points} (${command.assistBy} AST)`
               : `${command.playerName} +${command.points}`;
             setLastCommand(label);
             const scoreColor = command.assistBy ? colors.flashAssist : colors.flashScore;
@@ -419,14 +511,14 @@ function ActiveGameScreen({
           actedOn = "END_GAME";
           break;
         default:
+          addDebugLog(`Unknown command from: "${text}"`);
           if (state.gameId) api.logFailedTranscript(state.gameId, text).catch(() => {});
           break;
       }
 
       // Save transcript to API
-      if (state.gameId) {
+      if (state.gameId && actedOn) {
         api.saveTranscript(state.gameId, rawText, actedOn).catch(() => {});
-        if (actedOn) api.logFailedTranscript(state.gameId, null).catch(() => {});
       }
     },
     [knownPlayers, state.scoringMode, state.gameId, score, undo, redo, recordSteal, recordBlock, recordAssist, endGame, addTranscript, setLastCommand, flash, addDebugLog]
@@ -463,7 +555,7 @@ function ActiveGameScreen({
       <View style={[styles.eventRow, (isCorrection || isUndone) && styles.correctionRow]}>
         <Text style={styles.eventPlayer} numberOfLines={1}>
           {item.playerName}
-          {item.assistBy ? ` (ast: ${item.assistBy})` : ""}
+          {item.assistBy ? ` (${item.assistBy} AST)` : ""}
         </Text>
         <Text
           style={[
@@ -524,6 +616,12 @@ function ActiveGameScreen({
               <Text style={styles.fullscreenBigScore}>{state.teamBScore}</Text>
               <Text style={styles.fullscreenRoster}>{state.teamB.join(", ")}</Text>
             </View>
+          </View>
+          <View style={styles.fullscreenMeta}>
+            <Text style={styles.fullscreenTarget}>to {state.targetScore}</Text>
+            <Text style={styles.fullscreenMode}>
+              {state.scoringMode === "2s3s" ? "2s & 3s" : "1s & 2s"}
+            </Text>
           </View>
           {lastPlay && (
             <Text style={[styles.fullscreenLastPlay, { color: lastPlay.color }]}>
@@ -600,7 +698,7 @@ function ActiveGameScreen({
         <Text style={styles.lastCommand}>{state.lastCommand}</Text>
       )}
 
-      {/* Listening indicator */}
+      {/* Listening indicator + Fullscreen button */}
       <View style={styles.listenRow}>
         <View
           style={[styles.dot, isListening ? styles.dotActive : styles.dotInactive]}
@@ -608,14 +706,27 @@ function ActiveGameScreen({
         <Text style={styles.listenText}>
           {isListening ? "Listening..." : "Mic off"}
         </Text>
-        {error && <Text style={styles.errorText}>{error}</Text>}
+        <TouchableOpacity
+          style={styles.fullscreenBtn}
+          onPress={() => setShowFullscreen(true)}
+        >
+          <Text style={styles.fullscreenBtnText}>Fullscreen</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Transcript */}
-      {state.recentTranscripts.length > 0 && (
+      {/* Interim + final transcript display */}
+      {interimText ? (
+        <Text style={styles.interimTranscript} numberOfLines={2}>
+          {interimText}
+        </Text>
+      ) : state.recentTranscripts.length > 0 ? (
         <Text style={styles.transcript} numberOfLines={1}>
           &quot;{state.recentTranscripts[0]}&quot;
         </Text>
+      ) : null}
+
+      {error && (
+        <Text style={styles.errorBanner}>{error}</Text>
       )}
 
       {/* Event log */}
@@ -634,7 +745,7 @@ function ActiveGameScreen({
       {/* Settings row */}
       <View style={styles.settingsRow}>
         <View style={styles.settingItem}>
-          <Text style={styles.settingLabel}>Trigger Word</Text>
+          <Text style={styles.settingLabel}>Require &quot;STAT&quot; trigger</Text>
           <Switch
             value={triggerWord}
             onValueChange={setTriggerWord}
@@ -721,6 +832,100 @@ function ActiveGameScreen({
             <Text style={styles.endBtnText}>End Game</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Edit Teams */}
+        <TouchableOpacity
+          style={styles.editTeamsToggle}
+          onPress={() => setShowEditTeams((p) => !p)}
+        >
+          <Text style={styles.editTeamsToggleText}>
+            {showEditTeams ? "Hide" : "Edit"} Teams
+          </Text>
+        </TouchableOpacity>
+
+        {showEditTeams && (
+          <View style={styles.editTeamsContainer}>
+            {/* Current teams with move buttons */}
+            <View style={styles.editTeamsRow}>
+              <View style={styles.editTeamCol}>
+                <Text style={[styles.editTeamHeader, { color: colors.teamA }]}>Team A</Text>
+                {state.teamA.map((name) => (
+                  <View key={name} style={styles.editPlayerRow}>
+                    <Text style={styles.editPlayerName} numberOfLines={1}>{name}</Text>
+                    <TouchableOpacity onPress={() => movePlayer(name, "B")}>
+                      <Text style={[styles.editMoveBtn, { color: colors.teamB }]}>&rarr; B</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+              <View style={styles.editTeamCol}>
+                <Text style={[styles.editTeamHeader, { color: colors.teamB }]}>Team B</Text>
+                {state.teamB.map((name) => (
+                  <View key={name} style={styles.editPlayerRow}>
+                    <TouchableOpacity onPress={() => movePlayer(name, "A")}>
+                      <Text style={[styles.editMoveBtn, { color: colors.teamA }]}>A &larr;</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.editPlayerName} numberOfLines={1}>{name}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            {/* Search to add existing player */}
+            <TextInput
+              style={styles.editSearchInput}
+              placeholder="Search players to add..."
+              placeholderTextColor={colors.textMuted}
+              value={editSearch}
+              onChangeText={setEditSearch}
+            />
+            {editSearchResults.map((p) => (
+              <View key={p.id} style={styles.editSearchResult}>
+                <Text style={styles.editSearchName}>{p.name}</Text>
+                <View style={styles.editSearchBtns}>
+                  <TouchableOpacity onPress={() => addPlayerToTeam(p.name, "A")}>
+                    <Text style={[styles.editAddBtn, { color: colors.teamA }]}>+ A</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => addPlayerToTeam(p.name, "B")}>
+                    <Text style={[styles.editAddBtn, { color: colors.teamB }]}>+ B</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+
+            {/* Create new player */}
+            <View style={styles.editNewPlayerRow}>
+              <TextInput
+                style={[styles.editSearchInput, { flex: 1, marginBottom: 0 }]}
+                placeholder="First"
+                placeholderTextColor={colors.textMuted}
+                value={editNewFirst}
+                onChangeText={setEditNewFirst}
+              />
+              <TextInput
+                style={[styles.editSearchInput, { flex: 1, marginBottom: 0 }]}
+                placeholder="Last"
+                placeholderTextColor={colors.textMuted}
+                value={editNewLast}
+                onChangeText={setEditNewLast}
+              />
+              <TouchableOpacity
+                style={[styles.editCreateBtn, { backgroundColor: colors.teamA }]}
+                disabled={!editNewFirst.trim() || !editNewLast.trim() || editCreating}
+                onPress={() => createAndAddPlayer("A")}
+              >
+                <Text style={styles.editCreateBtnText}>+A</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editCreateBtn, { backgroundColor: colors.teamB }]}
+                disabled={!editNewFirst.trim() || !editNewLast.trim() || editCreating}
+                onPress={() => createAndAddPlayer("B")}
+              >
+                <Text style={styles.editCreateBtnText}>+B</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Debug log */}
@@ -733,13 +938,6 @@ function ActiveGameScreen({
           </TouchableOpacity>
           {showDebug && (
             <View style={styles.debugContainer}>
-              <TouchableOpacity
-                onPress={() => {
-                  Alert.alert("Debug Log", debugLog.slice(0, 20).join("\n"));
-                }}
-              >
-                <Text style={styles.debugCopy}>View full log</Text>
-              </TouchableOpacity>
               <ScrollView style={styles.debugScroll} nestedScrollEnabled>
                 {debugLog.map((line, i) => (
                   <Text key={i} style={styles.debugLine}>{line}</Text>
@@ -1435,7 +1633,35 @@ const styles = StyleSheet.create({
   dotActive: { backgroundColor: colors.flashScore },
   dotInactive: { backgroundColor: colors.textMuted },
   listenText: { color: colors.textMuted, fontSize: 13 },
-  errorText: { color: colors.flashUndo, fontSize: 12 },
+  fullscreenBtn: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    marginLeft: 4,
+  },
+  fullscreenBtnText: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  errorBanner: {
+    color: colors.flashUndo,
+    fontSize: 12,
+    textAlign: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 16,
+  },
+  interimTranscript: {
+    color: colors.textMuted,
+    fontSize: 13,
+    textAlign: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 2,
+    fontStyle: "italic",
+    opacity: 0.7,
+  },
   transcript: {
     color: colors.textMuted,
     fontSize: 12,
@@ -1603,10 +1829,24 @@ const styles = StyleSheet.create({
     color: "#444",
     fontSize: 48,
   },
+  fullscreenMeta: {
+    alignItems: "center",
+    marginTop: 16,
+  },
+  fullscreenTarget: {
+    color: "#60a5fa",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  fullscreenMode: {
+    color: colors.textMuted,
+    fontSize: 13,
+    marginTop: 2,
+  },
   fullscreenLastPlay: {
     fontSize: 24,
     fontWeight: "bold",
-    marginTop: 32,
+    marginTop: 24,
   },
   fullscreenLive: {
     color: colors.flashUndo,
@@ -1711,6 +1951,109 @@ const styles = StyleSheet.create({
   targetModalOkText: {
     color: "#fff",
     fontSize: 15,
+    fontWeight: "bold",
+  },
+
+  // Edit Teams
+  editTeamsToggle: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  editTeamsToggleText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  editTeamsContainer: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+  },
+  editTeamsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+  },
+  editTeamCol: {
+    flex: 1,
+  },
+  editTeamHeader: {
+    fontSize: 13,
+    fontWeight: "bold",
+    marginBottom: 6,
+    letterSpacing: 1,
+  },
+  editPlayerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  editPlayerName: {
+    color: colors.text,
+    fontSize: 13,
+    flex: 1,
+  },
+  editMoveBtn: {
+    fontSize: 12,
+    fontWeight: "bold",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  editSearchInput: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 8,
+    color: colors.text,
+    fontSize: 13,
+    marginBottom: 6,
+  },
+  editSearchResult: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  editSearchName: {
+    color: colors.text,
+    fontSize: 13,
+    flex: 1,
+  },
+  editSearchBtns: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  editAddBtn: {
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+  editNewPlayerRow: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  editCreateBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  editCreateBtnText: {
+    color: "#fff",
+    fontSize: 12,
     fontWeight: "bold",
   },
 

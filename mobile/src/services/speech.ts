@@ -20,13 +20,24 @@ export function useSpeechRecognition(onResult: (result: SpeechResult) => void) {
   });
 
   useSpeechRecognitionEvent("result", (event) => {
-    const result = event.results[0];
-    if (result) {
-      onResult({
-        transcript: result.transcript,
-        isFinal: (result as unknown as { isFinal?: boolean }).isFinal ?? !event.isFinal === false,
-      });
-    }
+    const results = event.results;
+    if (!results || results.length === 0) return;
+
+    const result = results[0];
+    if (!result) return;
+
+    // expo-speech-recognition: event.isFinal indicates if this is a final result
+    // Also check result-level isFinal for compatibility
+    const isFinal = Boolean(
+      event.isFinal ??
+      (result as unknown as { isFinal?: boolean }).isFinal ??
+      false
+    );
+
+    onResult({
+      transcript: result.transcript,
+      isFinal,
+    });
   });
 
   useSpeechRecognitionEvent("error", (event) => {
