@@ -287,7 +287,7 @@ function ActiveGameScreen({
 
   // Debug log
   const [debugLog, setDebugLog] = useState<string[]>([]);
-  const [showDebug, setShowDebug] = useState(false);
+  const [showDebug, setShowDebug] = useState(true);
   const addDebugLog = useCallback((msg: string) => {
     const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     setDebugLog((prev) => [`[${ts}] ${msg}`, ...prev].slice(0, 50));
@@ -386,6 +386,7 @@ function ActiveGameScreen({
       // Show interim transcripts in real-time
       if (!result.isFinal) {
         setInterimText(result.transcript);
+        addDebugLog(`Interim: "${result.transcript}"`);
         return;
       }
 

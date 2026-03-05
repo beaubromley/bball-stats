@@ -39,6 +39,7 @@ export function useSpeechRecognition(onResult: (result: SpeechResult) => void) {
 
   const emitFinal = useCallback((text: string) => {
     if (!text.trim()) return;
+    console.log("[Speech] emitFinal:", text.trim());
     accumulatedTextRef.current = "";
     clearSilenceTimer();
     onResultRef.current({ transcript: text.trim(), isFinal: true });
@@ -61,18 +62,23 @@ export function useSpeechRecognition(onResult: (result: SpeechResult) => void) {
   });
 
   useSpeechRecognitionEvent("result", (event) => {
+    console.log("[Speech] result event, isFinal:", event.isFinal, "results:", event.results?.length);
     const results = event.results;
-    if (!results || results.length === 0) return;
+    if (!results || results.length === 0) {
+      console.log("[Speech] No results array");
+      return;
+    }
 
     const result = results[0];
-    if (!result || !result.transcript) return;
+    if (!result || !result.transcript) {
+      console.log("[Speech] Empty transcript in result[0]");
+      return;
+    }
 
     const text = result.transcript;
-    const isFinal = Boolean(
-      event.isFinal ??
-      (result as unknown as { isFinal?: boolean }).isFinal ??
-      false
-    );
+    const isFinal = Boolean(event.isFinal);
+
+    console.log(`[Speech] "${text}" isFinal=${isFinal}`);
 
     if (isFinal) {
       // Native engine says this is final — emit immediately
