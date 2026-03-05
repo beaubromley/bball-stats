@@ -32,8 +32,29 @@ jobs:
       - name: Prebuild iOS project
         run: npx expo prebuild --platform ios --clean
 
+      - name: Debug autolinking
+        run: |
+          echo "=== ExpoModulesProvider.swift ==="
+          cat ios/Pods/Target\ Support\ Files/Pods-BballStats/ExpoModulesProvider.swift 2>/dev/null || \
+          find ios -name "ExpoModulesProvider.swift" -exec echo "Found: {}" \; -exec cat {} \; 2>/dev/null || \
+          echo "ExpoModulesProvider.swift not found"
+          echo ""
+          echo "=== Podfile AudioStream references ==="
+          grep -i "audio" ios/Podfile 2>/dev/null || echo "No AudioStream in Podfile"
+          echo ""
+          echo "=== Installed pods ==="
+          grep -i "audio" ios/Podfile.lock 2>/dev/null || echo "No AudioStream in Podfile.lock"
+
       - name: Install CocoaPods
         run: cd ios && pod install
+
+      - name: Debug autolinking (post pod install)
+        run: |
+          echo "=== ExpoModulesProvider.swift ==="
+          find ios -name "ExpoModulesProvider.swift" -exec cat {} \; 2>/dev/null || echo "Not found"
+          echo ""
+          echo "=== Podfile.lock AudioStream ==="
+          grep -i -A 2 "audio" ios/Podfile.lock 2>/dev/null || echo "No AudioStream in Podfile.lock"
 
       - name: Build unsigned archive
         run: |

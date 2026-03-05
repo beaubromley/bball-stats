@@ -10,21 +10,33 @@ export interface AudioDataEvent {
 let _module: any = null;
 function getModule() {
   if (!_module) {
-    _module = requireNativeModule<any>("AudioStream");
+    try {
+      _module = requireNativeModule<any>("AudioStream");
+    } catch {
+      throw new Error("Cannot find native module 'AudioStream'");
+    }
   }
   return _module;
 }
 
 export async function startAudioStream(sampleRate: number = 16000): Promise<void> {
-  await getModule().start(sampleRate);
+  const mod = getModule();
+  await mod.start(sampleRate);
 }
 
 export function stopAudioStream(): void {
-  getModule().stop();
+  try {
+    if (_module) {
+      _module.stop();
+    }
+  } catch {
+    // Module not available — nothing to stop
+  }
 }
 
 export function addAudioListener(
   callback: (event: AudioDataEvent) => void
 ): EventSubscription {
-  return getModule().addListener("onAudioData", callback);
+  const mod = getModule();
+  return mod.addListener("onAudioData", callback);
 }

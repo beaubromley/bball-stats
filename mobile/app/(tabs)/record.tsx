@@ -324,6 +324,17 @@ function ActiveGameScreen({
     }
   }, [showEditTeams, allPlayersList.length]);
 
+  // Build voice-to-display mapping like the web app:
+  // parser receives first names ("beau", "michael"), results mapped back to display names ("Beau B.", "Michael")
+  const { voiceNames, voiceToDisplay } = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const displayName of [...state.teamA, ...state.teamB]) {
+      const voice = displayName.split(/\s/)[0].toLowerCase();
+      map.set(voice, displayName);
+    }
+    return { voiceNames: Array.from(map.keys()), voiceToDisplay: map };
+  }, [state.teamA, state.teamB]);
+
   const knownPlayers = useMemo(
     () => [...state.teamA, ...state.teamB],
     [state.teamA, state.teamB]
@@ -415,13 +426,24 @@ function ActiveGameScreen({
         addDebugLog(`Prepended buffered name: "${text}"`);
       }
 
-      const command = parseTranscript(text, knownPlayers, state.scoringMode);
+      const command = parseTranscript(text, voiceNames, state.scoringMode);
+
+      // Map voice names back to display names
+      if (command.playerName) {
+        command.playerName = voiceToDisplay.get(command.playerName.toLowerCase()) || command.playerName;
+      }
+      if (command.assistBy) {
+        command.assistBy = voiceToDisplay.get(command.assistBy.toLowerCase()) || command.assistBy;
+      }
+      if (command.stealBy) {
+        command.stealBy = voiceToDisplay.get(command.stealBy.toLowerCase()) || command.stealBy;
+      }
       addDebugLog(`Parsed: type=${command.type}, player=${command.playerName || "none"}, pts=${command.points || 0}`);
 
       // Name carry-forward: buffer bare player name
       if (command.type === "unknown" && text.trim().split(/\s+/).length <= 2) {
         const word = text.trim().toLowerCase();
-        const matched = knownPlayers.find((p) => word.includes(p.toLowerCase()));
+        const matched = voiceNames.find((v) => word.includes(v));
         if (matched) {
           if (pendingNameRef.current) clearTimeout(pendingNameRef.current.timer);
           const timer = setTimeout(() => { pendingNameRef.current = null; }, 2000);
@@ -518,7 +540,7 @@ function ActiveGameScreen({
         api.saveTranscript(state.gameId, rawText, actedOn).catch(() => {});
       }
     },
-    [knownPlayers, state.scoringMode, state.gameId, score, undo, redo, recordSteal, recordBlock, recordAssist, endGame, addTranscript, setLastCommand, flash, addDebugLog]
+    [voiceNames, voiceToDisplay, state.scoringMode, state.gameId, score, undo, redo, recordSteal, recordBlock, recordAssist, endGame, addTranscript, setLastCommand, flash, addDebugLog]
   );
 
   // Both engines are always mounted (React hooks rule) but only one is active
