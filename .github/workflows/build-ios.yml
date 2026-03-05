@@ -56,8 +56,12 @@ jobs:
 
       - name: Package IPA
         run: |
+          echo "=== Archive contents ==="
+          find $RUNNER_TEMP/BballStats.xcarchive -name "*.app" -type d
           mkdir -p $RUNNER_TEMP/Payload
-          cp -r $RUNNER_TEMP/BballStats.xcarchive/Products/Applications/*.app $RUNNER_TEMP/Payload/
+          APP_PATH=$(find $RUNNER_TEMP/BballStats.xcarchive -name "*.app" -type d -maxdepth 5 | head -1)
+          echo "Found app at: $APP_PATH"
+          cp -r "$APP_PATH" $RUNNER_TEMP/Payload/
           cd $RUNNER_TEMP
           zip -r BballStats.ipa Payload
 
