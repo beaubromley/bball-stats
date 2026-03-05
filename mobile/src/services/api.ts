@@ -8,6 +8,10 @@ export async function loadSessionCookie() {
   authToken = await SecureStore.getItemAsync("auth_token");
 }
 
+export function getAuthToken(): string | null {
+  return authToken;
+}
+
 export async function setAuthToken(token: string | null) {
   authToken = token;
   if (token) {

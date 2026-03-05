@@ -10,15 +10,17 @@ import {
   ScrollView,
   ActivityIndicator,
   Modal,
-  Switch,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../../src/lib/colors";
 import { useSpeechRecognition, SpeechResult } from "../../src/services/speech";
+import { useDeepgram } from "../../src/services/deepgram";
 import { parseTranscript, ScoringMode } from "../../src/services/parser";
 import { useGameStore, ScoringEvent } from "../../src/store/gameStore";
 import { useAuth } from "../../src/context/AuthContext";
 import * as api from "../../src/services/api";
+
+type SpeechEngine = "apple" | "deepgram";
 
 const LAST_GAME_TEAMS_KEY = "lastGameTeams";
 
@@ -278,9 +280,7 @@ function ActiveGameScreen({
   const { state, score, recordSteal, recordBlock, recordAssist, undo, redo, endGame, changeTargetScore, addTranscript, setLastCommand, flash } = store;
 
   const [showFullscreen, setShowFullscreen] = useState(false);
-  const [triggerWord, setTriggerWord] = useState(false);
-  const triggerWordRef = useRef(false);
-  triggerWordRef.current = triggerWord;
+  const [engine, setEngine] = useState<SpeechEngine>("apple");
 
   // Interim transcript display
   const [interimText, setInterimText] = useState("");
@@ -396,15 +396,11 @@ function ActiveGameScreen({
       addTranscript(rawText);
       addDebugLog(`Final: "${rawText}"`);
 
-      // Trigger word handling
       let text = rawText;
+
+      // Strip "stat" prefix if present (legacy trigger word)
       const lower = text.toLowerCase().trim();
-      const hasStatPrefix = lower.startsWith("stat ") || lower === "stat";
-      if (triggerWordRef.current && !hasStatPrefix) {
-        addDebugLog(`Rejected (no STAT prefix): "${rawText}"`);
-        return;
-      }
-      if (hasStatPrefix) {
+      if (lower.startsWith("stat ")) {
         text = text.replace(/^stat\s*/i, "").trim();
         if (!text) return;
       }
@@ -524,12 +520,35 @@ function ActiveGameScreen({
     [knownPlayers, state.scoringMode, state.gameId, score, undo, redo, recordSteal, recordBlock, recordAssist, endGame, addTranscript, setLastCommand, flash, addDebugLog]
   );
 
-  const { isListening, error, start, stop } =
-    useSpeechRecognition(handleSpeechResult);
+  // Both engines are always mounted (React hooks rule) but only one is active
+  const apple = useSpeechRecognition(handleSpeechResult);
+  const deepgram = useDeepgram(handleSpeechResult, knownPlayers);
+
+  const activeEngine = engine === "deepgram" ? deepgram : apple;
+  const { isListening, error } = activeEngine;
+
+  const start = useCallback(async () => {
+    addDebugLog(`Starting ${engine} engine`);
+    await activeEngine.start();
+  }, [engine, activeEngine, addDebugLog]);
+
+  const stop = useCallback(() => {
+    addDebugLog(`Stopping ${engine} engine`);
+    activeEngine.stop();
+  }, [engine, activeEngine, addDebugLog]);
+
+  const switchEngine = useCallback((newEngine: SpeechEngine) => {
+    if (newEngine === engine) return;
+    // Stop current engine if listening
+    if (isListening) {
+      activeEngine.stop();
+    }
+    setEngine(newEngine);
+  }, [engine, isListening, activeEngine]);
 
   useEffect(() => {
-    addDebugLog(isListening ? "Speech recognition started" : "Speech recognition stopped");
-  }, [isListening, addDebugLog]);
+    addDebugLog(isListening ? `${engine} engine started` : `${engine} engine stopped`);
+  }, [isListening, engine, addDebugLog]);
 
   const [showTargetInput, setShowTargetInput] = useState(false);
   const [targetInput, setTargetInput] = useState("");
@@ -742,17 +761,24 @@ function ActiveGameScreen({
         }
       />
 
-      {/* Settings row */}
-      <View style={styles.settingsRow}>
-        <View style={styles.settingItem}>
-          <Text style={styles.settingLabel}>Require &quot;STAT&quot; trigger</Text>
-          <Switch
-            value={triggerWord}
-            onValueChange={setTriggerWord}
-            trackColor={{ false: colors.border, true: colors.accent }}
-            thumbColor="#fff"
-          />
-        </View>
+      {/* Engine selector */}
+      <View style={styles.engineRow}>
+        <TouchableOpacity
+          style={[styles.engineBtn, engine === "apple" && styles.engineBtnActive]}
+          onPress={() => switchEngine("apple")}
+        >
+          <Text style={[styles.engineBtnText, engine === "apple" && styles.engineBtnTextActive]}>
+            Apple Speech
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.engineBtn, engine === "deepgram" && styles.engineBtnActive]}
+          onPress={() => switchEngine("deepgram")}
+        >
+          <Text style={[styles.engineBtnText, engine === "deepgram" && styles.engineBtnTextActive]}>
+            Deepgram
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Controls */}
@@ -765,34 +791,6 @@ function ActiveGameScreen({
             {isListening ? "Stop Listening" : "Start Listening"}
           </Text>
         </TouchableOpacity>
-
-        {/* Manual score buttons - tap for +1, long press for +2 */}
-        <View style={styles.manualRow}>
-          {knownPlayers.map((name) => (
-            <TouchableOpacity
-              key={name}
-              style={styles.playerBtn}
-              onPress={() => {
-                const pts = state.scoringMode === "2s3s" ? 2 : 1;
-                score(name, pts, `[manual +${pts}]`);
-                setLastCommand(`${name} +${pts}`);
-                flash(colors.flashScore);
-                setLastPlay({ text: `${name} +${pts}`, color: colors.flashScore });
-              }}
-              onLongPress={() => {
-                const pts = state.scoringMode === "2s3s" ? 3 : 2;
-                score(name, pts, `[manual +${pts}]`);
-                setLastCommand(`${name} +${pts}`);
-                flash(colors.flashScore);
-                setLastPlay({ text: `${name} +${pts}`, color: colors.flashScore });
-              }}
-            >
-              <Text style={styles.playerBtnText} numberOfLines={1}>
-                {name.split(" ")[0]}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
 
         <View style={styles.bottomRow}>
           <TouchableOpacity
@@ -1700,23 +1698,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Settings row
-  settingsRow: {
+  // Engine selector
+  engineRow: {
     flexDirection: "row",
     justifyContent: "center",
-    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 4,
-    gap: 16,
-  },
-  settingItem: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 8,
   },
-  settingLabel: {
+  engineBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  engineBtnActive: {
+    borderColor: colors.accent,
+    backgroundColor: "rgba(37,99,235,0.15)",
+  },
+  engineBtnText: {
     color: colors.textMuted,
     fontSize: 12,
+    fontWeight: "600",
+  },
+  engineBtnTextActive: {
+    color: colors.accent,
   },
 
   controls: { padding: 12, gap: 8 },
@@ -1727,27 +1735,6 @@ const styles = StyleSheet.create({
   },
   btnListen: { backgroundColor: "#2563eb" },
   btnDanger: { backgroundColor: colors.flashUndo },
-  manualRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    justifyContent: "center",
-  },
-  playerBtn: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    minWidth: 60,
-    alignItems: "center",
-  },
-  playerBtnText: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: "600",
-  },
   bottomRow: {
     flexDirection: "row",
     gap: 8,

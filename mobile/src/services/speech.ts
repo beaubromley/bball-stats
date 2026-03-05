@@ -9,14 +9,55 @@ export interface SpeechResult {
   isFinal: boolean;
 }
 
+/**
+ * Apple Speech engine via expo-speech-recognition.
+ *
+ * Uses a debounce approach for "final" detection: if no new text arrives
+ * within SILENCE_MS, the accumulated transcript is emitted as final.
+ * This fixes the iOS issue where isFinal may never fire during continuous
+ * recognition until the session ends.
+ */
+const SILENCE_MS = 1500;
+
 export function useSpeechRecognition(onResult: (result: SpeechResult) => void) {
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const shouldRestartRef = useRef(false);
+  const onResultRef = useRef(onResult);
+  onResultRef.current = onResult;
+
+  // Debounce state for silence-based finalization
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accumulatedTextRef = useRef("");
+
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }, []);
+
+  const emitFinal = useCallback((text: string) => {
+    if (!text.trim()) return;
+    accumulatedTextRef.current = "";
+    clearSilenceTimer();
+    onResultRef.current({ transcript: text.trim(), isFinal: true });
+  }, [clearSilenceTimer]);
+
+  const startSilenceTimer = useCallback(() => {
+    clearSilenceTimer();
+    silenceTimerRef.current = setTimeout(() => {
+      // Silence detected — emit accumulated text as final
+      if (accumulatedTextRef.current.trim()) {
+        emitFinal(accumulatedTextRef.current);
+      }
+    }, SILENCE_MS);
+  }, [clearSilenceTimer, emitFinal]);
 
   useSpeechRecognitionEvent("start", () => {
     setIsListening(true);
     setError(null);
+    accumulatedTextRef.current = "";
   });
 
   useSpeechRecognitionEvent("result", (event) => {
@@ -24,30 +65,38 @@ export function useSpeechRecognition(onResult: (result: SpeechResult) => void) {
     if (!results || results.length === 0) return;
 
     const result = results[0];
-    if (!result) return;
+    if (!result || !result.transcript) return;
 
-    // expo-speech-recognition: event.isFinal indicates if this is a final result
-    // Also check result-level isFinal for compatibility
+    const text = result.transcript;
     const isFinal = Boolean(
       event.isFinal ??
       (result as unknown as { isFinal?: boolean }).isFinal ??
       false
     );
 
-    onResult({
-      transcript: result.transcript,
-      isFinal,
-    });
+    if (isFinal) {
+      // Native engine says this is final — emit immediately
+      emitFinal(text);
+    } else {
+      // Interim result — show in real-time, accumulate, restart silence timer
+      accumulatedTextRef.current = text;
+      onResultRef.current({ transcript: text, isFinal: false });
+      startSilenceTimer();
+    }
   });
 
   useSpeechRecognitionEvent("error", (event) => {
-    // "no-speech" is normal — just means silence, restart
     if (event.error !== "no-speech") {
       setError(event.message);
     }
   });
 
   useSpeechRecognitionEvent("end", () => {
+    // Emit any remaining accumulated text before stopping
+    if (accumulatedTextRef.current.trim()) {
+      emitFinal(accumulatedTextRef.current);
+    }
+
     setIsListening(false);
     // Auto-restart if we're supposed to be listening
     if (shouldRestartRef.current) {
@@ -74,13 +123,20 @@ export function useSpeechRecognition(onResult: (result: SpeechResult) => void) {
 
   const start = useCallback(async () => {
     shouldRestartRef.current = true;
+    accumulatedTextRef.current = "";
+    clearSilenceTimer();
     await startRecognition();
-  }, [startRecognition]);
+  }, [startRecognition, clearSilenceTimer]);
 
   const stop = useCallback(() => {
     shouldRestartRef.current = false;
+    clearSilenceTimer();
+    // Emit any remaining text
+    if (accumulatedTextRef.current.trim()) {
+      emitFinal(accumulatedTextRef.current);
+    }
     ExpoSpeechRecognitionModule.stop();
-  }, []);
+  }, [clearSilenceTimer, emitFinal]);
 
   return { isListening, error, start, stop };
 }
