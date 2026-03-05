@@ -54,13 +54,23 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
+      - name: Debug archive contents
+        if: always()
+        run: |
+          echo "=== Full archive tree ==="
+          find $RUNNER_TEMP/BballStats.xcarchive -type f | head -50 || echo "Archive not found"
+          echo "=== Archive directories ==="
+          find $RUNNER_TEMP/BballStats.xcarchive -type d | head -30 || echo "No directories"
+
       - name: Package IPA
         run: |
-          echo "=== Archive contents ==="
-          find $RUNNER_TEMP/BballStats.xcarchive -name "*.app" -type d
-          mkdir -p $RUNNER_TEMP/Payload
-          APP_PATH=$(find $RUNNER_TEMP/BballStats.xcarchive -name "*.app" -type d -maxdepth 5 | head -1)
+          APP_PATH=$(find $RUNNER_TEMP/BballStats.xcarchive -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found in archive"
+            exit 1
+          fi
           echo "Found app at: $APP_PATH"
+          mkdir -p $RUNNER_TEMP/Payload
           cp -r "$APP_PATH" $RUNNER_TEMP/Payload/
           cd $RUNNER_TEMP
           zip -r BballStats.ipa Payload
