@@ -38,10 +38,8 @@ jobs:
       - name: Build unsigned archive
         run: |
           cd ios
-          # List available schemes to verify the name
-          xcodebuild -workspace *.xcworkspace -list 2>/dev/null | head -20 || true
-          # Build the archive without code signing (AltStore will re-sign)
-          SCHEME=$(xcodebuild -workspace *.xcworkspace -list 2>/dev/null | grep -A 100 'Schemes:' | grep -v 'Schemes:' | head -1 | xargs)
+          # Use the app scheme explicitly (not a pod scheme like AudioStream)
+          SCHEME="BballStats"
           echo "Building scheme: $SCHEME"
           xcodebuild \
             -workspace *.xcworkspace \
