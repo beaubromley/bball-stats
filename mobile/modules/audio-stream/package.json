@@ -1,0 +1,8 @@
+{
+  "name": "audio-stream",
+  "version": "1.0.0",
+  "description": "Native audio streaming module for Expo",
+  "main": "src/index.ts",
+  "license": "MIT",
+  "author": "Beau Bromley"
+}
