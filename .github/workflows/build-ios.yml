@@ -35,7 +35,7 @@ jobs:
       - name: Install CocoaPods
         run: cd ios/App && pod install
 
-      - name: Build unsigned archive
+      - name: Build ad-hoc archive
         run: |
           cd ios/App
           xcodebuild \
@@ -45,9 +45,19 @@ jobs:
             -sdk iphoneos \
             -archivePath $RUNNER_TEMP/BballStats.xcarchive \
             archive \
-            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=YES \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
+
+      - name: Debug archive contents
+        run: |
+          echo "=== .app contents ==="
+          APP_PATH=$(find $RUNNER_TEMP/BballStats.xcarchive -name "*.app" -type d | head -1)
+          ls -la "$APP_PATH/" || echo "No .app found"
+          echo ""
+          echo "=== Frameworks ==="
+          ls -la "$APP_PATH/Frameworks/" 2>/dev/null || echo "No Frameworks directory"
 
       - name: Package IPA
         run: |
@@ -57,10 +67,12 @@ jobs:
             exit 1
           fi
           echo "Found app at: $APP_PATH"
+          echo "App size: $(du -sh "$APP_PATH" | cut -f1)"
           mkdir -p $RUNNER_TEMP/Payload
           cp -r "$APP_PATH" $RUNNER_TEMP/Payload/
           cd $RUNNER_TEMP
-          zip -r BballStats.ipa Payload
+          zip -r -X BballStats.ipa Payload
+          echo "IPA size: $(ls -lh BballStats.ipa | awk '{print $5}')"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
