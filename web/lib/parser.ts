@@ -58,6 +58,7 @@ const ALIASES: Record<string, string> = {
   jesse: "jc",
   jaycee: "jc",
   "j c": "jc",
+  "e g": "eg",
   don: "jon",
   bison: "bryson",
   brian: "ryan",

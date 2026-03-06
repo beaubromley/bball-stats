@@ -3,6 +3,7 @@ using Toybox.Graphics;
 using Toybox.Timer;
 using Toybox.Lang;
 using Toybox.System;
+using Toybox.Attention;
 
 class BballView extends WatchUi.View {
     // Game state from API
@@ -30,6 +31,9 @@ class BballView extends WatchUi.View {
     var lastError as Lang.String = "";
     var undoConfirm as Lang.Boolean = false;
 
+    // Track previous event ID for vibration on new play
+    var prevEventId as Lang.Number? = null;
+
     // Undo button touch zone
     var undoBtnY as Lang.Number = 160;
     var undoBtnHeight as Lang.Number = 40;
@@ -40,7 +44,7 @@ class BballView extends WatchUi.View {
 
     function onShow() as Void {
         pollTimer = new Timer.Timer();
-        pollTimer.start(method(:onPoll), 1000, true);
+        pollTimer.start(method(:onPoll), 500, true);
         BballService.fetchGameState(method(:onDataReceived));
     }
 
@@ -66,7 +70,17 @@ class BballView extends WatchUi.View {
             lastEvent = (data["last_event"] != null) ? (data["last_event"] as Lang.String) : "";
             gameStatus = (data["game_status"] != null) ? (data["game_status"] as Lang.String) : "idle";
             gameId = data["game_id"] as Lang.String?;
-            lastEventId = data["last_event_id"] as Lang.Number?;
+            var newEventId = data["last_event_id"] as Lang.Number?;
+            // Buzz on new play (skip initial load when prevEventId is null)
+            if (newEventId != null && prevEventId != null && newEventId != prevEventId) {
+                try {
+                    Attention.vibrate([new Attention.VibeProfile(50, 200)]);
+                } catch (ex) {
+                    // Device may not support vibration
+                }
+            }
+            prevEventId = newEventId;
+            lastEventId = newEventId;
             lastEventPlayer = data["last_event_player"] as Lang.String?;
             lastEventPoints = data["last_event_points"] as Lang.Number?;
             targetScore = (data["target_score"] != null) ? (data["target_score"] as Lang.Number) : 0;

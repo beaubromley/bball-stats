@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Bebas_Neue } from "next/font/google";
 import { Analytics } from "@vercel/analytics/react";
 import SpaRedirect from "./spa-redirect";
@@ -18,6 +18,13 @@ const bebasNeue = Bebas_Neue({
   variable: "--font-display",
   subsets: ["latin"],
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
 
 export const metadata: Metadata = {
   title: "YBA Stats",

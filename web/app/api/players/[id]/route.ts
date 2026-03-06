@@ -11,7 +11,7 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { first_name, last_name, full_name, status, notes, last_played_date, groupme_user_id } = body;
+    const { first_name, last_name, full_name, status, notes, last_played_date, groupme_user_id, voice_name } = body;
 
     // Build dynamic UPDATE query
     const updates: string[] = [];
@@ -44,6 +44,10 @@ export async function PATCH(
     if (groupme_user_id !== undefined) {
       updates.push("groupme_user_id = ?");
       args.push(groupme_user_id);
+    }
+    if (voice_name !== undefined) {
+      updates.push("voice_name = ?");
+      args.push(voice_name || null);
     }
 
     // Update display name if first or last name changed
@@ -140,6 +144,7 @@ function transformPlayer(row: any) {
     last_name: row.last_name,
     display_name: row.name,
     full_name: row.full_name,
+    voice_name: row.voice_name || null,
     aliases: row.aliases ? JSON.parse(row.aliases) : [],
     status: row.status || "active",
     last_played_date: row.last_played_date,

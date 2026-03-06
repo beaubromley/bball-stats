@@ -318,7 +318,7 @@ export default function RecordPage() {
         const players = data.players.map((p: any) => ({
           id: p.id,
           name: p.display_name,
-          voiceName: p.first_name?.toLowerCase() || p.display_name.split(" ")[0].toLowerCase(),
+          voiceName: p.voice_name?.toLowerCase() || p.first_name?.toLowerCase() || p.display_name.split(" ")[0].toLowerCase(),
           fullName: p.full_name,
         }));
         setExpectedPlayers(players);
@@ -336,7 +336,7 @@ export default function RecordPage() {
         const players = data.players.map((p: any) => ({
           id: p.id,
           name: p.display_name,
-          voiceName: p.first_name?.toLowerCase() || p.display_name.split(" ")[0].toLowerCase(),
+          voiceName: p.voice_name?.toLowerCase() || p.first_name?.toLowerCase() || p.display_name.split(" ")[0].toLowerCase(),
           fullName: p.full_name,
         }));
         setFullPlayerList(players);
@@ -404,7 +404,7 @@ export default function RecordPage() {
       const knownPlayer: KnownPlayer = {
         id: newPlayer.id,
         name: newPlayer.display_name,
-        voiceName: newPlayer.first_name.toLowerCase(),
+        voiceName: (newPlayer.voice_name || newPlayer.first_name).toLowerCase(),
         fullName: newPlayer.full_name,
       };
 
@@ -2171,7 +2171,7 @@ export default function RecordPage() {
                         if (!res.ok) { const err = await res.json(); alert(err.error || "Failed"); return; }
                         const np = await res.json();
                         const displayName = np.display_name;
-                        const knownPlayer: KnownPlayer = { id: np.id, name: displayName, voiceName: np.first_name.toLowerCase(), fullName: np.full_name };
+                        const knownPlayer: KnownPlayer = { id: np.id, name: displayName, voiceName: (np.voice_name || np.first_name).toLowerCase(), fullName: np.full_name };
                         setFullPlayerList((prev) => [...prev, knownPlayer]);
                         setGame((prev) => ({ ...prev, teamA: [...prev.teamA, displayName] }));
                         if (game.gameId) {
@@ -2201,7 +2201,7 @@ export default function RecordPage() {
                         if (!res.ok) { const err = await res.json(); alert(err.error || "Failed"); return; }
                         const np = await res.json();
                         const displayName = np.display_name;
-                        const knownPlayer: KnownPlayer = { id: np.id, name: displayName, voiceName: np.first_name.toLowerCase(), fullName: np.full_name };
+                        const knownPlayer: KnownPlayer = { id: np.id, name: displayName, voiceName: (np.voice_name || np.first_name).toLowerCase(), fullName: np.full_name };
                         setFullPlayerList((prev) => [...prev, knownPlayer]);
                         setGame((prev) => ({ ...prev, teamB: [...prev.teamB, displayName] }));
                         if (game.gameId) {

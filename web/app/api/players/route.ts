@@ -198,6 +198,7 @@ function transformPlayer(row: any) {
     last_name: row.last_name,
     display_name: row.name,
     full_name: row.full_name,
+    voice_name: row.voice_name || null,
     aliases: row.aliases ? JSON.parse(row.aliases) : [],
     status: row.status || "active",
     last_played_date: row.last_played_date,

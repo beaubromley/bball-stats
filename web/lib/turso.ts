@@ -165,6 +165,13 @@ export async function initDb() {
     // Column already exists
   }
 
+  // Migration: add voice_name column for custom voice recognition name
+  try {
+    await db.execute("ALTER TABLE players ADD COLUMN voice_name TEXT");
+  } catch {
+    // Column already exists
+  }
+
   // Backfill known full names from GroupMe data
   const knownFullNames: Record<string, string> = {
     "Addison P.": "Addison Peiroo",

@@ -12,6 +12,7 @@ interface Player {
   first_name: string | null;
   last_name: string | null;
   full_name: string | null;
+  voice_name: string | null;
   groupme_user_id: string | null;
   groupme_name: string | null;
   status: string;
@@ -25,7 +26,7 @@ export default function PlayersPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", full_name: "", groupme_user_id: "", status: "", notes: "" });
+  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", full_name: "", voice_name: "", groupme_user_id: "", status: "", notes: "" });
   const [addForm, setAddForm] = useState({ first_name: "", last_name: "", full_name: "", groupme_user_id: "" });
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +92,7 @@ export default function PlayersPage() {
       first_name: player.first_name || "",
       last_name: player.last_name || "",
       full_name: player.full_name || "",
+      voice_name: player.voice_name || "",
       groupme_user_id: player.groupme_user_id || "",
       status: player.status,
       notes: player.notes || "",
@@ -108,6 +110,7 @@ export default function PlayersPage() {
           first_name: editForm.first_name.trim(),
           last_name: editForm.last_name.trim(),
           full_name: editForm.full_name.trim() || null,
+          voice_name: editForm.voice_name.trim() || null,
           groupme_user_id: editForm.groupme_user_id.trim() || null,
           status: editForm.status,
           notes: editForm.notes.trim() || null,
@@ -218,6 +221,7 @@ export default function PlayersPage() {
                 <th className="py-2 pr-3">First</th>
                 <th className="py-2 pr-3">Last</th>
                 <th className="py-2 pr-3">Full Name</th>
+                <th className="py-2 pr-3">Voice Name</th>
                 <th className="py-2 pr-3">GroupMe</th>
                 <th className="py-2 pr-3">Status</th>
                 <th className="py-2 pr-3">Notes</th>
@@ -255,6 +259,15 @@ export default function PlayersPage() {
                           value={editForm.full_name}
                           onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
                           className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                        />
+                      </td>
+                      <td className="py-2 pr-3">
+                        <input
+                          type="text"
+                          value={editForm.voice_name}
+                          onChange={(e) => setEditForm({ ...editForm, voice_name: e.target.value })}
+                          className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                          placeholder="e.g. eg"
                         />
                       </td>
                       <td className="py-2 pr-3">
@@ -305,6 +318,7 @@ export default function PlayersPage() {
                       <td className="py-2 pr-3 text-gray-400">{player.first_name || "—"}</td>
                       <td className="py-2 pr-3 text-gray-400">{player.last_name || "—"}</td>
                       <td className="py-2 pr-3 text-gray-400">{player.full_name || "—"}</td>
+                      <td className="py-2 pr-3 text-gray-400">{player.voice_name || "—"}</td>
                       <td className="py-2 pr-3 text-xs">
                         {player.groupme_user_id ? (
                           <>
