@@ -59,6 +59,7 @@ const ALIASES: Record<string, string> = {
   jaycee: "jc",
   "j c": "jc",
   "e g": "eg",
+  both: "beau",
   don: "jon",
   bison: "bryson",
   brian: "ryan",
@@ -299,7 +300,7 @@ export function parseTranscript(
   // --- Standalone steal ---
   const stealMatch = text.match(/(\w+)\s+steals?(?:\s|$)/);
   if (stealMatch && !SCORING_WORDS.has(stealMatch[1])) {
-    const stealPlayer = resolvePlayer(stealMatch[1], knownPlayers);
+    const stealPlayer = resolvePlayer(stealMatch[1], knownPlayers) || findPlayerName(text, knownPlayers);
     if (stealPlayer) {
       return {
         ...result,
@@ -313,7 +314,7 @@ export function parseTranscript(
   // --- Standalone block ---
   const blockMatch = text.match(/(\w+)\s+blocks?(?:\s|$)/);
   if (blockMatch && !SCORING_WORDS.has(blockMatch[1])) {
-    const blockPlayer = resolvePlayer(blockMatch[1], knownPlayers);
+    const blockPlayer = resolvePlayer(blockMatch[1], knownPlayers) || findPlayerName(text, knownPlayers);
     if (blockPlayer) {
       return {
         ...result,

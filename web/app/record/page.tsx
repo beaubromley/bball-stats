@@ -205,6 +205,7 @@ export default function RecordPage() {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const dgAccumulatorRef = useRef("");
+  const dgAccumulatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dgReconnectCount = useRef(0);
   const nativeAudioListenerRef = useRef<PluginListenerHandle | null>(null);
 // Name carry-forward: buffer a bare player name for the next segment
@@ -666,10 +667,16 @@ export default function RecordPage() {
 
             handleVoiceResult(textToParse);
 
+            // Clear accumulator on silence detection or after 3s timeout
+            if (dgAccumulatorTimerRef.current) clearTimeout(dgAccumulatorTimerRef.current);
             if (data.speech_final) {
-              // Reset accumulator display on silence detection
               setTranscript(dgAccumulatorRef.current);
               dgAccumulatorRef.current = "";
+            } else {
+              dgAccumulatorTimerRef.current = setTimeout(() => {
+                setTranscript(dgAccumulatorRef.current);
+                dgAccumulatorRef.current = "";
+              }, 3000);
             }
           } else {
             // Interim result — show raw audio
