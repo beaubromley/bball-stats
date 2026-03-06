@@ -27,44 +27,20 @@ jobs:
           cache-dependency-path: mobile/package-lock.json
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
-      - name: Prebuild iOS project
-        run: npx expo prebuild --platform ios --clean
-
-      - name: Debug autolinking
-        run: |
-          echo "=== ExpoModulesProvider.swift ==="
-          cat ios/Pods/Target\ Support\ Files/Pods-BballStats/ExpoModulesProvider.swift 2>/dev/null || \
-          find ios -name "ExpoModulesProvider.swift" -exec echo "Found: {}" \; -exec cat {} \; 2>/dev/null || \
-          echo "ExpoModulesProvider.swift not found"
-          echo ""
-          echo "=== Podfile AudioStream references ==="
-          grep -i "audio" ios/Podfile 2>/dev/null || echo "No AudioStream in Podfile"
-          echo ""
-          echo "=== Installed pods ==="
-          grep -i "audio" ios/Podfile.lock 2>/dev/null || echo "No AudioStream in Podfile.lock"
+      - name: Sync Capacitor iOS
+        run: npx cap sync ios
 
       - name: Install CocoaPods
-        run: cd ios && pod install
-
-      - name: Debug autolinking (post pod install)
-        run: |
-          echo "=== ExpoModulesProvider.swift ==="
-          find ios -name "ExpoModulesProvider.swift" -exec cat {} \; 2>/dev/null || echo "Not found"
-          echo ""
-          echo "=== Podfile.lock AudioStream ==="
-          grep -i -A 2 "audio" ios/Podfile.lock 2>/dev/null || echo "No AudioStream in Podfile.lock"
+        run: cd ios/App && pod install
 
       - name: Build unsigned archive
         run: |
-          cd ios
-          # Use the app scheme explicitly (not a pod scheme like AudioStream)
-          SCHEME="BballStats"
-          echo "Building scheme: $SCHEME"
+          cd ios/App
           xcodebuild \
-            -workspace *.xcworkspace \
-            -scheme "$SCHEME" \
+            -workspace App.xcworkspace \
+            -scheme "App" \
             -configuration Release \
             -sdk iphoneos \
             -archivePath $RUNNER_TEMP/BballStats.xcarchive \
@@ -72,14 +48,6 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
-
-      - name: Debug archive contents
-        if: always()
-        run: |
-          echo "=== Full archive tree ==="
-          find $RUNNER_TEMP/BballStats.xcarchive -type f | head -50 || echo "Archive not found"
-          echo "=== Archive directories ==="
-          find $RUNNER_TEMP/BballStats.xcarchive -type d | head -30 || echo "No directories"
 
       - name: Package IPA
         run: |

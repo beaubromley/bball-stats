@@ -16,6 +16,8 @@ import {
 } from "recharts";
 import BoxScore from "@/app/components/BoxScore";
 import { useAuth } from "@/app/components/AuthProvider";
+import { isNativeAudioAvailable, AudioStream } from "@/lib/native-audio";
+import type { PluginListenerHandle } from "@capacitor/core";
 
 const API_BASE = "/api";
 
@@ -204,6 +206,7 @@ export default function RecordPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const dgAccumulatorRef = useRef("");
   const dgReconnectCount = useRef(0);
+  const nativeAudioListenerRef = useRef<PluginListenerHandle | null>(null);
 // Name carry-forward: buffer a bare player name for the next segment
   const pendingNameRef = useRef<{ name: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   // Dual display: last accepted command text (green line)
@@ -536,21 +539,29 @@ export default function RecordPage() {
       const token = tokenData.token;
       addDebugLog(`Token: ${tokenData.source} — ${token.length} chars`);
 
-      const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-      };
-      if (selectedDeviceIdRef.current) {
-        audioConstraints.deviceId = { exact: selectedDeviceIdRef.current };
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
-      audioStreamRef.current = stream;
+      const useNativeAudio = isNativeAudioAvailable();
+      let stream: MediaStream | null = null;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const nav = navigator as any;
-      if (nav.audioSession) {
-        nav.audioSession.type = "play-and-record";
+      if (!useNativeAudio) {
+        // Browser path: get audio via getUserMedia
+        const audioConstraints: MediaTrackConstraints = {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        };
+        if (selectedDeviceIdRef.current) {
+          audioConstraints.deviceId = { exact: selectedDeviceIdRef.current };
+        }
+        stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+        audioStreamRef.current = stream;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nav = navigator as any;
+        if (nav.audioSession) {
+          nav.audioSession.type = "play-and-record";
+        }
+      } else {
+        addDebugLog("Native audio detected — using Capacitor AudioStream plugin");
       }
 
       // Nova-3 uses "keyterm" (not "keywords") — no intensifiers like :5
@@ -562,6 +573,13 @@ export default function RecordPage() {
         utterance_end_ms: "1500",
         smart_format: "true",
       });
+
+      // Native audio sends raw PCM — tell Deepgram the encoding
+      if (useNativeAudio) {
+        params.set("encoding", "linear16");
+        params.set("sample_rate", "16000");
+        params.set("channels", "1");
+      }
 
       // Add active player names as keyterms
       const currentGame = gameRef.current;
@@ -591,19 +609,36 @@ export default function RecordPage() {
       addDebugLog(`WS URL ${dgUrl.length} chars`);
       deepgramWsRef.current = ws;
 
-      ws.onopen = () => {
+      ws.onopen = async () => {
         addDebugLog("WebSocket OPEN — streaming audio");
         dgReconnectCount.current = 0;
 
-        // MediaRecorder approach (Deepgram's recommended browser method)
-        const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
-        mediaRecorderRef.current = mediaRecorder;
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-            ws.send(e.data);
+        if (useNativeAudio) {
+          // Native path: use Capacitor AudioStream plugin for USB mic
+          try {
+            nativeAudioListenerRef.current = await AudioStream.addListener("onAudioData", (event) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                const binary = Uint8Array.from(atob(event.data), c => c.charCodeAt(0));
+                ws.send(binary.buffer);
+              }
+            });
+            await AudioStream.start({ sampleRate: 16000 });
+            addDebugLog("Native audio streaming started");
+          } catch (err) {
+            addDebugLog(`Native audio error: ${err instanceof Error ? err.message : String(err)}`);
+            setError("Failed to start native audio capture");
           }
-        };
-        mediaRecorder.start(250); // 250ms chunks
+        } else {
+          // Browser path: MediaRecorder (Deepgram's recommended browser method)
+          const mediaRecorder = new MediaRecorder(stream!, { mimeType: "audio/webm;codecs=opus" });
+          mediaRecorderRef.current = mediaRecorder;
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+              ws.send(e.data);
+            }
+          };
+          mediaRecorder.start(250); // 250ms chunks
+        }
       };
 
       ws.onmessage = (event) => {
@@ -657,6 +692,11 @@ export default function RecordPage() {
         if (deepgramWsRef.current === ws) {
           // Clean up old audio resources BEFORE reconnecting
           deepgramWsRef.current = null;
+          if (nativeAudioListenerRef.current) {
+            nativeAudioListenerRef.current.remove();
+            nativeAudioListenerRef.current = null;
+            AudioStream.stop().catch(() => {});
+          }
           if (mediaRecorderRef.current) {
             try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
             mediaRecorderRef.current = null;
@@ -715,6 +755,11 @@ export default function RecordPage() {
       } catch { /* ignore */ }
       deepgramWsRef.current.close();
       deepgramWsRef.current = null;
+    }
+    if (nativeAudioListenerRef.current) {
+      nativeAudioListenerRef.current.remove();
+      nativeAudioListenerRef.current = null;
+      AudioStream.stop().catch(() => {});
     }
     if (mediaRecorderRef.current) {
       try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }

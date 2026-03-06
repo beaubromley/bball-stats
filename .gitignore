@@ -13,10 +13,8 @@ build/
 .next/
 out/
 
-# React Native / Expo
-mobile/.expo/
-mobile/android/
-mobile/ios/
+# Capacitor / Mobile
+mobile/ios/App/Pods/
 *.apk
 *.ipa
 
