@@ -13,11 +13,16 @@ export default function PullToRefresh({ children }: { children: ReactNode }) {
   const MAX_PULL = 80;
 
   useEffect(() => {
+    const isCapacitor = !!(window as any).Capacitor;
     const standalone =
       window.matchMedia("(display-mode: standalone)").matches ||
       (navigator as any).standalone === true ||
-      !!(window as any).Capacitor;
+      isCapacitor;
     setIsStandalone(standalone);
+
+    if (isCapacitor) {
+      document.documentElement.classList.add("capacitor");
+    }
   }, []);
 
   useEffect(() => {
