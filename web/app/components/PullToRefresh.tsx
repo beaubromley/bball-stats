@@ -32,7 +32,7 @@ export default function PullToRefresh({ children }: { children: ReactNode }) {
     if (!wrapper) return;
 
     const onTouchStart = (e: TouchEvent) => {
-      if (wrapper.scrollTop === 0) {
+      if (window.scrollY === 0) {
         startYRef.current = e.touches[0].clientY;
         pullingRef.current = true;
       }
@@ -44,7 +44,7 @@ export default function PullToRefresh({ children }: { children: ReactNode }) {
       const currentY = e.touches[0].clientY;
       const distance = currentY - startYRef.current;
 
-      if (distance > 0 && wrapper.scrollTop === 0) {
+      if (distance > 0 && window.scrollY === 0) {
         e.preventDefault();
         setPullDistance(Math.min(distance, MAX_PULL));
       } else {
