@@ -6,6 +6,7 @@ import RegisterSW from "./register-sw";
 import { AuthProvider } from "./components/AuthProvider";
 import ThemeProvider from "./components/ThemeProvider";
 import Nav from "./components/Nav";
+import PullToRefresh from "./components/PullToRefresh";
 import "./globals.css";
 
 const inter = Inter({
@@ -53,10 +54,12 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <AuthProvider>
-            <Nav />
-            <SpaRedirect />
-            <RegisterSW />
-            <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
+            <PullToRefresh>
+              <Nav />
+              <SpaRedirect />
+              <RegisterSW />
+              <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
+            </PullToRefresh>
           </AuthProvider>
         </ThemeProvider>
         <Analytics />
