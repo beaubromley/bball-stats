@@ -15,7 +15,8 @@ export default function PullToRefresh({ children }: { children: ReactNode }) {
   useEffect(() => {
     const standalone =
       window.matchMedia("(display-mode: standalone)").matches ||
-      (navigator as any).standalone === true;
+      (navigator as any).standalone === true ||
+      !!(window as any).Capacitor;
     setIsStandalone(standalone);
   }, []);
 
