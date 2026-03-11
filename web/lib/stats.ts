@@ -561,11 +561,10 @@ export async function getBoxScore(gameId: string): Promise<BoxScoreResult | null
   };
 }
 
-export async function getGameHistory(limit = 20) {
+export async function getGameHistory() {
   const db = getDb();
 
-  const result = await db.execute({
-    sql: `
+  const result = await db.execute(`
       SELECT
         g.id,
         g.location,
@@ -594,10 +593,7 @@ export async function getGameHistory(limit = 20) {
       ) sb ON g.id = sb.game_id
       GROUP BY g.id
       ORDER BY g.start_time DESC
-      LIMIT ?
-    `,
-    args: [limit],
-  });
+  `);
 
   // Games are returned DESC — compute game_number (1 = oldest)
   const totalGames = result.rows.length;
