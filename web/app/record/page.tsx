@@ -324,7 +324,7 @@ export default function RecordPage() {
           lastName: p.last_name?.toLowerCase() || undefined,
           fullName: p.full_name,
         }));
-        setExpectedPlayers(players);
+        setExpectedPlayers(players.sort((a: KnownPlayer, b: KnownPlayer) => a.name.localeCompare(b.name)));
         setPlayersSource("registry");
       })
       .catch((err) => {
