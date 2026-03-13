@@ -530,8 +530,43 @@ export default function RecordPage() {
     setListening(false);
   }, []);
 
+  const stopDeepgram = useCallback(() => {
+    if (deepgramWsRef.current) {
+      try {
+        deepgramWsRef.current.send(new Uint8Array(0));
+      } catch { /* ignore */ }
+      deepgramWsRef.current.close();
+      deepgramWsRef.current = null;
+    }
+    if (nativeAudioListenerRef.current) {
+      nativeAudioListenerRef.current.remove();
+      nativeAudioListenerRef.current = null;
+      AudioStream.stop().catch(() => {});
+    }
+    if (mediaRecorderRef.current) {
+      try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+      mediaRecorderRef.current = null;
+    }
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      audioStreamRef.current = null;
+    }
+    dgAccumulatorRef.current = "";
+    setListening(false);
+  }, []);
+
   // --- Deepgram streaming ---
   const startDeepgram = useCallback(async () => {
+    // Kill any existing connection before opening a new one
+    stopDeepgram();
     try {
       addDebugLog("Fetching Deepgram token...");
       const tokenRes = await fetch(`${API_BASE}/deepgram/token`);
@@ -757,40 +792,7 @@ export default function RecordPage() {
       addDebugLog(`CATCH: ${err instanceof Error ? err.message : String(err)}`);
       setError(`Deepgram error: ${err instanceof Error ? err.message : "unknown"}`);
     }
-  }, []);
-
-  const stopDeepgram = useCallback(() => {
-    if (deepgramWsRef.current) {
-      try {
-        deepgramWsRef.current.send(new Uint8Array(0));
-      } catch { /* ignore */ }
-      deepgramWsRef.current.close();
-      deepgramWsRef.current = null;
-    }
-    if (nativeAudioListenerRef.current) {
-      nativeAudioListenerRef.current.remove();
-      nativeAudioListenerRef.current = null;
-      AudioStream.stop().catch(() => {});
-    }
-    if (mediaRecorderRef.current) {
-      try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
-      mediaRecorderRef.current = null;
-    }
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
-    if (audioStreamRef.current) {
-      audioStreamRef.current.getTracks().forEach((t) => t.stop());
-      audioStreamRef.current = null;
-    }
-    dgAccumulatorRef.current = "";
-    setListening(false);
-  }, []);
+  }, [stopDeepgram]);
 
   // --- Sherpa-ONNX (local WASM, full model) ---
   const startSherpa = useCallback(async () => {
