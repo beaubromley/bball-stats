@@ -27,7 +27,7 @@ export default function PlayersPage() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ first_name: "", last_name: "", full_name: "", voice_name: "", groupme_user_id: "", status: "", notes: "" });
-  const [addForm, setAddForm] = useState({ first_name: "", last_name: "", full_name: "", groupme_user_id: "" });
+  const [addForm, setAddForm] = useState({ first_name: "", last_name: "", full_name: "", voice_name: "", groupme_user_id: "" });
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +70,7 @@ export default function PlayersPage() {
           first_name: addForm.first_name.trim(),
           last_name: addForm.last_name.trim(),
           full_name: addForm.full_name.trim() || undefined,
+          voice_name: addForm.voice_name.trim() || undefined,
           groupme_user_id: addForm.groupme_user_id.trim() || undefined,
         }),
       });
@@ -78,7 +79,7 @@ export default function PlayersPage() {
         setError(data.error || "Failed to add player");
         return;
       }
-      setAddForm({ first_name: "", last_name: "", full_name: "", groupme_user_id: "" });
+      setAddForm({ first_name: "", last_name: "", full_name: "", voice_name: "", groupme_user_id: "" });
       setShowAdd(false);
       fetchPlayers();
     } catch {
@@ -170,7 +171,7 @@ export default function PlayersPage() {
       {showAdd && (
         <form onSubmit={handleAdd} className="mb-6 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
           <h2 className="text-sm font-bold font-display uppercase tracking-wide text-gray-500 mb-3">New Player</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
             <input
               type="text"
               placeholder="First name *"
@@ -190,6 +191,13 @@ export default function PlayersPage() {
               placeholder="Full name (optional)"
               value={addForm.full_name}
               onChange={(e) => setAddForm({ ...addForm, full_name: e.target.value })}
+              className="px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+            />
+            <input
+              type="text"
+              placeholder="Voice name (optional)"
+              value={addForm.voice_name}
+              onChange={(e) => setAddForm({ ...addForm, voice_name: e.target.value })}
               className="px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
             />
             <input

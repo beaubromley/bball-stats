@@ -97,7 +97,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { first_name, last_name, full_name, status, groupme_user_id } = body;
+    const { first_name, last_name, full_name, voice_name, status, groupme_user_id } = body;
 
     if (!first_name || !last_name) {
       return NextResponse.json(
@@ -140,6 +140,7 @@ export async function POST(request: Request) {
         last_name,
         name: disambiguatedName,
         full_name: full_name || `${first_name} ${last_name}`,
+        voice_name: voice_name || null,
         aliases: [],
         status: status || "active",
         groupme_user_id: groupme_user_id || null,
@@ -151,6 +152,7 @@ export async function POST(request: Request) {
       last_name,
       name: displayName,
       full_name: full_name || `${first_name} ${last_name}`,
+      voice_name: voice_name || null,
       aliases: [],
       status: status || "active",
       groupme_user_id: groupme_user_id || null,
@@ -168,14 +170,15 @@ async function createPlayer(db: any, data: any) {
   const id = uuid();
 
   await db.execute({
-    sql: `INSERT INTO players (id, name, first_name, last_name, full_name, aliases, status, groupme_user_id, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    sql: `INSERT INTO players (id, name, first_name, last_name, full_name, voice_name, aliases, status, groupme_user_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     args: [
       id,
       data.name,
       data.first_name,
       data.last_name,
       data.full_name,
+      data.voice_name || null,
       JSON.stringify(data.aliases),
       data.status,
       data.groupme_user_id,

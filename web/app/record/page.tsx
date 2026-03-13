@@ -28,6 +28,7 @@ interface KnownPlayer {
   id: string;
   name: string;        // displayName (e.g., "Beau B.")
   voiceName: string;   // what voice recognition matches (e.g., "beau")
+  lastName?: string;   // last name for disambiguation (e.g., "adel")
   fullName?: string;   // original full name from GroupMe
 }
 
@@ -320,6 +321,7 @@ export default function RecordPage() {
           id: p.id,
           name: p.display_name,
           voiceName: p.voice_name?.toLowerCase() || p.first_name?.toLowerCase() || p.display_name.split(" ")[0].toLowerCase(),
+          lastName: p.last_name?.toLowerCase() || undefined,
           fullName: p.full_name,
         }));
         setExpectedPlayers(players);
@@ -338,6 +340,7 @@ export default function RecordPage() {
           id: p.id,
           name: p.display_name,
           voiceName: p.voice_name?.toLowerCase() || p.first_name?.toLowerCase() || p.display_name.split(" ")[0].toLowerCase(),
+          lastName: p.last_name?.toLowerCase() || undefined,
           fullName: p.full_name,
         }));
         setFullPlayerList(players);
@@ -406,6 +409,7 @@ export default function RecordPage() {
         id: newPlayer.id,
         name: newPlayer.display_name,
         voiceName: (newPlayer.voice_name || newPlayer.first_name).toLowerCase(),
+        lastName: newPlayer.last_name?.toLowerCase() || undefined,
         fullName: newPlayer.full_name,
       };
 
@@ -1088,10 +1092,24 @@ export default function RecordPage() {
     const uniquePlayers = Array.from(new Map(allKnownPlayers.map(p => [p.id, p])).values());
 
     const voiceToDisplay = new Map<string, string>();
+    const voiceConflicts = new Map<string, string[]>(); // voice name → [display names]
     for (const displayName of allDisplayNames) {
       const player = uniquePlayers.find((p) => p.name === displayName);
       const voice = player?.voiceName || displayName.toLowerCase();
-      voiceToDisplay.set(voice, displayName);
+      // Detect conflicts: two players with the same voice name
+      if (voiceToDisplay.has(voice)) {
+        const existing = voiceToDisplay.get(voice)!;
+        voiceConflicts.set(voice, [existing, displayName]);
+        voiceToDisplay.delete(voice); // remove ambiguous first name
+      } else if (!voiceConflicts.has(voice)) {
+        voiceToDisplay.set(voice, displayName);
+      } else {
+        voiceConflicts.get(voice)!.push(displayName);
+      }
+      // Always register last name as additional voice trigger
+      if (player?.lastName) {
+        voiceToDisplay.set(player.lastName, displayName);
+      }
     }
     const voiceNames = Array.from(voiceToDisplay.keys());
     const cmd = parseTranscript(text, voiceNames, gameRef.current.scoringMode);
@@ -1105,6 +1123,22 @@ export default function RecordPage() {
     }
     if (cmd.stealBy) {
       cmd.stealBy = voiceToDisplay.get(cmd.stealBy.toLowerCase()) || cmd.stealBy;
+    }
+
+    // Check if unrecognized name matches a conflicting voice name — tell user to use last names
+    if ((cmd.type === "score" || cmd.type === "steal" || cmd.type === "block" || cmd.type === "assist") && !cmd.playerName) {
+      const normalizedText = text.toLowerCase();
+      for (const [conflictVoice, conflictNames] of voiceConflicts) {
+        if (normalizedText.includes(conflictVoice)) {
+          const lastNames = conflictNames.map((n) => {
+            const p = uniquePlayers.find((pl) => pl.name === n);
+            return p?.lastName || n;
+          }).map((l) => l.charAt(0).toUpperCase() + l.slice(1));
+          showRetryAlert(`Multiple ${conflictVoice.charAt(0).toUpperCase() + conflictVoice.slice(1)}s — say ${lastNames.join(" or ")}`);
+          if (currentGame.gameId) postFailedTranscript(currentGame.gameId, text);
+          return;
+        }
+      }
     }
 
     // Name carry-forward: if segment is JUST a known player name, buffer it
@@ -2178,7 +2212,7 @@ export default function RecordPage() {
                         if (!res.ok) { const err = await res.json(); alert(err.error || "Failed"); return; }
                         const np = await res.json();
                         const displayName = np.display_name;
-                        const knownPlayer: KnownPlayer = { id: np.id, name: displayName, voiceName: (np.voice_name || np.first_name).toLowerCase(), fullName: np.full_name };
+                        const knownPlayer: KnownPlayer = { id: np.id, name: displayName, voiceName: (np.voice_name || np.first_name).toLowerCase(), lastName: np.last_name?.toLowerCase() || undefined, fullName: np.full_name };
                         setFullPlayerList((prev) => [...prev, knownPlayer]);
                         setGame((prev) => ({ ...prev, teamA: [...prev.teamA, displayName] }));
                         if (game.gameId) {
@@ -2208,7 +2242,7 @@ export default function RecordPage() {
                         if (!res.ok) { const err = await res.json(); alert(err.error || "Failed"); return; }
                         const np = await res.json();
                         const displayName = np.display_name;
-                        const knownPlayer: KnownPlayer = { id: np.id, name: displayName, voiceName: (np.voice_name || np.first_name).toLowerCase(), fullName: np.full_name };
+                        const knownPlayer: KnownPlayer = { id: np.id, name: displayName, voiceName: (np.voice_name || np.first_name).toLowerCase(), lastName: np.last_name?.toLowerCase() || undefined, fullName: np.full_name };
                         setFullPlayerList((prev) => [...prev, knownPlayer]);
                         setGame((prev) => ({ ...prev, teamB: [...prev.teamB, displayName] }));
                         if (game.gameId) {
