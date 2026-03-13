@@ -35,10 +35,11 @@ Basketball context:
 - To find "deep" or "outside" shots: filter for the higher point_value. In 1s2s games, that's point_value=2. Check games.scoring_mode if needed.
 
 Key relationships:
-- To get a player's scores: JOIN game_events ON player_id, filter event_type = 'score'
+- To get a player's scores: JOIN game_events ON player_id, filter event_type IN ('score', 'correction')
 - To get team rosters: JOIN rosters ON game_id and player_id
 - To calculate team scores: SUM point_value from game_events JOINed with rosters filtered by team
-- Corrections should be excluded from stats (they represent undone plays)
+- CRITICAL — handling corrections/undos: When a score is undone, a 'correction' event is inserted with NEGATIVE point_value (e.g. -1, -2). The original 'score' event is NOT deleted. So to get accurate totals, ALWAYS use: SUM(point_value) WHERE event_type IN ('score', 'correction'). NEVER use WHERE event_type = 'score' alone — that would count undone scores. The same applies to counting makes: COUNT score events minus COUNT correction events for that point value.
+- For steals/blocks/assists: filter event_type = 'steal'/'block'/'assist' (these are never corrected)
 - To find assist-scorer pairs: JOIN assist events (via assisted_event_id) to the score event they assisted. The assist's player_id is the assister, the score's player_id is the scorer.
 - When querying by player name, use LIKE '%name%' or match on p.name. Players are stored as "First L." (e.g. "Brandon K.") so searching for "Brandon" should use p.name LIKE 'Brandon%'.
 - All timestamps are UTC. Central Time = UTC - 6 hours.
@@ -59,7 +60,7 @@ Rules:
 - Only SELECT queries (including WITH/CTE). Never INSERT, UPDATE, DELETE, DROP, or ALTER.
 - Use player name (p.name) for display, not player_id.
 - For win/loss records, use games.winning_team compared to rosters.team.
-- Exclude corrections from point totals (event_type != 'correction').
+- For point totals, ALWAYS include both 'score' and 'correction' events and use SUM(point_value). Corrections have negative values that cancel undone scores. Never filter to event_type = 'score' alone.
 - Use CTEs freely for complex analysis — readability matters more than brevity.
 - Default to showing the top 5 results when ranking players. Use LIMIT 5 unless the user asks for all.
 - Anticipate follow-up questions. If someone asks "who scores the most?", also show PPG, shooting splits, and games played — not just total points.
