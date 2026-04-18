@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import { AreaChart, Area, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from "recharts";
 
-import { formatShortDateCT } from "@/lib/time";
 import { computeLeagueAvg, computeNBAComp } from "@/lib/nba-comps";
 import { GAMES_PER_SEASON } from "@/lib/seasons";
 
@@ -191,7 +190,7 @@ function PlayerDetailInner() {
     .slice()
     .reverse()
     .map((g) => ({
-      date: formatShortDateCT(g.start_time),
+      date: formatSeasonGame(g.game_number),
       pts: r1(norm(Number(g.points_scored), Number(g.winning_score))),
     }));
 
