@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/components/AuthProvider";
 import {
   BarChart,
@@ -49,6 +49,23 @@ interface PlayerRow {
   twos_pg: number;
 }
 
+type SortKey =
+  | "name"
+  | "games_played"
+  | "wins"
+  | "win_pct"
+  | "total_points"
+  | "ppg"
+  | "assists"
+  | "steals"
+  | "blocks"
+  | "fantasy_points"
+  | "fpg"
+  | "plus_minus"
+  | "plus_minus_per_game"
+  | "streak"
+  | null;
+
 interface TodayData {
   games_today: number;
   players: PlayerRow[];
@@ -86,6 +103,41 @@ function ScatterTooltip({ active, payload }: any) {
       <p className="text-green-400">FPG: {data.fpg}</p>
       <p className="text-yellow-400">Win%: {data.winPct}%</p>
     </div>
+  );
+}
+
+function SortTh({
+  label,
+  field,
+  active,
+  dir,
+  onClick,
+  align = "right",
+  last = false,
+  advanced = false,
+}: {
+  label: string;
+  field: Exclude<SortKey, null>;
+  active: SortKey;
+  dir: "asc" | "desc";
+  onClick: (f: Exclude<SortKey, null>) => void;
+  align?: "left" | "right";
+  last?: boolean;
+  advanced?: boolean;
+}) {
+  const isActive = active === field;
+  const arrow = isActive ? (dir === "asc" ? "▲" : "▼") : "";
+  const padding = advanced ? "pl-4" : last ? "" : "pr-4";
+  const alignCls = align === "right" ? "text-right" : "";
+  const activeCls = isActive ? "text-gray-900 dark:text-gray-100" : "";
+  return (
+    <th
+      onClick={() => onClick(field)}
+      className={`py-3 ${padding} ${alignCls} ${activeCls} cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200`}
+    >
+      {label}
+      {arrow && <span className="ml-1 text-xs">{arrow}</span>}
+    </th>
   );
 }
 
@@ -144,6 +196,43 @@ export default function Home() {
   const [totalSeasons, setTotalSeasons] = useState(1);
   const [gamesInSeason, setGamesInSeason] = useState(0);
   const [switching, setSwitching] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  function handleSort(key: Exclude<SortKey, null>) {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir(key === "name" ? "asc" : "desc");
+    }
+  }
+
+  const sortedPlayers = useMemo(() => {
+    if (!sortKey) return players;
+    const parseStreak = (s: string) => {
+      if (!s) return 0;
+      const n = parseInt(s.slice(1)) || 0;
+      return s.startsWith("W") ? n : s.startsWith("L") ? -n : 0;
+    };
+    const arr = [...players];
+    arr.sort((a, b) => {
+      let av: number | string;
+      let bv: number | string;
+      if (sortKey === "streak") {
+        av = parseStreak(a.streak);
+        bv = parseStreak(b.streak);
+      } else {
+        av = a[sortKey] as number | string;
+        bv = b[sortKey] as number | string;
+      }
+      if (typeof av === "string" && typeof bv === "string") {
+        return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      }
+      return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
+    });
+    return arr;
+  }, [players, sortKey, sortDir]);
 
   function fetchLeaderboard(mode: "season" | "all-time", season?: number) {
     setSwitching(true);
@@ -401,24 +490,24 @@ export default function Home() {
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-sm">
               <th className="py-3 pr-4">#</th>
-              <th className="py-3 pr-4">Player</th>
-              <th className="py-3 pr-4 text-right">GP</th>
-              <th className="py-3 pr-4 text-right">W-L</th>
-              <th className="py-3 pr-4 text-right">Win%</th>
-              <th className="py-3 pr-4 text-right">PTS</th>
-              <th className="py-3 pr-4 text-right">PPG</th>
-              <th className="py-3 pr-4 text-right">AST</th>
-              <th className="py-3 pr-4 text-right">STL</th>
-              <th className="py-3 pr-4 text-right">BLK</th>
-              <th className="py-3 pr-4 text-right">FP</th>
-              <th className="py-3 text-right">FPG</th>
-              {showAdvanced && <th className="py-3 pl-4 text-right">+/-</th>}
-              {showAdvanced && <th className="py-3 pl-4 text-right">+/-PG</th>}
-              {showAdvanced && <th className="py-3 pl-4 text-right">STK</th>}
+              <SortTh label="Player" field="name" active={sortKey} dir={sortDir} onClick={handleSort} align="left" />
+              <SortTh label="GP" field="games_played" active={sortKey} dir={sortDir} onClick={handleSort} />
+              <SortTh label="W-L" field="wins" active={sortKey} dir={sortDir} onClick={handleSort} />
+              <SortTh label="Win%" field="win_pct" active={sortKey} dir={sortDir} onClick={handleSort} />
+              <SortTh label="PTS" field="total_points" active={sortKey} dir={sortDir} onClick={handleSort} />
+              <SortTh label="PPG" field="ppg" active={sortKey} dir={sortDir} onClick={handleSort} />
+              <SortTh label="AST" field="assists" active={sortKey} dir={sortDir} onClick={handleSort} />
+              <SortTh label="STL" field="steals" active={sortKey} dir={sortDir} onClick={handleSort} />
+              <SortTh label="BLK" field="blocks" active={sortKey} dir={sortDir} onClick={handleSort} />
+              <SortTh label="FP" field="fantasy_points" active={sortKey} dir={sortDir} onClick={handleSort} />
+              <SortTh label="FPG" field="fpg" active={sortKey} dir={sortDir} onClick={handleSort} last />
+              {showAdvanced && <SortTh label="+/-" field="plus_minus" active={sortKey} dir={sortDir} onClick={handleSort} advanced />}
+              {showAdvanced && <SortTh label="+/-PG" field="plus_minus_per_game" active={sortKey} dir={sortDir} onClick={handleSort} advanced />}
+              {showAdvanced && <SortTh label="STK" field="streak" active={sortKey} dir={sortDir} onClick={handleSort} advanced />}
             </tr>
           </thead>
           <tbody>
-            {players.map((player, i) => (
+            {sortedPlayers.map((player, i) => (
               <tr
                 key={player.id}
                 className="border-b border-gray-100 dark:border-gray-900 hover:bg-gray-100 dark:hover:bg-gray-900/50 transition-colors"
