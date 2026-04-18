@@ -465,7 +465,7 @@ function PlayerDetailInner() {
                 { key: "win_pct", label: "Win%" },
                 { key: "assists_to_teammate", label: "AST to" },
                 { key: "assists_from_teammate", label: "AST from" },
-                { key: "synergy", label: "Synergy" },
+                { key: "synergy", label: "Tot AST" },
               ] as { key: TeammateSort; label: string }[]).map(({ key, label }) => (
                 <button
                   key={key}
@@ -491,7 +491,7 @@ function PlayerDetailInner() {
                   <th className="py-2 pr-3 text-right">Win%</th>
                   <th className="py-2 pr-3 text-right">AST to</th>
                   <th className="py-2 pr-3 text-right">AST from</th>
-                  <th className="py-2 text-right">Synergy</th>
+                  <th className="py-2 text-right">Tot AST</th>
                 </tr>
               </thead>
               <tbody>
