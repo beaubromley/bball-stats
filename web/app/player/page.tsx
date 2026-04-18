@@ -419,7 +419,7 @@ function PlayerDetailInner() {
                 <span className="text-2xl font-bold font-display tabular-nums">
                   {topGame.team_a_score}-{topGame.team_b_score}
                 </span>
-                <span className="text-sm text-gray-500 ml-auto">{formatShortDateCT(topGame.start_time)}</span>
+                <span className="text-sm text-gray-500 ml-auto tabular-nums">{formatSeasonGame(topGame.game_number)}</span>
               </div>
               <div className="flex gap-4 text-sm flex-wrap">
                 <div><span className="font-bold tabular-nums">{Number(topGame.points_scored)}</span> <span className="text-gray-500">PTS</span></div>
@@ -551,8 +551,8 @@ function PlayerDetailInner() {
                     <span className="tabular-nums font-medium text-sm w-14">
                       {myScore}-{oppScore}
                     </span>
-                    <span className="flex-1 text-sm text-gray-500 dark:text-gray-400">
-                      {formatShortDateCT(game.start_time)}
+                    <span className="flex-1 text-sm text-gray-500 dark:text-gray-400 tabular-nums">
+                      {formatSeasonGame(game.game_number)}
                     </span>
                     <span className="flex gap-3 text-xs text-gray-500 tabular-nums">
                       <span><b className="text-gray-700 dark:text-gray-300">{Number(game.points_scored)}</b> pts</span>
