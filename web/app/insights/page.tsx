@@ -11,6 +11,8 @@ interface Message {
   text: string;
   sql?: string;
   rows?: Record<string, unknown>[];
+  sqlStepOutput?: string;
+  modelUsed?: string;
 }
 
 export default function InsightsPage() {
@@ -39,15 +41,28 @@ export default function InsightsPage() {
     setAsking(true);
 
     try {
+      // Send last 8 messages as conversation history (user+assistant)
+      const history = messages.slice(-8).map((m) => ({
+        role: m.role,
+        text: m.text,
+        sqlStepOutput: m.sqlStepOutput,
+      }));
       const res = await fetch(`${API_BASE}/ai/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q }),
+        body: JSON.stringify({ question: q, history }),
       });
       const data = await res.json();
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", text: data.answer || "No response.", sql: data.sql, rows: data.rows },
+        {
+          role: "assistant",
+          text: data.answer || "No response.",
+          sql: data.sql,
+          rows: data.rows,
+          sqlStepOutput: data.sqlStepOutput,
+          modelUsed: data.modelUsed,
+        },
       ]);
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", text: "Failed to get a response." }]);
