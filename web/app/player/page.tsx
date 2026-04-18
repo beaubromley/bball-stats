@@ -7,6 +7,14 @@ import { AreaChart, Area, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YA
 
 import { formatShortDateCT } from "@/lib/time";
 import { computeLeagueAvg, computeNBAComp } from "@/lib/nba-comps";
+import { GAMES_PER_SEASON } from "@/lib/seasons";
+
+function formatSeasonGame(gameNumber: number): string {
+  if (!gameNumber || gameNumber < 1) return "";
+  const season = Math.ceil(gameNumber / GAMES_PER_SEASON);
+  const gameInSeason = ((gameNumber - 1) % GAMES_PER_SEASON) + 1;
+  return `S${season} · G${gameInSeason}`;
+}
 
 const API_BASE = "/api";
 
@@ -62,6 +70,7 @@ interface RecentGame {
   team_b_score: number;
   winning_score: number;
   is_mvp: number;
+  game_number: number;
 }
 
 interface Teammate {
@@ -436,17 +445,17 @@ function PlayerDetailInner() {
             )}
             {mvpGames.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-2">
-                {mvpGames.slice(0, 10).map((g) => (
+                {mvpGames.slice(0, 12).map((g) => (
                   <Link
                     key={g.id}
                     href={`/game?id=${g.id}`}
-                    className="text-[11px] px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-500/20"
+                    className="text-[11px] px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-500/20 tabular-nums"
                   >
-                    {formatShortDateCT(g.start_time)}
+                    {formatSeasonGame(g.game_number)}
                   </Link>
                 ))}
-                {mvpGames.length > 10 && (
-                  <span className="text-[11px] px-2 py-0.5 text-gray-500">+{mvpGames.length - 10} more</span>
+                {mvpGames.length > 12 && (
+                  <span className="text-[11px] px-2 py-0.5 text-gray-500">+{mvpGames.length - 12} more</span>
                 )}
               </div>
             )}

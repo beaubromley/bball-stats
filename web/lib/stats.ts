@@ -215,7 +215,9 @@ export async function getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]>
         r.game_id,
         r.team,
         g.winning_team,
-        COALESCE(SUM(CASE WHEN ge.event_type = 'score' THEN ge.point_value ELSE 0 END), 0)
+        COALESCE(SUM(CASE WHEN ge.event_type IN ('score','correction') THEN ge.point_value ELSE 0 END), 0) as pts,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0) as asts,
+        COALESCE(SUM(CASE WHEN ge.event_type IN ('score','correction') THEN ge.point_value ELSE 0 END), 0)
           + COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0)
           + COALESCE(SUM(CASE WHEN ge.event_type = 'steal' THEN 1 ELSE 0 END), 0)
           + COALESCE(SUM(CASE WHEN ge.event_type = 'block' THEN 1 ELSE 0 END), 0) as fp
@@ -228,17 +230,29 @@ export async function getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]>
     `,
     args: mvpArgs,
   });
-  const gameMaxFP = new Map<string, { player_id: string; fp: number }>();
+  // Deterministic MVP tiebreaker: fp DESC, pts DESC, asts DESC, player_id ASC
+  const gameBest = new Map<string, { player_id: string; fp: number; pts: number; asts: number }>();
   for (const row of mvpResult.rows) {
     const gameId = row.game_id as string;
-    const fp = Number(row.fp);
-    const current = gameMaxFP.get(gameId);
-    if (!current || fp > current.fp) {
-      gameMaxFP.set(gameId, { player_id: row.player_id as string, fp });
+    const cand = {
+      player_id: row.player_id as string,
+      fp: Number(row.fp),
+      pts: Number(row.pts),
+      asts: Number(row.asts),
+    };
+    const current = gameBest.get(gameId);
+    if (
+      !current ||
+      cand.fp > current.fp ||
+      (cand.fp === current.fp && cand.pts > current.pts) ||
+      (cand.fp === current.fp && cand.pts === current.pts && cand.asts > current.asts) ||
+      (cand.fp === current.fp && cand.pts === current.pts && cand.asts === current.asts && cand.player_id < current.player_id)
+    ) {
+      gameBest.set(gameId, cand);
     }
   }
   const mvpCountMap = new Map<string, number>();
-  for (const { player_id } of gameMaxFP.values()) {
+  for (const { player_id } of gameBest.values()) {
     mvpCountMap.set(player_id, (mvpCountMap.get(player_id) || 0) + 1);
   }
 
@@ -536,14 +550,18 @@ export async function getBoxScore(gameId: string): Promise<BoxScoreResult | null
   const teamBScore = players.filter((p) => p.team === "B").reduce((s, p) => s + p.points, 0);
 
   // MVP: highest fantasy points on the winning team
+  // Deterministic tiebreaker: fp DESC, points DESC, assists DESC, player_id ASC
   let mvp: BoxScorePlayer | null = null;
   const winningTeam = game.winning_team as string | null;
   if (winningTeam) {
     const winningPlayers = players.filter((p) => p.team === winningTeam);
-    mvp = winningPlayers.reduce<BoxScorePlayer | null>(
-      (best, p) => (p.fantasy_points > (best?.fantasy_points ?? -1) ? p : best),
-      null
-    );
+    mvp = winningPlayers.reduce<BoxScorePlayer | null>((best, p) => {
+      if (!best) return p;
+      if (p.fantasy_points !== best.fantasy_points) return p.fantasy_points > best.fantasy_points ? p : best;
+      if (p.points !== best.points) return p.points > best.points ? p : best;
+      if (p.assists !== best.assists) return p.assists > best.assists ? p : best;
+      return p.player_id < best.player_id ? p : best;
+    }, null);
     if (mvp) {
       const idx = players.findIndex((p) => p.player_id === mvp!.player_id);
       if (idx >= 0) players[idx].is_mvp = true;

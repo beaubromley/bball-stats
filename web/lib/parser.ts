@@ -190,14 +190,12 @@ export function parseTranscript(
   };
 
   // --- Redo (undo an undo) ---
-  if (/\b(redo|re ?do|put it back|bring it back)\b/.test(text)) {
+  if (/\bre ?do\b/.test(text)) {
     return { ...result, type: "redo", confidence: 0.9 };
   }
 
   // --- Corrections ---
-  if (
-    /\b(cancel|undo|take that back|never ?mind|scratch that|no good|my bad)\b/.test(text)
-  ) {
+  if (/\bundo\b/.test(text)) {
     return { ...result, type: "correction", confidence: 0.9 };
   }
 
