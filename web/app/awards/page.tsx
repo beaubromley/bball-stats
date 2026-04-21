@@ -63,9 +63,11 @@ function AwardCard({
   const stat = winner ? splitStat(winner.value_label) : null;
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 flex flex-col">
-      <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display">{title}</h2>
-      {subtitle && <p className="text-[11px] text-gray-400 mt-1 mb-4">{subtitle}</p>}
-      {!subtitle && <div className="mb-4" />}
+      <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
+        {title}
+      </h2>
+      {subtitle && <p className="text-[11px] text-gray-500 dark:text-gray-400 -mt-2 mb-4">{subtitle}</p>}
+      {!subtitle && <div className="mb-1" />}
 
       {winner && stat ? (
         stat.numeric ? (
@@ -115,7 +117,9 @@ function AwardCard({
 function TeamCard({ title, players, minGames }: { title: string; players: AwardWinner[]; minGames: number }) {
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
-      <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display mb-4">{title}</h2>
+      <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-4 border-b border-gray-200 dark:border-gray-800">
+        {title}
+      </h2>
       {players.length === 0 ? (
         <p className="text-sm text-gray-500">Not enough qualified players yet (min {minGames} games).</p>
       ) : (
