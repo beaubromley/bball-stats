@@ -203,6 +203,19 @@ export async function initDb() {
     // Column already exists
   }
 
+  // Migration: season_awards for manually-set awards like MVP
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS season_awards (
+      season INTEGER NOT NULL,
+      award_type TEXT NOT NULL,
+      player_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (season, award_type),
+      FOREIGN KEY (player_id) REFERENCES players(id)
+    )
+  `);
+
   // Backfill: link assist events to the score event that immediately precedes them
   await db.execute(`
     UPDATE game_events SET assisted_event_id = (
