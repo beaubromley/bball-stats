@@ -41,38 +41,69 @@ interface LeaderboardPlayer {
   games_played: number;
 }
 
+function splitStat(label: string): { value: string; unit: string; numeric: boolean } {
+  const match = label.match(/^([\d.]+)\s*(.*)$/);
+  if (!match) return { value: label, unit: "", numeric: false };
+  return { value: match[1], unit: match[2], numeric: true };
+}
+
 function AwardCard({
   title,
-  emoji,
   subtitle,
   winner,
   minGames,
   children,
 }: {
   title: string;
-  emoji: string;
   subtitle?: string;
   winner: AwardWinner | null;
   minGames: number;
   children?: React.ReactNode;
 }) {
+  const stat = winner ? splitStat(winner.value_label) : null;
   return (
-    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-xl">{emoji}</span>
-        <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">{title}</h2>
-      </div>
-      {subtitle && <p className="text-[11px] text-gray-400 mb-2">{subtitle}</p>}
-      {winner ? (
-        <div>
-          <Link href={`/player?id=${winner.player_id}`} className="block hover:text-blue-400 transition-colors">
-            <div className="text-2xl font-bold font-display">{winner.name}</div>
-          </Link>
-          <div className="text-sm text-gray-500 mt-1 tabular-nums">{winner.value_label}</div>
-          <div className="text-[11px] text-gray-400 mt-0.5 tabular-nums">{winner.games_played} games played</div>
-        </div>
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 flex flex-col">
+      <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display">{title}</h2>
+      {subtitle && <p className="text-[11px] text-gray-400 mt-1 mb-4">{subtitle}</p>}
+      {!subtitle && <div className="mb-4" />}
+
+      {winner && stat ? (
+        stat.numeric ? (
+          <div className="flex-1">
+            {/* Hero stat — big bold number with high contrast */}
+            <div className="flex items-baseline gap-2 mb-4">
+              <span className="text-6xl font-bold font-display tabular-nums text-gray-900 dark:text-white leading-none">
+                {stat.value}
+              </span>
+              {stat.unit && (
+                <span className="text-xs text-gray-500 dark:text-gray-400 font-display uppercase tracking-wider">
+                  {stat.unit}
+                </span>
+              )}
+            </div>
+            {/* Winner name */}
+            <Link
+              href={`/player?id=${winner.player_id}`}
+              className="text-xl font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+            >
+              {winner.name}
+            </Link>
+            <div className="text-[11px] text-gray-500 mt-1 tabular-nums">{winner.games_played} games played</div>
+          </div>
+        ) : (
+          // MVP / non-numeric: name is the hero
+          <div className="flex-1">
+            <Link
+              href={`/player?id=${winner.player_id}`}
+              className="block text-4xl font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors leading-tight mb-2"
+            >
+              {winner.name}
+            </Link>
+            <div className="text-[11px] text-gray-500 uppercase tracking-wider font-display">{stat.value}</div>
+          </div>
+        )
       ) : (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-500 flex-1">
           No eligible player yet (min {minGames} games required).
         </p>
       )}
@@ -81,26 +112,39 @@ function AwardCard({
   );
 }
 
-function TeamCard({ title, emoji, players, minGames }: { title: string; emoji: string; players: AwardWinner[]; minGames: number }) {
+function TeamCard({ title, players, minGames }: { title: string; players: AwardWinner[]; minGames: number }) {
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xl">{emoji}</span>
-        <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">{title}</h2>
-      </div>
+      <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display mb-4">{title}</h2>
       {players.length === 0 ? (
         <p className="text-sm text-gray-500">Not enough qualified players yet (min {minGames} games).</p>
       ) : (
-        <ol className="space-y-2">
-          {players.map((p, i) => (
-            <li key={p.player_id} className="flex items-baseline gap-3">
-              <span className="text-xs text-gray-400 tabular-nums w-4">{i + 1}.</span>
-              <Link href={`/player?id=${p.player_id}`} className="flex-1 font-semibold hover:text-blue-400 transition-colors">
-                {p.name}
-              </Link>
-              <span className="text-sm text-gray-500 tabular-nums">{p.value_label}</span>
-            </li>
-          ))}
+        <ol className="divide-y divide-gray-100 dark:divide-gray-900">
+          {players.map((p, i) => {
+            const stat = splitStat(p.value_label);
+            const isTop = i === 0;
+            return (
+              <li key={p.player_id} className="flex items-baseline gap-3 py-3 first:pt-0 last:pb-0">
+                <span className={`tabular-nums w-5 font-display ${isTop ? "text-base font-bold text-gray-900 dark:text-white" : "text-xs text-gray-400"}`}>
+                  {i + 1}
+                </span>
+                <Link
+                  href={`/player?id=${p.player_id}`}
+                  className={`flex-1 hover:text-blue-400 transition-colors ${
+                    isTop
+                      ? "text-lg font-bold font-display text-gray-900 dark:text-white"
+                      : "text-sm font-semibold text-gray-700 dark:text-gray-200"
+                  }`}
+                >
+                  {p.name}
+                </Link>
+                <span className={`tabular-nums ${isTop ? "text-base font-bold text-gray-900 dark:text-white" : "text-sm text-gray-500"}`}>
+                  <span className="font-display">{stat.value}</span>
+                  {stat.unit && <span className="text-[11px] text-gray-500 ml-1 uppercase tracking-wider">{stat.unit}</span>}
+                </span>
+              </li>
+            );
+          })}
         </ol>
       )}
     </div>
@@ -255,7 +299,6 @@ function AwardsInner() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
           <AwardCard
             title="MVP"
-            emoji="🏆"
             subtitle="Voted separately"
             winner={awards.mvp}
             minGames={awards.min_games_required}
@@ -271,7 +314,6 @@ function AwardsInner() {
 
           <AwardCard
             title="Scoring Leader"
-            emoji="🎯"
             subtitle="Highest PPG (normalized to game-to-11)"
             winner={awards.scoring_leader}
             minGames={awards.min_games_required}
@@ -279,7 +321,6 @@ function AwardsInner() {
 
           <AwardCard
             title="Defensive Player of the Season"
-            emoji="🛡️"
             subtitle="Most steals + blocks per game"
             winner={awards.defensive_pots}
             minGames={awards.min_games_required}
@@ -287,7 +328,6 @@ function AwardsInner() {
 
           <AwardCard
             title="Clutch Player of the Season"
-            emoji="⚡"
             subtitle="Most game-winners in games decided by ≤ 3"
             winner={awards.clutch_pots}
             minGames={awards.min_games_required}
@@ -299,13 +339,11 @@ function AwardsInner() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <TeamCard
             title="All-YMCA First Team"
-            emoji="⭐"
             players={awards.all_ymca_1st}
             minGames={awards.min_games_required}
           />
           <TeamCard
             title="All-YMCA Second Team"
-            emoji="⭐"
             players={awards.all_ymca_2nd}
             minGames={awards.min_games_required}
           />
