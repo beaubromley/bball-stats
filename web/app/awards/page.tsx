@@ -29,6 +29,7 @@ interface SeasonAwards {
   scoring_leader: AwardEntry;
   defensive_pots: AwardEntry;
   clutch_pots: AwardEntry;
+  game_mvp_leader: AwardEntry;
   all_ymca_1st: AwardWinner[];
   all_ymca_2nd: AwardWinner[];
   all_defensive: AwardWinner[];
@@ -188,26 +189,21 @@ function TeamCard({ title, players, minGames }: { title: string; players: AwardW
         <ol className="divide-y divide-gray-100 dark:divide-gray-900">
           {players.map((p, i) => {
             const stat = splitStat(p.value_label);
-            const isTop = i === 0;
             return (
               <li key={p.player_id} className="flex items-baseline gap-3 py-3 first:pt-0 last:pb-0">
-                <span className={`tabular-nums w-5 font-display font-bold ${isTop ? "text-base text-gray-900 dark:text-white" : "text-xs text-gray-400"}`}>
+                <span className="tabular-nums w-5 font-display font-bold text-sm text-gray-900 dark:text-white">
                   {i + 1}
                 </span>
                 <Link
                   href={`/player?id=${p.player_id}`}
-                  className={`flex-1 hover:text-blue-400 transition-colors font-bold font-display ${
-                    isTop
-                      ? "text-lg text-gray-900 dark:text-white"
-                      : "text-sm text-gray-700 dark:text-gray-200"
-                  }`}
+                  className="flex-1 hover:text-blue-400 transition-colors font-bold font-display text-sm text-gray-900 dark:text-white"
                 >
                   {p.name}
                   <span className="ml-2 text-[11px] font-normal text-gray-500 tabular-nums">
                     · {p.games_played} GP
                   </span>
                 </Link>
-                <span className={`tabular-nums font-bold ${isTop ? "text-base text-gray-900 dark:text-white" : "text-sm text-gray-700 dark:text-gray-200"}`}>
+                <span className="tabular-nums font-bold text-sm text-gray-900 dark:text-white">
                   <span className="font-display">{stat.value}</span>
                   {stat.unit && <span className="text-[11px] font-normal text-gray-500 ml-1 uppercase tracking-wider">{stat.unit}</span>}
                 </span>
@@ -395,6 +391,13 @@ function AwardsInner() {
               title="Clutch Player of the Season"
               subtitle="Most game-winners in games decided by ≤ 3"
               entry={awards.clutch_pots}
+              minGames={awards.min_games_required}
+            />
+
+            <AwardCard
+              title="Game MVP Leader"
+              subtitle="Most individual game MVP awards"
+              entry={awards.game_mvp_leader}
               minGames={awards.min_games_required}
             />
           </div>

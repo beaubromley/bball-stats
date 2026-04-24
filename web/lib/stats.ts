@@ -6,6 +6,7 @@ export interface PlayerStats {
   id: string;
   name: string;
   games_played: number;
+  effective_games: number;  // normalized game-to-11 equivalent
   wins: number;
   losses: number;
   win_pct: number;
@@ -272,6 +273,7 @@ export async function getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]>
       id: row.id as string,
       name: row.name as string,
       games_played: Number(row.games_played),
+      effective_games: effectiveGames,
       wins: Number(row.wins),
       losses: Number(row.losses),
       win_pct: Math.round((Number(row.wins) / gamesPlayed) * 100),
@@ -397,6 +399,7 @@ export async function getTodayStats(dateStr: string): Promise<TodayStats> {
       id: row.id as string,
       name: row.name as string,
       games_played: Number(row.games_played),
+      effective_games: effectiveGames,
       wins: Number(row.wins),
       losses: Number(row.losses),
       win_pct: Math.round((Number(row.wins) / gamesPlayed) * 100),
