@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/app/components/AuthProvider";
-import { MvpTrophy, ScoringTrophy, ClutchTrophy, DefensiveTrophy } from "./trophies";
 
 const API_BASE = "/api";
 
@@ -49,17 +48,6 @@ interface LeaderboardPlayer {
   games_played: number;
 }
 
-// Trophy positioning — anchored in the top-right gap of each featured card.
-const TROPHY_STYLE = {
-  position: "absolute",
-  top: "54px",
-  right: "16px",
-  height: "auto",
-  maxHeight: "200px",
-  width: "auto",
-  pointerEvents: "none",
-} as const;
-
 function splitStat(label: string): { value: string; unit: string; numeric: boolean } {
   const match = label.match(/^([\d.]+)\s*(.*)$/);
   if (!match) return { value: label, unit: "", numeric: false };
@@ -99,21 +87,18 @@ function AwardCard({
   subtitle,
   entry,
   minGames,
-  icon,
   children,
 }: {
   title: string;
   subtitle?: string;
   entry: AwardEntry;
   minGames: number;
-  icon?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const winner = entry.winner;
   const stat = winner ? splitStat(winner.value_label) : null;
   return (
-    <div className="relative overflow-hidden border border-gray-200 dark:border-gray-800 rounded-lg p-5 flex flex-col">
-      {icon}
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 flex flex-col">
       <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
         {title}
       </h2>
@@ -158,18 +143,15 @@ function AwardCard({
 function MvpCard({
   winner,
   minGames,
-  icon,
   children,
 }: {
   winner: AwardWinner | null;
   minGames: number;
-  icon?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const stat = winner ? splitStat(winner.value_label) : null;
   return (
-    <div className="relative overflow-hidden border border-gray-200 dark:border-gray-800 rounded-lg p-5 flex flex-col">
-      {icon}
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 flex flex-col">
       <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
         MVP
       </h2>
@@ -381,11 +363,7 @@ function AwardsInner() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            <MvpCard
-              winner={awards.mvp}
-              minGames={awards.min_games_required}
-              icon={<MvpTrophy style={TROPHY_STYLE} />}
-            >
+            <MvpCard winner={awards.mvp} minGames={awards.min_games_required}>
               {isAdmin && (
                 <AdminMvpPicker
                   season={season}
@@ -400,7 +378,6 @@ function AwardsInner() {
               subtitle="Highest PPG (normalized to game-to-11)"
               entry={awards.scoring_leader}
               minGames={awards.min_games_required}
-              icon={<ScoringTrophy style={TROPHY_STYLE} />}
             />
 
             <AwardCard
@@ -408,7 +385,6 @@ function AwardsInner() {
               subtitle="Most steals + blocks per game"
               entry={awards.defensive_pots}
               minGames={awards.min_games_required}
-              icon={<DefensiveTrophy style={TROPHY_STYLE} />}
             />
 
             <AwardCard
@@ -416,7 +392,6 @@ function AwardsInner() {
               subtitle="Most game-winners in games decided by ≤ 3"
               entry={awards.clutch_pots}
               minGames={awards.min_games_required}
-              icon={<ClutchTrophy style={TROPHY_STYLE} />}
             />
           </div>
 
