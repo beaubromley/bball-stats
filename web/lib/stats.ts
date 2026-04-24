@@ -582,6 +582,16 @@ export async function getBoxScore(gameId: string): Promise<BoxScoreResult | null
   };
 }
 
+export interface GameHistoryMvp {
+  player_id: string;
+  player_name: string;
+  points: number;
+  assists: number;
+  steals: number;
+  blocks: number;
+  fantasy_points: number;
+}
+
 export async function getGameHistory() {
   const db = getDb();
 
@@ -616,6 +626,59 @@ export async function getGameHistory() {
       ORDER BY g.start_time DESC
   `);
 
+  // Second query: MVP per finished game. MVP = highest fantasy points on the
+  // winning team with deterministic tiebreakers (fp, pts, asts, player_id).
+  const mvpResult = await db.execute(`
+    WITH player_stats AS (
+      SELECT
+        r.game_id,
+        r.player_id,
+        p.name AS player_name,
+        r.team,
+        COALESCE(SUM(CASE WHEN ge.event_type IN ('score','correction') THEN ge.point_value ELSE 0 END), 0) AS points,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0) AS assists,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'steal'  THEN 1 ELSE 0 END), 0) AS steals,
+        COALESCE(SUM(CASE WHEN ge.event_type = 'block'  THEN 1 ELSE 0 END), 0) AS blocks
+      FROM rosters r
+      JOIN players p ON p.id = r.player_id
+      LEFT JOIN game_events ge ON ge.game_id = r.game_id AND ge.player_id = r.player_id
+      GROUP BY r.game_id, r.player_id, p.name, r.team
+    ),
+    ranked AS (
+      SELECT
+        ps.*,
+        (ps.points + ps.assists + ps.steals + ps.blocks) AS fp,
+        ROW_NUMBER() OVER (
+          PARTITION BY ps.game_id
+          ORDER BY
+            (ps.points + ps.assists + ps.steals + ps.blocks) DESC,
+            ps.points DESC,
+            ps.assists DESC,
+            ps.player_id ASC
+        ) AS rn
+      FROM player_stats ps
+      JOIN games g ON g.id = ps.game_id
+      WHERE g.status = 'finished'
+        AND g.winning_team IS NOT NULL
+        AND ps.team = g.winning_team
+    )
+    SELECT game_id, player_id, player_name, points, assists, steals, blocks, fp
+    FROM ranked WHERE rn = 1
+  `);
+
+  const mvpMap = new Map<string, GameHistoryMvp>();
+  for (const row of mvpResult.rows) {
+    mvpMap.set(row.game_id as string, {
+      player_id: row.player_id as string,
+      player_name: row.player_name as string,
+      points: Number(row.points),
+      assists: Number(row.assists),
+      steals: Number(row.steals),
+      blocks: Number(row.blocks),
+      fantasy_points: Number(row.fp),
+    });
+  }
+
   // Games are returned DESC — compute game_number (1 = oldest)
   const totalGames = result.rows.length;
   return result.rows.map((row, i) => ({
@@ -634,6 +697,7 @@ export async function getGameHistory() {
     team_a_score: Number(row.team_a_score),
     team_b_score: Number(row.team_b_score),
     game_number: totalGames - i,
+    mvp: mvpMap.get(row.id as string) ?? null,
   }));
 }
 

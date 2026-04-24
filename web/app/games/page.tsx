@@ -8,6 +8,16 @@ import { formatShortDateCT } from "@/lib/time";
 
 const API_BASE = "/api";
 
+interface GameMvp {
+  player_id: string;
+  player_name: string;
+  points: number;
+  assists: number;
+  steals: number;
+  blocks: number;
+  fantasy_points: number;
+}
+
 interface GameRow {
   id: string;
   start_time: string;
@@ -18,6 +28,7 @@ interface GameRow {
   team_a_score: number;
   team_b_score: number;
   game_number: number;
+  mvp: GameMvp | null;
 }
 
 export default function GamesPage() {
@@ -161,6 +172,32 @@ export default function GamesPage() {
                       </div>
                     </div>
                   </Link>
+
+                  {/* MVP + box score (finished games only) */}
+                  {game.mvp && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-900 flex items-baseline gap-3 flex-wrap">
+                      <span className="text-[10px] font-bold font-display uppercase tracking-wider text-yellow-600 dark:text-yellow-500">
+                        MVP
+                      </span>
+                      <Link
+                        href={`/player?id=${game.mvp.player_id}`}
+                        className="text-sm font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+                      >
+                        {game.mvp.player_name}
+                      </Link>
+                      <span className="text-xs tabular-nums text-gray-500 dark:text-gray-400">
+                        <span className="font-bold text-gray-700 dark:text-gray-200">{game.mvp.points}</span> PTS
+                        <span className="mx-1.5 text-gray-400 dark:text-gray-600">·</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-200">{game.mvp.assists}</span> AST
+                        <span className="mx-1.5 text-gray-400 dark:text-gray-600">·</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-200">{game.mvp.steals}</span> STL
+                        <span className="mx-1.5 text-gray-400 dark:text-gray-600">·</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-200">{game.mvp.blocks}</span> BLK
+                        <span className="mx-1.5 text-gray-400 dark:text-gray-600">·</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-200">{game.mvp.fantasy_points}</span> FP
+                      </span>
+                    </div>
+                  )}
 
                   {/* Action buttons (admin only) */}
                   {isAdmin && (
