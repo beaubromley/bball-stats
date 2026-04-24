@@ -48,6 +48,51 @@ interface LeaderboardPlayer {
   games_played: number;
 }
 
+// --- Award icons ---
+// Each card gets a unique decorative icon anchored in the top-right gap.
+// Rendered subtle (low contrast) so the hero stat stays the focal point.
+
+const ICON_CLASS =
+  "absolute top-[72px] right-5 text-gray-200 dark:text-gray-800 pointer-events-none";
+
+function CrownIcon() {
+  // MVP — regal crown
+  return (
+    <svg className={ICON_CLASS} width="92" height="92" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
+function FlameIcon() {
+  // Scoring Leader — flame
+  return (
+    <svg className={ICON_CLASS} width="92" height="92" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  // Defensive POTS — shield with check
+  return (
+    <svg className={ICON_CLASS} width="92" height="92" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
+
+function BoltIcon() {
+  // Clutch POTS — lightning bolt
+  return (
+    <svg className={ICON_CLASS} width="92" height="92" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+    </svg>
+  );
+}
+
 function splitStat(label: string): { value: string; unit: string; numeric: boolean } {
   const match = label.match(/^([\d.]+)\s*(.*)$/);
   if (!match) return { value: label, unit: "", numeric: false };
@@ -87,18 +132,21 @@ function AwardCard({
   subtitle,
   entry,
   minGames,
+  icon,
   children,
 }: {
   title: string;
   subtitle?: string;
   entry: AwardEntry;
   minGames: number;
+  icon?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const winner = entry.winner;
   const stat = winner ? splitStat(winner.value_label) : null;
   return (
-    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 flex flex-col">
+    <div className="relative overflow-hidden border border-gray-200 dark:border-gray-800 rounded-lg p-5 flex flex-col">
+      {icon}
       <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
         {title}
       </h2>
@@ -143,15 +191,18 @@ function AwardCard({
 function MvpCard({
   winner,
   minGames,
+  icon,
   children,
 }: {
   winner: AwardWinner | null;
   minGames: number;
+  icon?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const stat = winner ? splitStat(winner.value_label) : null;
   return (
-    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 flex flex-col">
+    <div className="relative overflow-hidden border border-gray-200 dark:border-gray-800 rounded-lg p-5 flex flex-col">
+      {icon}
       <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
         MVP
       </h2>
@@ -363,7 +414,7 @@ function AwardsInner() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            <MvpCard winner={awards.mvp} minGames={awards.min_games_required}>
+            <MvpCard winner={awards.mvp} minGames={awards.min_games_required} icon={<CrownIcon />}>
               {isAdmin && (
                 <AdminMvpPicker
                   season={season}
@@ -378,6 +429,7 @@ function AwardsInner() {
               subtitle="Highest PPG (normalized to game-to-11)"
               entry={awards.scoring_leader}
               minGames={awards.min_games_required}
+              icon={<FlameIcon />}
             />
 
             <AwardCard
@@ -385,6 +437,7 @@ function AwardsInner() {
               subtitle="Most steals + blocks per game"
               entry={awards.defensive_pots}
               minGames={awards.min_games_required}
+              icon={<ShieldIcon />}
             />
 
             <AwardCard
@@ -392,6 +445,7 @@ function AwardsInner() {
               subtitle="Most game-winners in games decided by ≤ 3"
               entry={awards.clutch_pots}
               minGames={awards.min_games_required}
+              icon={<BoltIcon />}
             />
           </div>
 
