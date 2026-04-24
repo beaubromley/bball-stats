@@ -4,6 +4,9 @@ import { GAMES_PER_SEASON } from "./seasons";
 
 // Minimum games played in the season to be eligible for any computed award.
 export const AWARDS_MIN_GAMES = 30;
+// Lower bar used only to fill remaining All-YMCA 2nd team slots when the
+// full-eligibility pool doesn't produce 10 qualified players.
+export const AWARDS_MIN_GAMES_FALLBACK = 10;
 
 export interface AwardWinner {
   player_id: string;
@@ -178,14 +181,32 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
     runner_up: mvpCountSort[1] && mvpCountSort[1].mvp_count > 0 ? toGameMvpWinner(mvpCountSort[1]) : null,
   };
 
-  // All-YMCA 1st/2nd — by fantasy PPG (2dp), tiebreak fantasy_points
+  // All-YMCA 1st/2nd — by fantasy PPG (2dp), tiebreak fantasy_points.
+  // 1st team: strictly top 5 among players with ≥ AWARDS_MIN_GAMES.
+  // 2nd team: ranks 6–10 among the same eligible pool, then fill remaining
+  // slots from players with ≥ AWARDS_MIN_GAMES_FALLBACK GP (ranked below
+  // anyone who hit the full game requirement).
   const fpg2 = (p: PlayerStats) =>
     r2((p.total_points + p.assists + p.steals + p.blocks) / (p.effective_games || 1));
-  const fpSort = [...eligible].sort(
-    (a, b) => (fpg2(b) - fpg2(a)) || (b.fantasy_points - a.fantasy_points),
-  );
+  const bySeasonFp = (a: PlayerStats, b: PlayerStats) =>
+    (fpg2(b) - fpg2(a)) || (b.fantasy_points - a.fantasy_points);
+
+  const fpSort = [...eligible].sort(bySeasonFp);
+  const fallbackPool = stats
+    .filter(
+      (p) =>
+        p.games_played >= AWARDS_MIN_GAMES_FALLBACK &&
+        p.games_played < AWARDS_MIN_GAMES,
+    )
+    .sort(bySeasonFp);
+
   const all_ymca_1st = fpSort.slice(0, 5).map(toAllYmcaWinner);
-  const all_ymca_2nd = fpSort.slice(5, 10).map(toAllYmcaWinner);
+  const second_primary = fpSort.slice(5, 10);
+  const needed = Math.max(0, 5 - second_primary.length);
+  const all_ymca_2nd = [
+    ...second_primary,
+    ...fallbackPool.slice(0, needed),
+  ].map(toAllYmcaWinner);
 
   // All-Defensive Team — top 5 by TOTAL steals + blocks, tiebreak per-game rate
   const defTotalSort = [...eligible].sort((a, b) => {
