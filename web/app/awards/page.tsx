@@ -393,13 +393,6 @@ function AwardsInner() {
               entry={awards.clutch_pots}
               minGames={awards.min_games_required}
             />
-
-            <AwardCard
-              title="Game MVP Leader"
-              subtitle="Most individual game MVP awards"
-              entry={awards.game_mvp_leader}
-              minGames={awards.min_games_required}
-            />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
@@ -415,10 +408,16 @@ function AwardsInner() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <TeamCard
               title="YMCA All-Defensive Team"
               players={awards.all_defensive}
+              minGames={awards.min_games_required}
+            />
+            <AwardCard
+              title="Game MVP Leader"
+              subtitle="Most individual game MVP awards"
+              entry={awards.game_mvp_leader}
               minGames={awards.min_games_required}
             />
           </div>
