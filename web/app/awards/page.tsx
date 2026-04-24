@@ -15,17 +15,23 @@ interface AwardWinner {
   games_played: number;
 }
 
+interface AwardEntry {
+  winner: AwardWinner | null;
+  runner_up: AwardWinner | null;
+}
+
 interface SeasonAwards {
   season: number;
   games_in_season: number;
   total_games_in_season: number;
   min_games_required: number;
   mvp: AwardWinner | null;
-  scoring_leader: AwardWinner | null;
-  defensive_pots: AwardWinner | null;
-  clutch_pots: AwardWinner | null;
+  scoring_leader: AwardEntry;
+  defensive_pots: AwardEntry;
+  clutch_pots: AwardEntry;
   all_ymca_1st: AwardWinner[];
   all_ymca_2nd: AwardWinner[];
+  all_defensive: AwardWinner[];
 }
 
 interface SeasonMeta {
@@ -47,19 +53,48 @@ function splitStat(label: string): { value: string; unit: string; numeric: boole
   return { value: match[1], unit: match[2], numeric: true };
 }
 
+function RunnerUpRow({ winner }: { winner: AwardWinner }) {
+  const stat = splitStat(winner.value_label);
+  return (
+    <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
+      <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display mb-1.5">
+        Runner-up
+      </div>
+      <div className="flex items-baseline justify-between gap-3">
+        <Link
+          href={`/player?id=${winner.player_id}`}
+          className="text-sm font-bold font-display text-gray-700 dark:text-gray-200 hover:text-blue-400 transition-colors truncate"
+        >
+          {winner.name}
+          <span className="ml-2 text-[11px] font-normal text-gray-500 tabular-nums">
+            · {winner.games_played} GP
+          </span>
+        </Link>
+        <span className="tabular-nums text-sm font-bold text-gray-700 dark:text-gray-200 shrink-0">
+          <span className="font-display">{stat.value}</span>
+          {stat.unit && (
+            <span className="text-[10px] text-gray-500 ml-1 uppercase tracking-wider">{stat.unit}</span>
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function AwardCard({
   title,
   subtitle,
-  winner,
+  entry,
   minGames,
   children,
 }: {
   title: string;
   subtitle?: string;
-  winner: AwardWinner | null;
+  entry: AwardEntry;
   minGames: number;
   children?: React.ReactNode;
 }) {
+  const winner = entry.winner;
   const stat = winner ? splitStat(winner.value_label) : null;
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 flex flex-col">
@@ -70,43 +105,70 @@ function AwardCard({
       {!subtitle && <div className="mb-1" />}
 
       {winner && stat ? (
-        stat.numeric ? (
-          <div className="flex-1">
-            {/* Hero stat — big bold number with high contrast */}
-            <div className="flex items-baseline gap-2 mb-4">
-              <span className="text-6xl font-bold font-display tabular-nums text-gray-900 dark:text-white leading-none">
-                {stat.value}
+        <div className="flex-1">
+          {/* Hero stat — big bold number with high contrast */}
+          <div className="flex items-baseline gap-2 mb-4">
+            <span className="text-6xl font-bold font-display tabular-nums text-gray-900 dark:text-white leading-none">
+              {stat.value}
+            </span>
+            {stat.unit && (
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-display uppercase tracking-wider">
+                {stat.unit}
               </span>
-              {stat.unit && (
-                <span className="text-xs text-gray-500 dark:text-gray-400 font-display uppercase tracking-wider">
-                  {stat.unit}
-                </span>
-              )}
-            </div>
-            {/* Winner name */}
-            <Link
-              href={`/player?id=${winner.player_id}`}
-              className="text-xl font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
-            >
-              {winner.name}
-            </Link>
-            <div className="text-[11px] text-gray-500 mt-1 tabular-nums">{winner.games_played} games played</div>
+            )}
           </div>
-        ) : (
-          // MVP / non-numeric: name is the hero
-          <div className="flex-1">
-            <Link
-              href={`/player?id=${winner.player_id}`}
-              className="block text-4xl font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors leading-tight mb-2"
-            >
-              {winner.name}
-            </Link>
-            <div className="text-[11px] text-gray-500 uppercase tracking-wider font-display">{stat.value}</div>
-          </div>
-        )
+          {/* Winner name with GP inline */}
+          <Link
+            href={`/player?id=${winner.player_id}`}
+            className="text-xl font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+          >
+            {winner.name}
+            <span className="ml-2 text-[11px] font-normal text-gray-500 tabular-nums">
+              · {winner.games_played} GP
+            </span>
+          </Link>
+          {entry.runner_up && <RunnerUpRow winner={entry.runner_up} />}
+        </div>
       ) : (
         <p className="text-sm text-gray-500 flex-1">
           No eligible player yet (min {minGames} games required).
+        </p>
+      )}
+      {children}
+    </div>
+  );
+}
+
+function MvpCard({
+  winner,
+  minGames,
+  children,
+}: {
+  winner: AwardWinner | null;
+  minGames: number;
+  children?: React.ReactNode;
+}) {
+  const stat = winner ? splitStat(winner.value_label) : null;
+  return (
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 flex flex-col">
+      <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
+        MVP
+      </h2>
+      <p className="text-[11px] text-gray-500 dark:text-gray-400 -mt-2 mb-4">Voted separately</p>
+
+      {winner && stat ? (
+        <div className="flex-1">
+          <Link
+            href={`/player?id=${winner.player_id}`}
+            className="block text-4xl font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors leading-tight mb-2"
+          >
+            {winner.name}
+          </Link>
+          <div className="text-[11px] text-gray-500 uppercase tracking-wider font-display">{stat.value}</div>
+        </div>
+      ) : (
+        <p className="text-sm text-gray-500 flex-1">
+          No MVP set yet (min {minGames} games recommended).
         </p>
       )}
       {children}
@@ -129,22 +191,25 @@ function TeamCard({ title, players, minGames }: { title: string; players: AwardW
             const isTop = i === 0;
             return (
               <li key={p.player_id} className="flex items-baseline gap-3 py-3 first:pt-0 last:pb-0">
-                <span className={`tabular-nums w-5 font-display ${isTop ? "text-base font-bold text-gray-900 dark:text-white" : "text-xs text-gray-400"}`}>
+                <span className={`tabular-nums w-5 font-display font-bold ${isTop ? "text-base text-gray-900 dark:text-white" : "text-xs text-gray-400"}`}>
                   {i + 1}
                 </span>
                 <Link
                   href={`/player?id=${p.player_id}`}
-                  className={`flex-1 hover:text-blue-400 transition-colors ${
+                  className={`flex-1 hover:text-blue-400 transition-colors font-bold font-display ${
                     isTop
-                      ? "text-lg font-bold font-display text-gray-900 dark:text-white"
-                      : "text-sm font-semibold text-gray-700 dark:text-gray-200"
+                      ? "text-lg text-gray-900 dark:text-white"
+                      : "text-sm text-gray-700 dark:text-gray-200"
                   }`}
                 >
                   {p.name}
+                  <span className="ml-2 text-[11px] font-normal text-gray-500 tabular-nums">
+                    · {p.games_played} GP
+                  </span>
                 </Link>
-                <span className={`tabular-nums ${isTop ? "text-base font-bold text-gray-900 dark:text-white" : "text-sm text-gray-500"}`}>
+                <span className={`tabular-nums font-bold ${isTop ? "text-base text-gray-900 dark:text-white" : "text-sm text-gray-700 dark:text-gray-200"}`}>
                   <span className="font-display">{stat.value}</span>
-                  {stat.unit && <span className="text-[11px] text-gray-500 ml-1 uppercase tracking-wider">{stat.unit}</span>}
+                  {stat.unit && <span className="text-[11px] font-normal text-gray-500 ml-1 uppercase tracking-wider">{stat.unit}</span>}
                 </span>
               </li>
             );
@@ -300,58 +365,61 @@ function AwardsInner() {
       {loading || !awards ? (
         <div className="text-gray-500 text-center py-16">Loading awards...</div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-          <AwardCard
-            title="MVP"
-            subtitle="Voted separately"
-            winner={awards.mvp}
-            minGames={awards.min_games_required}
-          >
-            {isAdmin && (
-              <AdminMvpPicker
-                season={season}
-                currentMvpId={awards.mvp?.player_id ?? null}
-                onSet={loadAwards}
-              />
-            )}
-          </AwardCard>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <MvpCard winner={awards.mvp} minGames={awards.min_games_required}>
+              {isAdmin && (
+                <AdminMvpPicker
+                  season={season}
+                  currentMvpId={awards.mvp?.player_id ?? null}
+                  onSet={loadAwards}
+                />
+              )}
+            </MvpCard>
 
-          <AwardCard
-            title="Scoring Leader"
-            subtitle="Highest PPG (normalized to game-to-11)"
-            winner={awards.scoring_leader}
-            minGames={awards.min_games_required}
-          />
+            <AwardCard
+              title="Scoring Leader"
+              subtitle="Highest PPG (normalized to game-to-11)"
+              entry={awards.scoring_leader}
+              minGames={awards.min_games_required}
+            />
 
-          <AwardCard
-            title="Defensive Player of the Season"
-            subtitle="Most steals + blocks per game"
-            winner={awards.defensive_pots}
-            minGames={awards.min_games_required}
-          />
+            <AwardCard
+              title="Defensive Player of the Season"
+              subtitle="Most steals + blocks per game"
+              entry={awards.defensive_pots}
+              minGames={awards.min_games_required}
+            />
 
-          <AwardCard
-            title="Clutch Player of the Season"
-            subtitle="Most game-winners in games decided by ≤ 3"
-            winner={awards.clutch_pots}
-            minGames={awards.min_games_required}
-          />
-        </div>
-      )}
+            <AwardCard
+              title="Clutch Player of the Season"
+              subtitle="Most game-winners in games decided by ≤ 3"
+              entry={awards.clutch_pots}
+              minGames={awards.min_games_required}
+            />
+          </div>
 
-      {awards && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <TeamCard
-            title="All-YMCA First Team"
-            players={awards.all_ymca_1st}
-            minGames={awards.min_games_required}
-          />
-          <TeamCard
-            title="All-YMCA Second Team"
-            players={awards.all_ymca_2nd}
-            minGames={awards.min_games_required}
-          />
-        </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <TeamCard
+              title="All-YMCA First Team"
+              players={awards.all_ymca_1st}
+              minGames={awards.min_games_required}
+            />
+            <TeamCard
+              title="All-YMCA Second Team"
+              players={awards.all_ymca_2nd}
+              minGames={awards.min_games_required}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <TeamCard
+              title="YMCA All-Defensive Team"
+              players={awards.all_defensive}
+              minGames={awards.min_games_required}
+            />
+          </div>
+        </>
       )}
     </div>
   );

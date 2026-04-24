@@ -13,17 +13,23 @@ export interface AwardWinner {
   games_played: number;
 }
 
+export interface AwardEntry {
+  winner: AwardWinner | null;
+  runner_up: AwardWinner | null;
+}
+
 export interface SeasonAwards {
   season: number;
   games_in_season: number;
   total_games_in_season: number;
   min_games_required: number;
-  mvp: AwardWinner | null;              // manually set by admin
-  scoring_leader: AwardWinner | null;
-  defensive_pots: AwardWinner | null;
-  clutch_pots: AwardWinner | null;
+  mvp: AwardWinner | null;              // manually set by admin (no runner-up)
+  scoring_leader: AwardEntry;
+  defensive_pots: AwardEntry;
+  clutch_pots: AwardEntry;
   all_ymca_1st: AwardWinner[];          // top 5 by fantasy PPG
   all_ymca_2nd: AwardWinner[];          // ranks 6-10 by fantasy PPG
+  all_defensive: AwardWinner[];         // top 5 by total steals + blocks
 }
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -49,6 +55,17 @@ function toDefensiveWinner(p: PlayerStats): AwardWinner {
   };
 }
 
+function toDefensiveTotalWinner(p: PlayerStats): AwardWinner {
+  const total = p.steals + p.blocks;
+  return {
+    player_id: p.id,
+    name: p.name,
+    value: total,
+    value_label: `${total} STL+BLK`,
+    games_played: p.games_played,
+  };
+}
+
 function toAllYmcaWinner(p: PlayerStats): AwardWinner {
   return {
     player_id: p.id,
@@ -65,17 +82,19 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
 
   const { gameIds, meta } = await getSeasonGameIds(season);
 
+  const emptyEntry: AwardEntry = { winner: null, runner_up: null };
   const empty: SeasonAwards = {
     season,
     games_in_season: meta.gamesInSeason,
     total_games_in_season: GAMES_PER_SEASON,
     min_games_required: AWARDS_MIN_GAMES,
     mvp: null,
-    scoring_leader: null,
-    defensive_pots: null,
-    clutch_pots: null,
+    scoring_leader: emptyEntry,
+    defensive_pots: emptyEntry,
+    clutch_pots: emptyEntry,
     all_ymca_1st: [],
     all_ymca_2nd: [],
+    all_defensive: [],
   };
 
   // MVP is admin-settable even if no games yet
@@ -113,7 +132,10 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
   const scoringSort = [...eligible].sort(
     (a, b) => (b.ppg - a.ppg) || (b.total_points - a.total_points),
   );
-  const scoring_leader = scoringSort[0] ? toScoringWinner(scoringSort[0]) : null;
+  const scoring_leader: AwardEntry = {
+    winner: scoringSort[0] ? toScoringWinner(scoringSort[0]) : null,
+    runner_up: scoringSort[1] ? toScoringWinner(scoringSort[1]) : null,
+  };
 
   // Defensive POTS — (SPG + BPG), tiebreak total steals+blocks
   const defSort = [...eligible].sort((a, b) => {
@@ -122,7 +144,10 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
     if (bVal !== aVal) return bVal - aVal;
     return (b.steals + b.blocks) - (a.steals + a.blocks);
   });
-  const defensive_pots = defSort[0] ? toDefensiveWinner(defSort[0]) : null;
+  const defensive_pots: AwardEntry = {
+    winner: defSort[0] ? toDefensiveWinner(defSort[0]) : null,
+    runner_up: defSort[1] ? toDefensiveWinner(defSort[1]) : null,
+  };
 
   // All-YMCA 1st/2nd — by fantasy PPG, tiebreak fantasy_points
   const fpSort = [...eligible].sort(
@@ -130,6 +155,15 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
   );
   const all_ymca_1st = fpSort.slice(0, 5).map(toAllYmcaWinner);
   const all_ymca_2nd = fpSort.slice(5, 10).map(toAllYmcaWinner);
+
+  // All-Defensive Team — top 5 by TOTAL steals + blocks, tiebreak per-game rate
+  const defTotalSort = [...eligible].sort((a, b) => {
+    const aVal = a.steals + a.blocks;
+    const bVal = b.steals + b.blocks;
+    if (bVal !== aVal) return bVal - aVal;
+    return (b.spg + b.bpg) - (a.spg + a.bpg);
+  });
+  const all_defensive = defTotalSort.slice(0, 5).map(toDefensiveTotalWinner);
 
   // Clutch POTS — last scoring event in games decided by ≤ 3 points,
   // credited only to the scorer on the winning team.
@@ -180,23 +214,27 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
     args: [...gameIds, ...gameIds],
   });
 
-  // Pick the top eligible player (skip anyone under the games-played min)
-  let clutch_pots: AwardWinner | null = null;
+  // Pick the top two eligible players for winner + runner-up
+  const clutchPicks: AwardWinner[] = [];
   for (const row of clutchResult.rows) {
     const pid = row.player_id as string;
     if (!eligibleIds.has(pid)) continue;
     const eligiblePlayer = eligible.find((p) => p.id === pid);
     if (!eligiblePlayer) continue;
     const count = Number(row.game_winners);
-    clutch_pots = {
+    clutchPicks.push({
       player_id: pid,
       name: row.name as string,
       value: count,
       value_label: `${count} game-winner${count !== 1 ? "s" : ""}`,
       games_played: eligiblePlayer.games_played,
-    };
-    break;
+    });
+    if (clutchPicks.length >= 2) break;
   }
+  const clutch_pots: AwardEntry = {
+    winner: clutchPicks[0] ?? null,
+    runner_up: clutchPicks[1] ?? null,
+  };
 
   // MVP lookup (already queried above) — look up games_played if possible
   const mvp: AwardWinner | null = mvpRow
@@ -220,6 +258,7 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
     clutch_pots,
     all_ymca_1st,
     all_ymca_2nd,
+    all_defensive,
   };
 }
 
