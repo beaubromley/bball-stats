@@ -47,8 +47,8 @@ export default function Nav() {
   const links = [
     { href: "/", label: "Stats" },
     { href: "/games", label: "Games" },
-    // Awards tab hidden from non-admins until Season 1 finishes
-    ...(isAdmin ? [{ href: "/awards", label: "Awards" }] : []),
+    // Awards page self-gates by season completion (admins see in-progress seasons too)
+    { href: "/awards", label: "Awards" },
     ...(isAdmin
       ? [{ href: "/record", label: "Record" }, { href: "/players", label: "Players" }, { href: "/insights", label: "Insights" }]
       : isViewer

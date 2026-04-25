@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/app/components/AuthProvider";
 
 const API_BASE = "/api";
@@ -107,7 +106,6 @@ function AwardCard({
 
       {winner && stat ? (
         <div className="flex-1">
-          {/* Hero stat — big bold number with high contrast */}
           <div className="flex items-baseline gap-2 mb-4">
             <span className="text-6xl font-bold font-display tabular-nums text-gray-900 dark:text-white leading-none">
               {stat.value}
@@ -118,7 +116,6 @@ function AwardCard({
               </span>
             )}
           </div>
-          {/* Winner name with GP inline */}
           <Link
             href={`/player?id=${winner.player_id}`}
             className="text-xl font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
@@ -238,7 +235,6 @@ function AdminMvpPicker({
       .then((r) => r.json())
       .then((data) => {
         const list: LeaderboardPlayer[] = Array.isArray(data) ? data : data.data || [];
-        // Sort alphabetically for the picker
         list.sort((a, b) => a.name.localeCompare(b.name));
         setPlayers(list);
       })
@@ -285,90 +281,114 @@ function AdminMvpPicker({
   );
 }
 
-function AwardsInner() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const { isAdmin } = useAuth();
+// --- Collapsed-state summary ---
 
-  const [meta, setMeta] = useState<SeasonMeta | null>(null);
-  const [awards, setAwards] = useState<SeasonAwards | null>(null);
-  const [loading, setLoading] = useState(true);
+function SummaryItem({ label, winner }: { label: string; winner: AwardWinner | null }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display mb-0.5">
+        {label}
+      </div>
+      {winner ? (
+        <Link
+          href={`/player?id=${winner.player_id}`}
+          className="text-sm font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors block truncate"
+        >
+          {winner.name}
+        </Link>
+      ) : (
+        <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
+      )}
+    </div>
+  );
+}
 
-  const urlSeason = searchParams.get("season");
-  const season = useMemo(() => {
-    const n = urlSeason ? parseInt(urlSeason, 10) : NaN;
-    return Number.isFinite(n) && n >= 1 ? n : null;
-  }, [urlSeason]);
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`text-gray-500 dark:text-gray-400 transition-transform shrink-0 ${
+        expanded ? "rotate-90" : ""
+      }`}
+    >
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
 
-  // Load meta first, default to current season if no URL param
-  useEffect(() => {
-    fetch(`${API_BASE}/stats/seasons`)
-      .then((r) => r.json())
-      .then((m: SeasonMeta) => {
-        setMeta(m);
-        if (season === null) {
-          router.replace(`/awards?season=${m.currentSeason}`);
-        }
-      })
-      .catch(() => {});
-  }, [season, router]);
+// --- Per-season accordion ---
 
-  const loadAwards = useMemo(() => {
-    return () => {
-      if (season === null) return;
-      setLoading(true);
-      fetch(`${API_BASE}/seasons/${season}/awards`)
-        .then((r) => r.json())
-        .then(setAwards)
-        .finally(() => setLoading(false));
-    };
-  }, [season]);
-
-  useEffect(() => {
-    loadAwards();
-  }, [loadAwards]);
-
-  if (season === null || !meta) {
-    return <div className="text-gray-500 text-center py-16">Loading...</div>;
-  }
-
-  const isInProgress = season === meta.currentSeason && awards
-    ? awards.games_in_season < awards.total_games_in_season
-    : false;
+function SeasonAccordion({
+  season,
+  awards,
+  expanded,
+  onToggle,
+  isAdmin,
+  onMvpUpdate,
+}: {
+  season: number;
+  awards: SeasonAwards;
+  expanded: boolean;
+  onToggle: () => void;
+  isAdmin: boolean;
+  onMvpUpdate: () => void;
+}) {
+  const completed = awards.games_in_season >= awards.total_games_in_season;
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
-        <h1 className="text-3xl font-bold font-display uppercase tracking-wide">Awards</h1>
-        <select
-          value={season}
-          onChange={(e) => router.push(`/awards?season=${e.target.value}`)}
-          className="text-sm px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-gray-900 dark:text-white focus:outline-none focus:border-blue-500"
-        >
-          {Array.from({ length: meta.totalSeasons }, (_, i) => i + 1).map((s) => (
-            <option key={s} value={s}>Season {s}{s === meta.currentSeason ? " (current)" : ""}</option>
-          ))}
-        </select>
-      </div>
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+      {/* Header bar */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <ChevronIcon expanded={expanded} />
+          <div className="min-w-0">
+            <div className="text-base font-bold font-display uppercase tracking-wide text-gray-900 dark:text-white">
+              Season {season}
+            </div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">
+              {completed
+                ? `Completed · ${awards.total_games_in_season} games`
+                : `In progress · ${awards.games_in_season} / ${awards.total_games_in_season} games · min ${awards.min_games_required} GP to qualify`}
+            </div>
+          </div>
+        </div>
+        {!completed && (
+          <span className="text-[10px] font-bold font-display uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 shrink-0">
+            Provisional
+          </span>
+        )}
+      </button>
 
-      {awards && (
-        <p className="text-xs text-gray-500 mb-6">
-          {isInProgress ? "Provisional — " : ""}
-          {awards.games_in_season} / {awards.total_games_in_season} games completed · min {awards.min_games_required} GP to qualify
-        </p>
+      {/* Collapsed summary */}
+      {!expanded && (
+        <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <SummaryItem label="MVP" winner={awards.mvp} />
+          <SummaryItem label="Scoring Leader" winner={awards.scoring_leader.winner} />
+          <SummaryItem label="Def. POTS" winner={awards.defensive_pots.winner} />
+          <SummaryItem label="Clutch POTS" winner={awards.clutch_pots.winner} />
+        </div>
       )}
 
-      {loading || !awards ? (
-        <div className="text-gray-500 text-center py-16">Loading awards...</div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+      {/* Expanded full layout */}
+      {expanded && (
+        <div className="border-t border-gray-200 dark:border-gray-800 p-4 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <MvpCard winner={awards.mvp} minGames={awards.min_games_required}>
               {isAdmin && (
                 <AdminMvpPicker
                   season={season}
                   currentMvpId={awards.mvp?.player_id ?? null}
-                  onSet={loadAwards}
+                  onSet={onMvpUpdate}
                 />
               )}
             </MvpCard>
@@ -395,7 +415,7 @@ function AwardsInner() {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <TeamCard
               title="All-YMCA First Team"
               players={awards.all_ymca_1st}
@@ -421,16 +441,120 @@ function AwardsInner() {
               minGames={awards.min_games_required}
             />
           </div>
-        </>
+        </div>
       )}
     </div>
   );
 }
 
+// --- Page shell ---
+
 export default function AwardsPage() {
+  const { isAdmin } = useAuth();
+  const [meta, setMeta] = useState<SeasonMeta | null>(null);
+  const [awardsBySeason, setAwardsBySeason] = useState<Map<number, SeasonAwards>>(new Map());
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  // Fetch meta + every season's awards in parallel.
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const m: SeasonMeta = await fetch(`${API_BASE}/stats/seasons`).then((r) => r.json());
+        if (cancelled) return;
+        setMeta(m);
+
+        const seasons = Array.from({ length: m.totalSeasons }, (_, i) => i + 1);
+        const entries = await Promise.all(
+          seasons.map(
+            (s) =>
+              fetch(`${API_BASE}/seasons/${s}/awards`)
+                .then((r) => r.json() as Promise<SeasonAwards>)
+                .then((a) => [s, a] as const),
+          ),
+        );
+        if (cancelled) return;
+
+        setAwardsBySeason(new Map(entries));
+
+        // Default-expand the most recent COMPLETED season; if none exist,
+        // fall back to the most recent visible (admin viewing only in-progress).
+        const completedNums = entries
+          .filter(([, a]) => a.games_in_season >= a.total_games_in_season)
+          .map(([s]) => s);
+        const defaultExpand =
+          completedNums.length > 0 ? Math.max(...completedNums) : m.currentSeason;
+        setExpanded(new Set([defaultExpand]));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function reloadSeason(season: number) {
+    fetch(`${API_BASE}/seasons/${season}/awards`)
+      .then((r) => r.json() as Promise<SeasonAwards>)
+      .then((a) => {
+        setAwardsBySeason((prev) => {
+          const next = new Map(prev);
+          next.set(season, a);
+          return next;
+        });
+      })
+      .catch(() => {});
+  }
+
+  function toggle(season: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(season)) next.delete(season);
+      else next.add(season);
+      return next;
+    });
+  }
+
+  if (loading || !meta) {
+    return <div className="text-gray-500 text-center py-16">Loading awards...</div>;
+  }
+
+  // Most recent first; non-admins only see completed seasons.
+  const seasonsDesc = Array.from({ length: meta.totalSeasons }, (_, i) => meta.totalSeasons - i);
+  const visible = seasonsDesc.filter((s) => {
+    const a = awardsBySeason.get(s);
+    if (!a) return false;
+    const completed = a.games_in_season >= a.total_games_in_season;
+    return completed || isAdmin;
+  });
+
   return (
-    <Suspense fallback={<div className="text-gray-500 text-center py-16">Loading...</div>}>
-      <AwardsInner />
-    </Suspense>
+    <div>
+      <h1 className="text-3xl font-bold font-display uppercase tracking-wide mb-6">Awards</h1>
+
+      {visible.length === 0 ? (
+        <div className="text-gray-500 text-center py-16">
+          <p className="text-lg">No completed seasons yet.</p>
+          <p className="text-sm mt-2">Awards are revealed once the season finishes.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {visible.map((s) => (
+            <SeasonAccordion
+              key={s}
+              season={s}
+              awards={awardsBySeason.get(s)!}
+              expanded={expanded.has(s)}
+              onToggle={() => toggle(s)}
+              isAdmin={isAdmin}
+              onMvpUpdate={() => reloadSeason(s)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
