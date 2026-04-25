@@ -286,18 +286,18 @@ function AdminMvpPicker({
 function SummaryItem({ label, winner }: { label: string; winner: AwardWinner | null }) {
   return (
     <div className="min-w-0">
-      <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display mb-0.5">
+      <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display mb-1">
         {label}
       </div>
       {winner ? (
         <Link
           href={`/player?id=${winner.player_id}`}
-          className="text-sm font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors block truncate"
+          className="text-lg font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors block truncate"
         >
           {winner.name}
         </Link>
       ) : (
-        <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
+        <span className="text-lg text-gray-400 dark:text-gray-600">—</span>
       )}
     </div>
   );
@@ -306,8 +306,8 @@ function SummaryItem({ label, winner }: { label: string; winner: AwardWinner | n
 function ChevronIcon({ expanded }: { expanded: boolean }) {
   return (
     <svg
-      width="16"
-      height="16"
+      width="20"
+      height="20"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -347,15 +347,15 @@ function SeasonAccordion({
       {/* Header bar */}
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors text-left"
+        className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors text-left"
       >
         <div className="flex items-center gap-3 min-w-0">
           <ChevronIcon expanded={expanded} />
           <div className="min-w-0">
-            <div className="text-base font-bold font-display uppercase tracking-wide text-gray-900 dark:text-white">
+            <div className="text-xl font-bold font-display uppercase tracking-wide text-gray-900 dark:text-white">
               Season {season}
             </div>
-            <div className="text-[11px] text-gray-500 dark:text-gray-400">
+            <div className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
               {completed
                 ? `Completed · ${awards.total_games_in_season} games`
                 : `In progress · ${awards.games_in_season} / ${awards.total_games_in_season} games · min ${awards.min_games_required} GP to qualify`}
@@ -363,7 +363,7 @@ function SeasonAccordion({
           </div>
         </div>
         {!completed && (
-          <span className="text-[10px] font-bold font-display uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 shrink-0">
+          <span className="text-xs font-bold font-display uppercase tracking-wider px-2.5 py-1 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 shrink-0">
             Provisional
           </span>
         )}
@@ -371,7 +371,7 @@ function SeasonAccordion({
 
       {/* Collapsed summary */}
       {!expanded && (
-        <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="border-t border-gray-200 dark:border-gray-800 px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
           <SummaryItem label="MVP" winner={awards.mvp} />
           <SummaryItem label="Scoring Leader" winner={awards.scoring_leader.winner} />
           <SummaryItem label="Def. POTS" winner={awards.defensive_pots.winner} />
