@@ -337,6 +337,13 @@ export async function getGameLevelRecords(): Promise<GameRecord[]> {
   const numberMap = await getGameNumberMap();
 
   // Pull every score event for finished, decided games — ordered per game.
+  // Exclude scores that were later undone via a correction (and the
+  // correction events themselves). A "correction" stores corrected_event_id
+  // pointing at the score it cancels; both rows stay in the DB. If we
+  // walked them, Team A in a game might transiently appear up 11–6 before
+  // dropping back to 10–6, and that phantom 5-point "deficit" would get
+  // counted as a comeback for Team B. Filter them out so only plays that
+  // actually stuck show up in the running scores.
   const eventsResult = await db.execute(`
     SELECT
       ge.game_id,
@@ -347,7 +354,11 @@ export async function getGameLevelRecords(): Promise<GameRecord[]> {
     JOIN games g ON g.id = ge.game_id
     WHERE g.status = 'finished'
       AND g.winning_team IS NOT NULL
-      AND ge.event_type IN ('score', 'correction')
+      AND ge.event_type = 'score'
+      AND ge.id NOT IN (
+        SELECT corrected_event_id FROM game_events
+        WHERE event_type = 'correction' AND corrected_event_id IS NOT NULL
+      )
     ORDER BY ge.game_id, ge.created_at ASC, ge.id ASC
   `);
 
