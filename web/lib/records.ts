@@ -1,6 +1,35 @@
 import { getDb } from "./turso";
 import { getLeaderboard, getSeasonGameIds } from "./stats";
-import { getSeasonInfo } from "./seasons";
+import { getSeasonInfo, getSeasonForGameNumber } from "./seasons";
+
+// =======================================================================
+// Shared helpers
+// =======================================================================
+
+/**
+ * Map of game_id -> { game_number, season } for every finished game.
+ * Game number is 1-indexed in chronological (start_time) order. Season is
+ * derived from GAMES_PER_SEASON.
+ */
+async function getGameNumberMap(): Promise<
+  Map<string, { game_number: number; season: number }>
+> {
+  const db = getDb();
+  const result = await db.execute(`
+    SELECT id, ROW_NUMBER() OVER (ORDER BY start_time ASC) AS game_number
+    FROM games
+    WHERE status = 'finished'
+  `);
+  const map = new Map<string, { game_number: number; season: number }>();
+  for (const row of result.rows) {
+    const num = Number(row.game_number);
+    map.set(row.id as string, {
+      game_number: num,
+      season: getSeasonForGameNumber(num),
+    });
+  }
+  return map;
+}
 
 // =======================================================================
 // Types
@@ -16,6 +45,8 @@ export interface SingleGameRecord {
   value: number;
   game_id: string;
   start_time: string;
+  game_number: number;
+  season: number;
 }
 
 export type SeasonRecordStat =
@@ -49,6 +80,8 @@ export interface GameRecord {
   winning_team: "A" | "B";
   team_a_players: string[];
   team_b_players: string[];
+  game_number: number;
+  season: number;
 }
 
 export type StreakKind = "win_streak" | "loss_streak";
@@ -61,6 +94,12 @@ export interface StreakRecord {
   value: number;
   start_time: string; // start of first game in streak
   end_time: string;   // start of last game in streak
+  start_game_id: string;
+  end_game_id: string;
+  start_game_number: number;
+  end_game_number: number;
+  start_season: number;
+  end_season: number;
 }
 
 export type MilestoneStat = "points" | "assists" | "steals" | "blocks" | "games";
@@ -143,6 +182,7 @@ export async function getMilestoneWatch(): Promise<MilestoneAlert[]> {
 
 export async function getSingleGameRecords(): Promise<SingleGameRecord[]> {
   const db = getDb();
+  const numberMap = await getGameNumberMap();
 
   const result = await db.execute(`
     SELECT
@@ -182,15 +222,20 @@ export async function getSingleGameRecords(): Promise<SingleGameRecord[]> {
     if (max <= 0) return [];
     const ties = rows.filter((r) => r[key] === max);
     ties.sort((a, b) => b.start_time.localeCompare(a.start_time));
-    return ties.map((r) => ({
-      category: "single_game" as const,
-      stat: statName,
-      player_id: r.player_id,
-      player_name: r.player_name,
-      value: r[key],
-      game_id: r.game_id,
-      start_time: r.start_time,
-    }));
+    return ties.map((r) => {
+      const num = numberMap.get(r.game_id);
+      return {
+        category: "single_game" as const,
+        stat: statName,
+        player_id: r.player_id,
+        player_name: r.player_name,
+        value: r[key],
+        game_id: r.game_id,
+        start_time: r.start_time,
+        game_number: num?.game_number ?? 0,
+        season: num?.season ?? 0,
+      };
+    });
   }
 
   return [
@@ -289,6 +334,7 @@ export async function getSeasonRecords(): Promise<SeasonRecord[]> {
 
 export async function getGameLevelRecords(): Promise<GameRecord[]> {
   const db = getDb();
+  const numberMap = await getGameNumberMap();
 
   // Pull every score event for finished, decided games — ordered per game.
   const eventsResult = await db.execute(`
@@ -395,18 +441,23 @@ export async function getGameLevelRecords(): Promise<GameRecord[]> {
     if (max <= 0) return [];
     const ties = stats.filter((s) => s[key] === max);
     ties.sort((a, b) => b.start_time.localeCompare(a.start_time));
-    return ties.map((s) => ({
-      category: "game" as const,
-      stat,
-      game_id: s.game_id,
-      start_time: s.start_time,
-      value: s[key],
-      team_a_score: s.final_a,
-      team_b_score: s.final_b,
-      winning_team: s.winning_team,
-      team_a_players: s.team_a_players,
-      team_b_players: s.team_b_players,
-    }));
+    return ties.map((s) => {
+      const num = numberMap.get(s.game_id);
+      return {
+        category: "game" as const,
+        stat,
+        game_id: s.game_id,
+        start_time: s.start_time,
+        value: s[key],
+        team_a_score: s.final_a,
+        team_b_score: s.final_b,
+        winning_team: s.winning_team,
+        team_a_players: s.team_a_players,
+        team_b_players: s.team_b_players,
+        game_number: num?.game_number ?? 0,
+        season: num?.season ?? 0,
+      };
+    });
   }
 
   return [...build("margin", "margin"), ...build("comeback", "comeback")];
@@ -418,11 +469,13 @@ export async function getGameLevelRecords(): Promise<GameRecord[]> {
 
 export async function getStreakRecords(): Promise<StreakRecord[]> {
   const db = getDb();
+  const numberMap = await getGameNumberMap();
   const result = await db.execute(`
     SELECT
       r.player_id,
       p.name AS player_name,
       r.team,
+      r.game_id,
       g.winning_team,
       g.start_time
     FROM rosters r
@@ -439,6 +492,8 @@ export async function getStreakRecords(): Promise<StreakRecord[]> {
     length: number;
     start_time: string;
     end_time: string;
+    start_game_id: string;
+    end_game_id: string;
   };
   const runs: Run[] = [];
 
@@ -448,10 +503,12 @@ export async function getStreakRecords(): Promise<StreakRecord[]> {
     const name = row.player_name as string;
     const won = row.team === row.winning_team;
     const t = row.start_time as string;
+    const gid = row.game_id as string;
 
     if (cur && cur.player_id === pid && cur.won === won) {
       cur.length += 1;
       cur.end_time = t;
+      cur.end_game_id = gid;
     } else {
       if (cur) runs.push(cur);
       cur = {
@@ -461,6 +518,8 @@ export async function getStreakRecords(): Promise<StreakRecord[]> {
         length: 1,
         start_time: t,
         end_time: t,
+        start_game_id: gid,
+        end_game_id: gid,
       };
     }
   }
@@ -475,15 +534,25 @@ export async function getStreakRecords(): Promise<StreakRecord[]> {
     if (max <= 1) return []; // streak of 1 is trivial
     const ties = filtered.filter((r) => r.length === max);
     ties.sort((a, b) => b.end_time.localeCompare(a.end_time));
-    return ties.map((r) => ({
-      category: "streak" as const,
-      stat,
-      player_id: r.player_id,
-      player_name: r.player_name,
-      value: r.length,
-      start_time: r.start_time,
-      end_time: r.end_time,
-    }));
+    return ties.map((r) => {
+      const start = numberMap.get(r.start_game_id);
+      const end = numberMap.get(r.end_game_id);
+      return {
+        category: "streak" as const,
+        stat,
+        player_id: r.player_id,
+        player_name: r.player_name,
+        value: r.length,
+        start_time: r.start_time,
+        end_time: r.end_time,
+        start_game_id: r.start_game_id,
+        end_game_id: r.end_game_id,
+        start_game_number: start?.game_number ?? 0,
+        end_game_number: end?.game_number ?? 0,
+        start_season: start?.season ?? 0,
+        end_season: end?.season ?? 0,
+      };
+    });
   }
 
   return [...pick("win_streak", true), ...pick("loss_streak", false)];
