@@ -46,6 +46,7 @@ export default function Nav() {
   const loggedIn = isAdmin || isViewer;
   const links = [
     { href: "/", label: "Stats" },
+    { href: "/home", label: "Home" },
     { href: "/games", label: "Games" },
     // Awards page self-gates by season completion (admins see in-progress seasons too)
     { href: "/awards", label: "Awards" },
