@@ -6,7 +6,9 @@ import { formatShortDateCT } from "@/lib/time";
 
 const API_BASE = "/api";
 
-// --- Types matching the various endpoints we hit ---
+// =======================================================================
+// Types matching the various endpoints we hit
+// =======================================================================
 
 interface GameMvp {
   player_id: string;
@@ -49,37 +51,47 @@ interface SeasonMeta {
   gamesPerSeason: number;
 }
 
-interface AwardWinner {
-  player_id: string;
-  name: string;
-  value: number;
-  value_label: string;
-  games_played: number;
-}
-
-interface AwardEntry {
-  winner: AwardWinner | null;
-  runner_up: AwardWinner | null;
-}
-
-interface SeasonAwards {
-  season: number;
-  games_in_season: number;
-  total_games_in_season: number;
-  min_games_required: number;
-  mvp: AwardWinner | null;
-  scoring_leader: AwardEntry;
-  defensive_pots: AwardEntry;
-  clutch_pots: AwardEntry;
-}
-
 interface SingleGameRecord {
+  category: "single_game";
   stat: "points" | "assists" | "steals" | "blocks" | "fantasy_points";
   player_id: string;
   player_name: string;
   value: number;
   game_id: string;
   start_time: string;
+}
+
+interface SeasonRecord {
+  category: "season";
+  stat: "points" | "assists" | "steals" | "blocks" | "fantasy_points" | "wins";
+  player_id: string;
+  player_name: string;
+  value: number;
+  season: number;
+  games_played: number;
+}
+
+interface GameRecord {
+  category: "game";
+  stat: "margin" | "comeback";
+  game_id: string;
+  start_time: string;
+  value: number;
+  team_a_score: number;
+  team_b_score: number;
+  winning_team: "A" | "B";
+  team_a_players: string[];
+  team_b_players: string[];
+}
+
+interface StreakRecord {
+  category: "streak";
+  stat: "win_streak" | "loss_streak";
+  player_id: string;
+  player_name: string;
+  value: number;
+  start_time: string;
+  end_time: string;
 }
 
 interface MilestoneAlert {
@@ -91,19 +103,29 @@ interface MilestoneAlert {
   remaining: number;
 }
 
-interface RecordsData {
-  records: SingleGameRecord[];
+interface RecordsBundle {
+  single_game: SingleGameRecord[];
+  season: SeasonRecord[];
+  game: GameRecord[];
+  streak: StreakRecord[];
   milestones: MilestoneAlert[];
 }
 
-// --- Display helpers ---
+// =======================================================================
+// Display helpers
+// =======================================================================
 
-const STAT_LABEL: Record<string, string> = {
+const STAT_SHORT: Record<string, string> = {
   points: "PTS",
   assists: "AST",
   steals: "STL",
   blocks: "BLK",
   fantasy_points: "FP",
+  wins: "WINS",
+  margin: "MARGIN",
+  comeback: "COMEBACK",
+  win_streak: "WIN STREAK",
+  loss_streak: "LOSS STREAK",
   games: "GP",
 };
 
@@ -115,7 +137,20 @@ const STAT_LONG: Record<string, string> = {
   games: "Career Games",
 };
 
-// --- Components ---
+// Group an array of records by `stat` while preserving the order they arrived.
+function groupByStat<T extends { stat: string }>(items: T[]): { stat: string; rows: T[] }[] {
+  const out: { stat: string; rows: T[] }[] = [];
+  for (const item of items) {
+    const last = out[out.length - 1];
+    if (last && last.stat === item.stat) last.rows.push(item);
+    else out.push({ stat: item.stat, rows: [item] });
+  }
+  return out;
+}
+
+// =======================================================================
+// Components
+// =======================================================================
 
 function LiveBanner({ game }: { game: GameRow }) {
   return (
@@ -226,25 +261,19 @@ function LatestGameHero({ game }: { game: GameRow }) {
 
 function SeasonPulse({
   meta,
-  awards,
   topByFpg,
 }: {
   meta: SeasonMeta;
-  awards: SeasonAwards | null;
   topByFpg: PlayerRow[];
 }) {
-  const completed = awards
-    ? awards.games_in_season >= awards.total_games_in_season
-    : false;
-  const remaining = awards
-    ? Math.max(0, awards.total_games_in_season - awards.games_in_season)
-    : 0;
-  const pct = awards
-    ? Math.round((awards.games_in_season / awards.total_games_in_season) * 100)
-    : 0;
+  // Compute games-in-season directly from meta — avoids an extra fetch.
+  const seasonStartGameIdx = (meta.currentSeason - 1) * meta.gamesPerSeason;
+  const gamesInSeason = Math.max(0, meta.totalGames - seasonStartGameIdx);
+  const totalSeasonGames = meta.gamesPerSeason;
+  const remaining = Math.max(0, totalSeasonGames - gamesInSeason);
+  const completed = gamesInSeason >= totalSeasonGames;
+  const pct = Math.min(100, Math.round((gamesInSeason / totalSeasonGames) * 100));
 
-  // MVP race: top two by FPG with a real qualifying GP count.
-  // (Awards page uses ≥30 GP, but for the home strip we just show the leaderboard frontrunners.)
   const [first, second] = topByFpg;
   const gap = first && second ? Math.round((first.fpg - second.fpg) * 100) / 100 : 0;
 
@@ -255,27 +284,19 @@ function SeasonPulse({
           Season {meta.currentSeason}
         </div>
         <div className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
-          {awards ? (
-            completed
-              ? `Completed · ${awards.total_games_in_season} games`
-              : `${awards.games_in_season} / ${awards.total_games_in_season} games · ${remaining} to go`
-          ) : (
-            `${meta.totalGames} games`
-          )}
+          {completed
+            ? `Completed · ${totalSeasonGames} games`
+            : `${gamesInSeason} / ${totalSeasonGames} games · ${remaining} to go`}
         </div>
       </div>
 
-      {/* Progress bar */}
-      {awards && (
-        <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden mb-3">
-          <div
-            className="h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-      )}
+      <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden mb-3">
+        <div
+          className="h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
 
-      {/* MVP race line */}
       {first && second ? (
         <div className="flex items-baseline gap-2 text-xs flex-wrap">
           <span className="text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display">
@@ -357,191 +378,250 @@ function MiniLeaderCard({
   );
 }
 
-function AwardRaceItem({ label, entry, minGames }: { label: string; entry: AwardEntry; minGames: number }) {
-  const w = entry.winner;
-  const r = entry.runner_up;
+// --- Records section: shared row layout for each record category ---
+
+function RecordRow({
+  label,
+  value,
+  children,
+  showLabel,
+}: {
+  label: string;
+  value: number;
+  children: React.ReactNode; // subject + meta (right-aligned children inside)
+  showLabel: boolean;
+}) {
   return (
-    <div>
-      <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display mb-1.5">
+    <li className="flex items-baseline gap-3 py-3 first:pt-0 last:pb-0">
+      <span
+        className={`text-[11px] font-bold font-display uppercase tracking-wider w-20 shrink-0 ${
+          showLabel ? "text-gray-500 dark:text-gray-400" : "text-transparent"
+        }`}
+        aria-hidden={!showLabel}
+      >
         {label}
-      </div>
-      {w ? (
-        <>
-          <Link
-            href={`/player?id=${w.player_id}`}
-            className="block text-sm font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors truncate"
-          >
-            {w.name}
-            <span className="ml-1.5 text-[11px] font-normal text-gray-500 tabular-nums">
-              {w.value_label}
-            </span>
-          </Link>
-          {r && (
-            <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
-              <Link
-                href={`/player?id=${r.player_id}`}
-                className="hover:text-blue-400 transition-colors"
+      </span>
+      <span className="tabular-nums font-bold font-display text-2xl text-gray-900 dark:text-white w-12 shrink-0 leading-none">
+        {value}
+      </span>
+      <div className="flex-1 min-w-0 flex items-baseline gap-2 flex-wrap">{children}</div>
+    </li>
+  );
+}
+
+function SingleGameSection({ records }: { records: SingleGameRecord[] }) {
+  const groups = groupByStat(records);
+  return (
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+      <h3 className="text-sm font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-3 mb-3 border-b border-gray-200 dark:border-gray-800">
+        Single-Game Records
+      </h3>
+      {groups.length === 0 ? (
+        <p className="text-sm text-gray-500">No games played yet.</p>
+      ) : (
+        <ul className="divide-y divide-gray-100 dark:divide-gray-900">
+          {groups.flatMap((g) =>
+            g.rows.map((r, i) => (
+              <RecordRow
+                key={`${r.stat}-${r.player_id}-${r.game_id}`}
+                label={STAT_SHORT[r.stat]}
+                value={r.value}
+                showLabel={i === 0}
               >
-                {r.name}
-              </Link>
-              <span className="tabular-nums ml-1.5">{r.value_label}</span>
-            </div>
-          )}
-        </>
-      ) : (
-        <span className="text-xs text-gray-400 dark:text-gray-600">
-          No qualifier yet (min {minGames} GP)
-        </span>
-      )}
-    </div>
-  );
-}
-
-function MvpRaceItem({ winner, minGames }: { winner: AwardWinner | null; minGames: number }) {
-  return (
-    <div>
-      <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display mb-1.5">
-        MVP
-      </div>
-      {winner ? (
-        <Link
-          href={`/player?id=${winner.player_id}`}
-          className="block text-sm font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors truncate"
-        >
-          {winner.name}
-          <span className="ml-1.5 text-[11px] font-normal text-gray-500">voted</span>
-        </Link>
-      ) : (
-        <span className="text-xs text-gray-400 dark:text-gray-600">
-          Not voted yet (min {minGames} GP)
-        </span>
-      )}
-    </div>
-  );
-}
-
-function AwardsRace({ awards }: { awards: SeasonAwards }) {
-  return (
-    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4">
-      <div className="flex items-baseline justify-between mb-3 pb-2 border-b border-gray-200 dark:border-gray-800">
-        <h3 className="text-xs font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white">
-          Season {awards.season} Award Race
-        </h3>
-        <Link
-          href="/awards"
-          className="text-[11px] text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors"
-        >
-          Full awards →
-        </Link>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <MvpRaceItem winner={awards.mvp} minGames={awards.min_games_required} />
-        <AwardRaceItem
-          label="Scoring Leader"
-          entry={awards.scoring_leader}
-          minGames={awards.min_games_required}
-        />
-        <AwardRaceItem
-          label="Def. POTS"
-          entry={awards.defensive_pots}
-          minGames={awards.min_games_required}
-        />
-        <AwardRaceItem
-          label="Clutch POTS"
-          entry={awards.clutch_pots}
-          minGames={awards.min_games_required}
-        />
-      </div>
-    </div>
-  );
-}
-
-function RecordsAndMilestones({ data }: { data: RecordsData }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {/* Single-game records */}
-      <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4">
-        <h3 className="text-xs font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
-          All-Time Single-Game Records
-        </h3>
-        {data.records.length === 0 ? (
-          <p className="text-xs text-gray-500">No games played yet.</p>
-        ) : (
-          <ul className="divide-y divide-gray-100 dark:divide-gray-900">
-            {data.records.map((r) => (
-              <li key={r.stat} className="flex items-baseline gap-3 py-2.5 first:pt-0 last:pb-0">
-                <span className="text-[10px] font-bold font-display uppercase tracking-wider text-gray-500 dark:text-gray-400 w-8 shrink-0">
-                  {STAT_LABEL[r.stat]}
-                </span>
-                <span className="tabular-nums font-bold font-display text-lg text-gray-900 dark:text-white w-10 shrink-0">
-                  {r.value}
-                </span>
                 <Link
                   href={`/player?id=${r.player_id}`}
-                  className="flex-1 truncate text-sm font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+                  className="text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors truncate"
                 >
                   {r.player_name}
                 </Link>
                 <Link
                   href={`/game?id=${r.game_id}`}
-                  className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white shrink-0 tabular-nums"
+                  className="ml-auto text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white tabular-nums shrink-0"
                 >
                   {formatShortDateCT(r.start_time)}
                 </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Milestone watch */}
-      <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4">
-        <h3 className="text-xs font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
-          Milestone Watch
-        </h3>
-        {data.milestones.length === 0 ? (
-          <p className="text-xs text-gray-500">
-            Nobody is approaching a milestone right now.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {data.milestones.slice(0, 10).map((m, i) => (
-              <li
-                key={`${m.player_id}-${m.stat}-${m.next_milestone}-${i}`}
-                className="flex items-baseline gap-3 text-sm"
-              >
-                <span className="tabular-nums w-12 font-display font-bold text-amber-600 dark:text-amber-500 shrink-0">
-                  {m.remaining}
-                </span>
-                <span className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
-                  from {m.next_milestone}
-                </span>
-                <Link
-                  href={`/player?id=${m.player_id}`}
-                  className="flex-1 truncate font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
-                >
-                  {m.player_name}
-                </Link>
-                <span className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
-                  {STAT_LONG[m.stat]} ({m.current})
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+              </RecordRow>
+            )),
+          )}
+        </ul>
+      )}
     </div>
   );
 }
 
-// --- Page shell ---
+function SeasonSection({ records }: { records: SeasonRecord[] }) {
+  const groups = groupByStat(records);
+  return (
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+      <h3 className="text-sm font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-3 mb-3 border-b border-gray-200 dark:border-gray-800">
+        Season Records (Totals)
+      </h3>
+      {groups.length === 0 ? (
+        <p className="text-sm text-gray-500">No completed games yet.</p>
+      ) : (
+        <ul className="divide-y divide-gray-100 dark:divide-gray-900">
+          {groups.flatMap((g) =>
+            g.rows.map((r, i) => (
+              <RecordRow
+                key={`${r.stat}-${r.player_id}-${r.season}`}
+                label={STAT_SHORT[r.stat]}
+                value={r.value}
+                showLabel={i === 0}
+              >
+                <Link
+                  href={`/player?id=${r.player_id}`}
+                  className="text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors truncate"
+                >
+                  {r.player_name}
+                </Link>
+                <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
+                  · {r.games_played} GP
+                </span>
+                <span className="ml-auto text-xs font-display text-gray-500 dark:text-gray-400 shrink-0">
+                  Season {r.season}
+                </span>
+              </RecordRow>
+            )),
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function GameLevelSection({ records }: { records: GameRecord[] }) {
+  const groups = groupByStat(records);
+  return (
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+      <h3 className="text-sm font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-3 mb-3 border-b border-gray-200 dark:border-gray-800">
+        Game Records
+      </h3>
+      {groups.length === 0 ? (
+        <p className="text-sm text-gray-500">No completed games yet.</p>
+      ) : (
+        <ul className="divide-y divide-gray-100 dark:divide-gray-900">
+          {groups.flatMap((g) =>
+            g.rows.map((r, i) => {
+              const winnerScore = Math.max(r.team_a_score, r.team_b_score);
+              const loserScore = Math.min(r.team_a_score, r.team_b_score);
+              const winnerRoster =
+                r.winning_team === "A" ? r.team_a_players : r.team_b_players;
+              return (
+                <RecordRow
+                  key={`${r.stat}-${r.game_id}`}
+                  label={STAT_SHORT[r.stat]}
+                  value={r.value}
+                  showLabel={i === 0}
+                >
+                  <Link
+                    href={`/game?id=${r.game_id}`}
+                    className="text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors tabular-nums shrink-0"
+                  >
+                    {winnerScore}–{loserScore}
+                  </Link>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {winnerRoster.join(", ")}
+                  </span>
+                  <Link
+                    href={`/game?id=${r.game_id}`}
+                    className="ml-auto text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white tabular-nums shrink-0"
+                  >
+                    {formatShortDateCT(r.start_time)}
+                  </Link>
+                </RecordRow>
+              );
+            }),
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function StreakSection({ records }: { records: StreakRecord[] }) {
+  const groups = groupByStat(records);
+  return (
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+      <h3 className="text-sm font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-3 mb-3 border-b border-gray-200 dark:border-gray-800">
+        Streak Records
+      </h3>
+      {groups.length === 0 ? (
+        <p className="text-sm text-gray-500">Not enough games yet.</p>
+      ) : (
+        <ul className="divide-y divide-gray-100 dark:divide-gray-900">
+          {groups.flatMap((g) =>
+            g.rows.map((r, i) => (
+              <RecordRow
+                key={`${r.stat}-${r.player_id}-${r.start_time}`}
+                label={STAT_SHORT[r.stat]}
+                value={r.value}
+                showLabel={i === 0}
+              >
+                <Link
+                  href={`/player?id=${r.player_id}`}
+                  className="text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors truncate"
+                >
+                  {r.player_name}
+                </Link>
+                <span className="ml-auto text-xs text-gray-500 dark:text-gray-400 tabular-nums shrink-0">
+                  {formatShortDateCT(r.start_time)} – {formatShortDateCT(r.end_time)}
+                </span>
+              </RecordRow>
+            )),
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function MilestoneWatchSection({ alerts }: { alerts: MilestoneAlert[] }) {
+  return (
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+      <h3 className="text-sm font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-3 mb-3 border-b border-gray-200 dark:border-gray-800">
+        Milestone Watch
+      </h3>
+      {alerts.length === 0 ? (
+        <p className="text-sm text-gray-500">Nobody is approaching a milestone right now.</p>
+      ) : (
+        <ul className="divide-y divide-gray-100 dark:divide-gray-900">
+          {alerts.slice(0, 10).map((m, i) => (
+            <li
+              key={`${m.player_id}-${m.stat}-${m.next_milestone}-${i}`}
+              className="flex items-baseline gap-3 py-3 first:pt-0 last:pb-0"
+            >
+              <span className="tabular-nums font-bold font-display text-2xl text-amber-600 dark:text-amber-500 w-10 shrink-0 leading-none">
+                {m.remaining}
+              </span>
+              <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
+                from {m.next_milestone}
+              </span>
+              <Link
+                href={`/player?id=${m.player_id}`}
+                className="flex-1 truncate text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+              >
+                {m.player_name}
+              </Link>
+              <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0 tabular-nums">
+                {STAT_LONG[m.stat]} ({m.current})
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// =======================================================================
+// Page shell
+// =======================================================================
 
 export default function HomePage() {
   const [meta, setMeta] = useState<SeasonMeta | null>(null);
   const [games, setGames] = useState<GameRow[]>([]);
   const [seasonPlayers, setSeasonPlayers] = useState<PlayerRow[]>([]);
-  const [awards, setAwards] = useState<SeasonAwards | null>(null);
-  const [records, setRecords] = useState<RecordsData | null>(null);
+  const [records, setRecords] = useState<RecordsBundle | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -552,20 +632,16 @@ export default function HomePage() {
         if (cancelled) return;
         setMeta(m);
 
-        const [g, p, a, r] = await Promise.all([
+        const [g, p, r] = await Promise.all([
           fetch(`${API_BASE}/games`).then((r) => r.json() as Promise<GameRow[]>),
-          fetch(`${API_BASE}/players?season=${m.currentSeason}`).then(
-            (r) => r.json() as Promise<PlayerRow[]>,
-          ),
-          fetch(`${API_BASE}/seasons/${m.currentSeason}/awards`).then(
-            (r) => r.json() as Promise<SeasonAwards>,
-          ),
-          fetch(`${API_BASE}/records`).then((r) => r.json() as Promise<RecordsData>),
+          fetch(`${API_BASE}/players?season=${m.currentSeason}`).then((r) => r.json()),
+          fetch(`${API_BASE}/records`).then((r) => r.json() as Promise<RecordsBundle>),
         ]);
         if (cancelled) return;
         setGames(Array.isArray(g) ? g : []);
-        setSeasonPlayers(Array.isArray(p) ? p : []);
-        setAwards(a);
+        // /api/players?season=N returns { data, season } — unwrap.
+        const players: PlayerRow[] = Array.isArray(p) ? p : Array.isArray(p?.data) ? p.data : [];
+        setSeasonPlayers(players);
         setRecords(r);
       } finally {
         if (!cancelled) setLoading(false);
@@ -585,7 +661,7 @@ export default function HomePage() {
   const latestFinished = games.find((g) => g.status === "finished") || null;
 
   // Top-3 leaders for current season — minimal GP filter so we don't crown a
-  // 1-game wonder. 5 GP keeps it inclusive but not noisy.
+  // 1-game wonder.
   const eligible = seasonPlayers.filter((p) => p.games_played >= 5);
   const topPpg = [...eligible].sort((a, b) => b.ppg - a.ppg).slice(0, 3);
   const topFpg = [...eligible].sort((a, b) => b.fpg - a.fpg).slice(0, 3);
@@ -598,10 +674,9 @@ export default function HomePage() {
       <h1 className="text-3xl font-bold font-display uppercase tracking-wide">Home</h1>
 
       {liveGame && <LiveBanner game={liveGame} />}
-
       {latestFinished && <LatestGameHero game={latestFinished} />}
 
-      <SeasonPulse meta={meta} awards={awards} topByFpg={topFpg} />
+      <SeasonPulse meta={meta} topByFpg={topFpg} />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <MiniLeaderCard title="Scoring (PPG)" unit="PPG" rows={topPpg} valueKey="ppg" />
@@ -609,9 +684,18 @@ export default function HomePage() {
         <MiniLeaderCard title="Defense (S+B)" unit="SPG+BPG" rows={topDef} valueKey="def" />
       </div>
 
-      {awards && <AwardsRace awards={awards} />}
-
-      {records && <RecordsAndMilestones data={records} />}
+      {records && (
+        <>
+          <h2 className="text-xl font-bold font-display uppercase tracking-wide pt-2">Records</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <SingleGameSection records={records.single_game} />
+            <SeasonSection records={records.season} />
+            <GameLevelSection records={records.game} />
+            <StreakSection records={records.streak} />
+          </div>
+          <MilestoneWatchSection alerts={records.milestones} />
+        </>
+      )}
     </div>
   );
 }
