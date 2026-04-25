@@ -336,18 +336,26 @@ export async function getGameLevelRecords(): Promise<GameRecord[]> {
   const db = getDb();
   const numberMap = await getGameNumberMap();
 
-  // Pull every score event for finished, decided games — ordered per game.
-  // Exclude scores that were later undone via a correction (and the
-  // correction events themselves). A "correction" stores corrected_event_id
-  // pointing at the score it cancels; both rows stay in the DB. If we
-  // walked them, Team A in a game might transiently appear up 11–6 before
-  // dropping back to 10–6, and that phantom 5-point "deficit" would get
-  // counted as a comeback for Team B. Filter them out so only plays that
-  // actually stuck show up in the running scores.
-  const eventsResult = await db.execute(`
+  // Pull every score AND correction event for finished, decided games.
+  // We need both because:
+  //   1. Scores that were later undone shouldn't count toward final score
+  //      OR toward the running total used for comeback peaks. (Otherwise
+  //      Team A might transiently appear up 11–6 before dropping back to
+  //      10–6, and that phantom 5-point "deficit" would get counted as a
+  //      comeback for Team B.)
+  //   2. We can't just rely on corrected_event_id pointing at the right
+  //      score id — older client builds wrote the row index instead of
+  //      the DB id, leaving 4 corrections with non-resolvable ids. So we
+  //      do a two-pass match: trust corrected_event_id when it lands on
+  //      a real score, then fall back to (player, opposite pv, earlier
+  //      created_at) for the rest.
+  const scoresResult = await db.execute(`
     SELECT
+      ge.id,
       ge.game_id,
+      ge.player_id,
       ge.point_value,
+      ge.created_at,
       r.team
     FROM game_events ge
     JOIN rosters r ON r.game_id = ge.game_id AND r.player_id = ge.player_id
@@ -355,10 +363,22 @@ export async function getGameLevelRecords(): Promise<GameRecord[]> {
     WHERE g.status = 'finished'
       AND g.winning_team IS NOT NULL
       AND ge.event_type = 'score'
-      AND ge.id NOT IN (
-        SELECT corrected_event_id FROM game_events
-        WHERE event_type = 'correction' AND corrected_event_id IS NOT NULL
-      )
+    ORDER BY ge.game_id, ge.created_at ASC, ge.id ASC
+  `);
+
+  const correctionsResult = await db.execute(`
+    SELECT
+      ge.id,
+      ge.game_id,
+      ge.player_id,
+      ge.point_value,
+      ge.corrected_event_id,
+      ge.created_at
+    FROM game_events ge
+    JOIN games g ON g.id = ge.game_id
+    WHERE g.status = 'finished'
+      AND g.winning_team IS NOT NULL
+      AND ge.event_type = 'correction'
     ORDER BY ge.game_id, ge.created_at ASC, ge.id ASC
   `);
 
@@ -407,24 +427,105 @@ export async function getGameLevelRecords(): Promise<GameRecord[]> {
     comeback: number;
     margin: number;
   };
-  const byGame = new Map<string, { team: "A" | "B"; pv: number }[]>();
-  for (const row of eventsResult.rows) {
+  type ScoreEvent = {
+    id: number;
+    player_id: string;
+    pv: number;
+    created_at: string;
+    team: "A" | "B";
+  };
+  type Correction = {
+    id: number;
+    player_id: string;
+    pv: number;
+    corrected_event_id: number | null;
+    created_at: string;
+  };
+
+  const scoresByGame = new Map<string, ScoreEvent[]>();
+  for (const row of scoresResult.rows) {
     const gid = row.game_id as string;
-    if (!byGame.has(gid)) byGame.set(gid, []);
-    byGame.get(gid)!.push({
-      team: row.team as "A" | "B",
+    if (!scoresByGame.has(gid)) scoresByGame.set(gid, []);
+    scoresByGame.get(gid)!.push({
+      id: Number(row.id),
+      player_id: row.player_id as string,
       pv: Number(row.point_value),
+      created_at: row.created_at as string,
+      team: row.team as "A" | "B",
     });
   }
 
+  const correctionsByGame = new Map<string, Correction[]>();
+  for (const row of correctionsResult.rows) {
+    const gid = row.game_id as string;
+    if (!correctionsByGame.has(gid)) correctionsByGame.set(gid, []);
+    correctionsByGame.get(gid)!.push({
+      id: Number(row.id),
+      player_id: row.player_id as string,
+      pv: Number(row.point_value),
+      corrected_event_id:
+        row.corrected_event_id !== null && row.corrected_event_id !== undefined
+          ? Number(row.corrected_event_id)
+          : null,
+      created_at: row.created_at as string,
+    });
+  }
+
+  // Build set of undone score IDs per game.
+  // Pass 1: trust corrected_event_id when it resolves to a real score in this game.
+  // Pass 2: heuristic — match leftover corrections to most recent unmatched score
+  //         by same player + opposite point value + earlier timestamp.
+  function computeUndoneIds(
+    scores: ScoreEvent[],
+    corrections: Correction[]
+  ): Set<number> {
+    const undone = new Set<number>();
+    const scoreIds = new Set(scores.map((s) => s.id));
+    const remaining: Correction[] = [];
+    for (const c of corrections) {
+      if (
+        c.corrected_event_id !== null &&
+        scoreIds.has(c.corrected_event_id) &&
+        !undone.has(c.corrected_event_id)
+      ) {
+        undone.add(c.corrected_event_id);
+      } else {
+        remaining.push(c);
+      }
+    }
+    for (const c of remaining) {
+      const candidates = scores
+        .filter(
+          (s) =>
+            s.player_id === c.player_id &&
+            s.pv === -c.pv &&
+            s.created_at < c.created_at &&
+            !undone.has(s.id)
+        )
+        .sort(
+          (a, b) =>
+            b.created_at.localeCompare(a.created_at) || b.id - a.id
+        );
+      if (candidates.length > 0) {
+        undone.add(candidates[0].id);
+      }
+      // Otherwise the data is too inconsistent to recover; drop the correction.
+    }
+    return undone;
+  }
+
   const stats: GameStat[] = [];
-  for (const [gid, events] of byGame) {
+  for (const [gid, scores] of scoresByGame) {
     const m = meta.get(gid);
     if (!m) continue;
+    const corrections = correctionsByGame.get(gid) ?? [];
+    const undone = computeUndoneIds(scores, corrections);
+
     let a = 0;
     let b = 0;
     let maxDef = 0;
-    for (const e of events) {
+    for (const e of scores) {
+      if (undone.has(e.id)) continue;
       if (e.team === "A") a += e.pv;
       else b += e.pv;
       const winner = m.winning_team === "A" ? a : b;
