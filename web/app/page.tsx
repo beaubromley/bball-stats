@@ -762,31 +762,26 @@ function MilestoneWatchSection({ alerts }: { alerts: MilestoneAlert[] }) {
                     key={`a-${m.player_id}-${m.stat}-${m.next_milestone}-${i}`}
                     className="flex items-baseline gap-3 py-3 first:pt-0 last:pb-0"
                   >
-                    <span className="text-emerald-500 dark:text-emerald-400 text-xl shrink-0 leading-none w-10">
-                      ✓
-                    </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
-                      hit
-                    </span>
-                    <span className="tabular-nums font-bold font-display text-lg text-emerald-600 dark:text-emerald-400 shrink-0 leading-none">
-                      {m.next_milestone.toLocaleString()}
-                    </span>
                     <Link
                       href={`/player?id=${m.player_id}`}
-                      className="flex-1 truncate text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+                      className="text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
                     >
                       {m.player_name}
                     </Link>
-                    <span className="shrink-0 flex items-baseline gap-1.5">
-                      <span className="text-sm font-bold font-display uppercase tracking-wider text-gray-700 dark:text-gray-200">
-                        {STAT_LONG[m.stat]}
-                      </span>
-                      {m.achieved_at && (
-                        <span className="text-xs text-gray-500 dark:text-gray-400 font-display tabular-nums">
-                          · {relativeDays(m.achieved_at)}
-                        </span>
-                      )}
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 uppercase tracking-wider font-display">
+                      hit
                     </span>
+                    <span className="tabular-nums font-bold font-display text-lg text-emerald-600 dark:text-emerald-400 leading-none">
+                      {m.next_milestone.toLocaleString()}
+                    </span>
+                    <span className="text-sm font-bold font-display uppercase tracking-wider text-gray-700 dark:text-gray-200">
+                      {STAT_LONG[m.stat]}
+                    </span>
+                    {m.achieved_at && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400 font-display tabular-nums">
+                        · {relativeDays(m.achieved_at)}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -805,28 +800,29 @@ function MilestoneWatchSection({ alerts }: { alerts: MilestoneAlert[] }) {
                     key={`p-${m.player_id}-${m.stat}-${m.next_milestone}-${i}`}
                     className="flex items-baseline gap-3 py-3 first:pt-0 last:pb-0"
                   >
-                    <span className="tabular-nums font-bold font-display text-2xl text-gray-900 dark:text-white w-10 shrink-0 leading-none">
-                      {m.remaining}
-                    </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
-                      from
-                    </span>
-                    <span className="tabular-nums font-bold font-display text-lg text-gray-700 dark:text-gray-200 shrink-0 leading-none">
-                      {m.next_milestone.toLocaleString()}
-                    </span>
                     <Link
                       href={`/player?id=${m.player_id}`}
-                      className="flex-1 truncate text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+                      className="text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
                     >
                       {m.player_name}
                     </Link>
-                    <span className="shrink-0 flex items-baseline gap-1.5">
-                      <span className="text-sm font-bold font-display uppercase tracking-wider text-gray-700 dark:text-gray-200">
-                        {STAT_LONG[m.stat]}
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 font-display tabular-nums">
-                        ({m.current.toLocaleString()})
-                      </span>
+                    <span className="tabular-nums font-bold font-display text-lg text-gray-900 dark:text-white leading-none">
+                      {m.remaining}
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display">
+                      away
+                    </span>
+                    <span className="text-sm font-bold font-display uppercase tracking-wider text-gray-700 dark:text-gray-200">
+                      {STAT_LONG[m.stat]}
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display">
+                      from
+                    </span>
+                    <span className="tabular-nums font-bold font-display text-lg text-gray-700 dark:text-gray-200 leading-none">
+                      {m.next_milestone.toLocaleString()}
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 font-display tabular-nums">
+                      ({m.current.toLocaleString()})
                     </span>
                   </li>
                 ))}
@@ -895,11 +891,11 @@ export default function HomePage() {
   const liveGame = games.find((g) => g.status === "active") || null;
   const latestFinished = games.find((g) => g.status === "finished") || null;
 
-  // Top-3 leaders for current season — require at least 20% of completed
+  // Top-3 leaders for current season — require at least 25% of completed
   // season games played so we don't crown a 1-game wonder.
   const seasonStartGameIdx = (meta.currentSeason - 1) * meta.gamesPerSeason;
   const completedSeasonGames = Math.max(0, meta.totalGames - seasonStartGameIdx);
-  const minGP = Math.max(1, Math.ceil(completedSeasonGames * 0.2));
+  const minGP = Math.max(1, Math.ceil(completedSeasonGames * 0.25));
   const eligible = seasonPlayers.filter((p) => p.games_played >= minGP);
   const topPpg = [...eligible].sort((a, b) => b.ppg - a.ppg).slice(0, 3);
   const topFpg = [...eligible].sort((a, b) => b.fpg - a.fpg).slice(0, 3);
@@ -933,7 +929,7 @@ export default function HomePage() {
             Season {meta.currentSeason} Leaders
           </h2>
           <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
-            min {minGP} GP (20% of {completedSeasonGames})
+            min {minGP} GP (25% of {completedSeasonGames})
           </span>
         </div>
         <Link
