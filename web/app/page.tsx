@@ -124,6 +124,8 @@ interface MilestoneAlert {
   current: number;
   next_milestone: number;
   remaining: number;
+  kind: "approaching" | "achieved";
+  achieved_at?: string;
 }
 
 interface RecordsBundle {
@@ -725,45 +727,101 @@ function StreakSection({ records }: { records: StreakRecord[] }) {
   );
 }
 
+function relativeDays(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const ms = Date.now() - then;
+  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return `${days}d ago`;
+}
+
 function MilestoneWatchSection({ alerts }: { alerts: MilestoneAlert[] }) {
-  // Sort by closeness — already done upstream, but keep stable.
-  const sorted = [...alerts].sort((a, b) => a.remaining - b.remaining);
+  // Already sorted upstream: achieved (newest first) then approaching (closest first).
+  const achieved = alerts.filter((a) => a.kind === "achieved");
+  const approaching = alerts.filter((a) => a.kind === "approaching");
 
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
       <h3 className="text-sm font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-3 mb-3 border-b border-gray-200 dark:border-gray-800">
         Milestone Watch
       </h3>
-      {sorted.length === 0 ? (
-        <p className="text-sm text-gray-500">Nobody is approaching a milestone right now.</p>
+      {alerts.length === 0 ? (
+        <p className="text-sm text-gray-500">No milestones approaching or recently achieved.</p>
       ) : (
-        <ul className="divide-y divide-gray-100 dark:divide-gray-900">
-          {sorted.slice(0, 12).map((m, i) => (
-            <li
-              key={`${m.player_id}-${m.stat}-${m.next_milestone}-${i}`}
-              className="flex items-baseline gap-3 py-3 first:pt-0 last:pb-0"
-            >
-              <span className="tabular-nums font-bold font-display text-2xl text-gray-900 dark:text-white w-10 shrink-0 leading-none">
-                {m.remaining}
-              </span>
-              <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
-                from
-              </span>
-              <span className="tabular-nums font-bold font-display text-lg text-gray-700 dark:text-gray-200 shrink-0 leading-none">
-                {m.next_milestone.toLocaleString()}
-              </span>
-              <Link
-                href={`/player?id=${m.player_id}`}
-                className="flex-1 truncate text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
-              >
-                {m.player_name}
-              </Link>
-              <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0 tabular-nums">
-                {STAT_LONG[m.stat]} ({m.current.toLocaleString()})
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-4">
+          {achieved.length > 0 && (
+            <div>
+              <div className="text-[11px] font-display uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1">
+                Just Achieved
+              </div>
+              <ul className="divide-y divide-gray-100 dark:divide-gray-900">
+                {achieved.slice(0, 8).map((m, i) => (
+                  <li
+                    key={`a-${m.player_id}-${m.stat}-${m.next_milestone}-${i}`}
+                    className="flex items-baseline gap-3 py-3 first:pt-0 last:pb-0"
+                  >
+                    <span className="text-emerald-500 dark:text-emerald-400 text-xl shrink-0 leading-none w-10">
+                      ✓
+                    </span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
+                      hit
+                    </span>
+                    <span className="tabular-nums font-bold font-display text-lg text-emerald-600 dark:text-emerald-400 shrink-0 leading-none">
+                      {m.next_milestone.toLocaleString()}
+                    </span>
+                    <Link
+                      href={`/player?id=${m.player_id}`}
+                      className="flex-1 truncate text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+                    >
+                      {m.player_name}
+                    </Link>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0 tabular-nums">
+                      {STAT_LONG[m.stat]} · {m.achieved_at ? relativeDays(m.achieved_at) : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {approaching.length > 0 && (
+            <div>
+              {achieved.length > 0 && (
+                <div className="text-[11px] font-display uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                  Approaching
+                </div>
+              )}
+              <ul className="divide-y divide-gray-100 dark:divide-gray-900">
+                {approaching.slice(0, 12).map((m, i) => (
+                  <li
+                    key={`p-${m.player_id}-${m.stat}-${m.next_milestone}-${i}`}
+                    className="flex items-baseline gap-3 py-3 first:pt-0 last:pb-0"
+                  >
+                    <span className="tabular-nums font-bold font-display text-2xl text-gray-900 dark:text-white w-10 shrink-0 leading-none">
+                      {m.remaining}
+                    </span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
+                      from
+                    </span>
+                    <span className="tabular-nums font-bold font-display text-lg text-gray-700 dark:text-gray-200 shrink-0 leading-none">
+                      {m.next_milestone.toLocaleString()}
+                    </span>
+                    <Link
+                      href={`/player?id=${m.player_id}`}
+                      className="flex-1 truncate text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+                    >
+                      {m.player_name}
+                    </Link>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0 tabular-nums">
+                      {STAT_LONG[m.stat]} ({m.current.toLocaleString()})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

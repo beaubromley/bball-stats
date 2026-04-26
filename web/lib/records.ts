@@ -111,6 +111,9 @@ export interface MilestoneAlert {
   current: number;
   next_milestone: number;
   remaining: number;
+  kind: "approaching" | "achieved";
+  /** ISO timestamp of the game in which the milestone was crossed (achieved kind only). */
+  achieved_at?: string;
 }
 
 export interface RecordsBundle {
@@ -133,12 +136,8 @@ const MILESTONES: Record<MilestoneStat, number[]> = {
   games: [50, 100, 250, 500],
 };
 
-function approachThreshold(milestone: number): number {
-  if (milestone <= 100) return 5;
-  if (milestone <= 500) return 15;
-  if (milestone <= 1000) return 30;
-  return 100;
-}
+const APPROACHING_THRESHOLD = 10;
+const RECENT_DAYS = 7;
 
 function nextMilestone(value: number, list: number[]): number | null {
   for (const m of list) if (value < m) return m;
@@ -146,9 +145,55 @@ function nextMilestone(value: number, list: number[]): number | null {
 }
 
 export async function getMilestoneWatch(): Promise<MilestoneAlert[]> {
+  const db = getDb();
   const lb = await getLeaderboard();
+
+  // Per-player per-game stat deltas (chronological) so we can detect when a
+  // player crossed each milestone and surface "just achieved" alerts.
+  const perGameRes = await db.execute(`
+    SELECT
+      r.player_id,
+      g.start_time,
+      g.id AS game_id,
+      COALESCE(SUM(CASE WHEN ge.event_type IN ('score','correction') THEN ge.point_value ELSE 0 END), 0) AS pts,
+      COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0) AS asts,
+      COALESCE(SUM(CASE WHEN ge.event_type = 'steal'  THEN 1 ELSE 0 END), 0) AS stls,
+      COALESCE(SUM(CASE WHEN ge.event_type = 'block'  THEN 1 ELSE 0 END), 0) AS blks
+    FROM rosters r
+    JOIN games g ON g.id = r.game_id AND g.status = 'finished'
+    LEFT JOIN game_events ge ON ge.game_id = r.game_id AND ge.player_id = r.player_id
+    GROUP BY r.player_id, g.id, g.start_time
+    ORDER BY r.player_id, g.start_time ASC, g.id ASC
+  `);
+
+  type PerGame = {
+    start_time: string;
+    pts: number;
+    asts: number;
+    stls: number;
+    blks: number;
+  };
+  const byPlayer = new Map<string, PerGame[]>();
+  for (const row of perGameRes.rows) {
+    const pid = row.player_id as string;
+    if (!byPlayer.has(pid)) byPlayer.set(pid, []);
+    byPlayer.get(pid)!.push({
+      start_time: row.start_time as string,
+      pts: Number(row.pts),
+      asts: Number(row.asts),
+      stls: Number(row.stls),
+      blks: Number(row.blks),
+    });
+  }
+
+  const recentCutoff = new Date(
+    Date.now() - RECENT_DAYS * 24 * 60 * 60 * 1000
+  ).toISOString();
+
   const alerts: MilestoneAlert[] = [];
+
   for (const p of lb) {
+    // ── Approaching: within APPROACHING_THRESHOLD of next milestone ──
     const checks: { stat: MilestoneStat; value: number }[] = [
       { stat: "points", value: p.total_points },
       { stat: "assists", value: p.assists },
@@ -160,7 +205,7 @@ export async function getMilestoneWatch(): Promise<MilestoneAlert[]> {
       const next = nextMilestone(c.value, MILESTONES[c.stat]);
       if (next === null) continue;
       const remaining = next - c.value;
-      if (remaining > 0 && remaining <= approachThreshold(next)) {
+      if (remaining > 0 && remaining <= APPROACHING_THRESHOLD) {
         alerts.push({
           player_id: p.id,
           player_name: p.name,
@@ -168,11 +213,60 @@ export async function getMilestoneWatch(): Promise<MilestoneAlert[]> {
           current: c.value,
           next_milestone: next,
           remaining,
+          kind: "approaching",
         });
       }
     }
+
+    // ── Achieved: crossed a milestone in a game within the last N days ──
+    const games = byPlayer.get(p.id);
+    if (!games || games.length === 0) continue;
+
+    const cumul: Record<MilestoneStat, number> = {
+      points: 0,
+      assists: 0,
+      steals: 0,
+      blocks: 0,
+      games: 0,
+    };
+    for (const g of games) {
+      const deltas: Record<MilestoneStat, number> = {
+        points: g.pts,
+        assists: g.asts,
+        steals: g.stls,
+        blocks: g.blks,
+        games: 1,
+      };
+      for (const stat of Object.keys(deltas) as MilestoneStat[]) {
+        const before = cumul[stat];
+        cumul[stat] += deltas[stat];
+        const after = cumul[stat];
+        for (const m of MILESTONES[stat]) {
+          if (before < m && after >= m && g.start_time >= recentCutoff) {
+            alerts.push({
+              player_id: p.id,
+              player_name: p.name,
+              stat,
+              current: after,
+              next_milestone: m,
+              remaining: 0,
+              kind: "achieved",
+              achieved_at: g.start_time,
+            });
+          }
+        }
+      }
+    }
   }
-  alerts.sort((a, b) => a.remaining - b.remaining);
+
+  // Achieved first (newest crossing first), then approaching (closest first).
+  alerts.sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === "achieved" ? -1 : 1;
+    if (a.kind === "achieved") {
+      return (b.achieved_at || "").localeCompare(a.achieved_at || "");
+    }
+    return a.remaining - b.remaining;
+  });
   return alerts;
 }
 
