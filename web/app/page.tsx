@@ -809,14 +809,11 @@ function MilestoneWatchSection({ alerts }: { alerts: MilestoneAlert[] }) {
                     <span className="tabular-nums font-bold font-display text-lg text-gray-900 dark:text-white leading-none">
                       {m.remaining}
                     </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display">
-                      away
-                    </span>
                     <span className="text-sm font-bold font-display uppercase tracking-wider text-gray-700 dark:text-gray-200">
                       {STAT_LONG[m.stat]}
                     </span>
                     <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display">
-                      from
+                      away from
                     </span>
                     <span className="tabular-nums font-bold font-display text-lg text-gray-700 dark:text-gray-200 leading-none">
                       {m.next_milestone.toLocaleString()}
