@@ -259,9 +259,13 @@ export async function getMilestoneWatch(): Promise<MilestoneAlert[]> {
     }
   }
 
-  // Achieved first (newest crossing first), then approaching (closest first).
+  // Achieved first, then approaching. Within each group, highest milestone
+  // value on top (a 1000 milestone outranks a 50 milestone). Tiebreak:
+  //   - achieved → newest crossing first
+  //   - approaching → closest first
   alerts.sort((a, b) => {
     if (a.kind !== b.kind) return a.kind === "achieved" ? -1 : 1;
+    if (a.next_milestone !== b.next_milestone) return b.next_milestone - a.next_milestone;
     if (a.kind === "achieved") {
       return (b.achieved_at || "").localeCompare(a.achieved_at || "");
     }

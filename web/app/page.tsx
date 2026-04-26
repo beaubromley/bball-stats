@@ -753,7 +753,7 @@ function MilestoneWatchSection({ alerts }: { alerts: MilestoneAlert[] }) {
         <div className="space-y-4">
           {achieved.length > 0 && (
             <div>
-              <div className="text-[11px] font-display uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1">
+              <div className="text-xs font-display uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1">
                 Just Achieved
               </div>
               <ul className="divide-y divide-gray-100 dark:divide-gray-900">
@@ -765,7 +765,7 @@ function MilestoneWatchSection({ alerts }: { alerts: MilestoneAlert[] }) {
                     <span className="text-emerald-500 dark:text-emerald-400 text-xl shrink-0 leading-none w-10">
                       ✓
                     </span>
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
                       hit
                     </span>
                     <span className="tabular-nums font-bold font-display text-lg text-emerald-600 dark:text-emerald-400 shrink-0 leading-none">
@@ -777,8 +777,15 @@ function MilestoneWatchSection({ alerts }: { alerts: MilestoneAlert[] }) {
                     >
                       {m.player_name}
                     </Link>
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0 tabular-nums">
-                      {STAT_LONG[m.stat]} · {m.achieved_at ? relativeDays(m.achieved_at) : ""}
+                    <span className="shrink-0 flex items-baseline gap-1.5">
+                      <span className="text-sm font-bold font-display uppercase tracking-wider text-gray-700 dark:text-gray-200">
+                        {STAT_LONG[m.stat]}
+                      </span>
+                      {m.achieved_at && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400 font-display tabular-nums">
+                          · {relativeDays(m.achieved_at)}
+                        </span>
+                      )}
                     </span>
                   </li>
                 ))}
@@ -788,7 +795,7 @@ function MilestoneWatchSection({ alerts }: { alerts: MilestoneAlert[] }) {
           {approaching.length > 0 && (
             <div>
               {achieved.length > 0 && (
-                <div className="text-[11px] font-display uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                <div className="text-xs font-display uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
                   Approaching
                 </div>
               )}
@@ -801,7 +808,7 @@ function MilestoneWatchSection({ alerts }: { alerts: MilestoneAlert[] }) {
                     <span className="tabular-nums font-bold font-display text-2xl text-gray-900 dark:text-white w-10 shrink-0 leading-none">
                       {m.remaining}
                     </span>
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0">
                       from
                     </span>
                     <span className="tabular-nums font-bold font-display text-lg text-gray-700 dark:text-gray-200 shrink-0 leading-none">
@@ -813,8 +820,13 @@ function MilestoneWatchSection({ alerts }: { alerts: MilestoneAlert[] }) {
                     >
                       {m.player_name}
                     </Link>
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display shrink-0 tabular-nums">
-                      {STAT_LONG[m.stat]} ({m.current.toLocaleString()})
+                    <span className="shrink-0 flex items-baseline gap-1.5">
+                      <span className="text-sm font-bold font-display uppercase tracking-wider text-gray-700 dark:text-gray-200">
+                        {STAT_LONG[m.stat]}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 font-display tabular-nums">
+                        ({m.current.toLocaleString()})
+                      </span>
                     </span>
                   </li>
                 ))}
