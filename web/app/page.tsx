@@ -536,29 +536,64 @@ function SingleGameSection({ records }: { records: SingleGameRecord[] }) {
         <p className="text-sm text-gray-500">No games played yet.</p>
       ) : (
         <ul className="divide-y divide-gray-100 dark:divide-gray-900">
-          {groups.map((g) => (
-            <RecordHeaderRow key={g.stat} label={STAT_SHORT[g.stat]} value={g.rows[0].value}>
-              <CommaList
-                items={g.rows}
-                keyOf={(r) => `${r.player_id}-${r.game_id}`}
-                render={(r) => (
-                  <>
-                    <Link
-                      href={`/player?id=${r.player_id}`}
-                      className="text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
-                    >
-                      {r.player_name}
-                    </Link>
-                    <GameRef
-                      gameId={r.game_id}
-                      season={r.season}
-                      gameNumber={r.game_number}
-                    />
-                  </>
-                )}
-              />
-            </RecordHeaderRow>
-          ))}
+          {groups.map((g) => {
+            // Group ties by player so a player who holds the record across
+            // multiple games is shown once with all their qualifying games.
+            type PlayerGroup = {
+              player_id: string;
+              player_name: string;
+              games: SingleGameRecord[];
+            };
+            const byPlayer = new Map<string, PlayerGroup>();
+            for (const r of g.rows) {
+              const cur = byPlayer.get(r.player_id);
+              if (cur) {
+                cur.games.push(r);
+              } else {
+                byPlayer.set(r.player_id, {
+                  player_id: r.player_id,
+                  player_name: r.player_name,
+                  games: [r],
+                });
+              }
+            }
+            const playerGroups = Array.from(byPlayer.values());
+            return (
+              <RecordHeaderRow key={g.stat} label={STAT_SHORT[g.stat]} value={g.rows[0].value}>
+                <CommaList
+                  items={playerGroups}
+                  keyOf={(p) => p.player_id}
+                  render={(p) => (
+                    <span className="inline-flex items-baseline gap-2 flex-wrap">
+                      <Link
+                        href={`/player?id=${p.player_id}`}
+                        className="text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+                      >
+                        {p.player_name}
+                      </Link>
+                      {p.games.length > 1 && (
+                        <span className="text-xs font-display text-gray-500 dark:text-gray-400 tabular-nums">
+                          ×{p.games.length}
+                        </span>
+                      )}
+                      <span className="inline-flex items-baseline gap-1 flex-wrap">
+                        {p.games.map((r, i) => (
+                          <span key={r.game_id} className="inline-flex items-baseline gap-1">
+                            {i > 0 && <span className="text-gray-300 dark:text-gray-700">·</span>}
+                            <GameRef
+                              gameId={r.game_id}
+                              season={r.season}
+                              gameNumber={r.game_number}
+                            />
+                          </span>
+                        ))}
+                      </span>
+                    </span>
+                  )}
+                />
+              </RecordHeaderRow>
+            );
+          })}
         </ul>
       )}
     </div>
