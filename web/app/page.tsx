@@ -790,9 +790,12 @@ export default function HomePage() {
   const liveGame = games.find((g) => g.status === "active") || null;
   const latestFinished = games.find((g) => g.status === "finished") || null;
 
-  // Top-3 leaders for current season — minimal GP filter so we don't crown a
-  // 1-game wonder.
-  const eligible = seasonPlayers.filter((p) => p.games_played >= 5);
+  // Top-3 leaders for current season — require at least 20% of completed
+  // season games played so we don't crown a 1-game wonder.
+  const seasonStartGameIdx = (meta.currentSeason - 1) * meta.gamesPerSeason;
+  const completedSeasonGames = Math.max(0, meta.totalGames - seasonStartGameIdx);
+  const minGP = Math.max(1, Math.ceil(completedSeasonGames * 0.2));
+  const eligible = seasonPlayers.filter((p) => p.games_played >= minGP);
   const topPpg = [...eligible].sort((a, b) => b.ppg - a.ppg).slice(0, 3);
   const topFpg = [...eligible].sort((a, b) => b.fpg - a.fpg).slice(0, 3);
   const topDef = [...eligible]
@@ -820,9 +823,14 @@ export default function HomePage() {
       <SeasonPulse meta={meta} />
 
       <div className="flex items-baseline justify-between gap-3 pt-2 flex-wrap">
-        <h2 className="text-xl font-bold font-display uppercase tracking-wide">
-          Season {meta.currentSeason} Leaders
-        </h2>
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <h2 className="text-xl font-bold font-display uppercase tracking-wide">
+            Season {meta.currentSeason} Leaders
+          </h2>
+          <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+            min {minGP} GP (20% of {completedSeasonGames})
+          </span>
+        </div>
         <Link
           href="/stats"
           className="text-xs font-display uppercase tracking-wider text-gray-500 dark:text-gray-400 hover:text-blue-400 transition-colors"
