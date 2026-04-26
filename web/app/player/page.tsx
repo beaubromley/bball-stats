@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
-import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from "recharts";
+import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell, LabelList } from "recharts";
 
 import { computeLeagueAvg, computeNBAComp } from "@/lib/nba-comps";
 import { GAMES_PER_SEASON } from "@/lib/seasons";
@@ -382,27 +382,43 @@ function PlayerDetailInner() {
                 const histData = buildHistogram(perGame.map((g) => g[key]));
                 if (histData.length === 0) return null;
                 const maxCount = Math.max(...histData.map((d) => d.count));
+                const totalGames = perGame.length;
                 return (
                   <div key={label} className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
                     <div className="flex items-baseline justify-between mb-2">
                       <h3 className="text-sm text-gray-500 dark:text-gray-400">{label}</h3>
                       <span className="text-xs text-gray-400">avg {avg}</span>
                     </div>
-                    <ResponsiveContainer width="100%" height={120}>
-                      <BarChart data={histData} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
+                    <ResponsiveContainer width="100%" height={140}>
+                      <BarChart data={histData} margin={{ left: 0, right: 0, top: 16, bottom: 0 }}>
                         <XAxis dataKey="bucket" tick={{ fontSize: 10, fill: "#6B7280" }} tickLine={false} axisLine={false} />
                         <YAxis hide allowDecimals={false} domain={[0, maxCount + 1]} />
                         <Tooltip
                           cursor={false}
                           contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151", borderRadius: "8px", fontSize: "12px" }}
                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          formatter={(value: any) => [`${value} game${value !== 1 ? "s" : ""}`, ""]}
+                          formatter={(value: any) => {
+                            const n = Number(value);
+                            const pct = Math.round((n / totalGames) * 100);
+                            return [`${n} game${n !== 1 ? "s" : ""} (${pct}%)`, ""];
+                          }}
                           labelFormatter={(l) => `${label}: ${l}`}
                         />
                         <Bar dataKey="count" radius={[3, 3, 0, 0]}>
                           {histData.map((_, i) => (
                             <Cell key={i} fill={color} fillOpacity={0.7} />
                           ))}
+                          <LabelList
+                            dataKey="count"
+                            position="top"
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            formatter={(value: any) => {
+                              const n = Number(value);
+                              if (!n) return "";
+                              return `${Math.round((n / totalGames) * 100)}%`;
+                            }}
+                            style={{ fontSize: 10, fill: "#6B7280", fontVariantNumeric: "tabular-nums" }}
+                          />
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
