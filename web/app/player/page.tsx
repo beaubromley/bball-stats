@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
-import { AreaChart, Area, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from "recharts";
+import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from "recharts";
 
 import { computeLeagueAvg, computeNBAComp } from "@/lib/nba-comps";
 import { GAMES_PER_SEASON } from "@/lib/seasons";
@@ -53,6 +53,9 @@ interface LeaderboardPlayer {
   spg: number;
   bpg: number;
   twos_pg: number;
+  win_pct: number;
+  total_points: number;
+  fantasy_points: number;
 }
 
 interface RecentGame {
@@ -107,17 +110,6 @@ interface BoxScore {
 }
 
 type TeammateSort = "games_together" | "win_pct" | "assists_to_teammate" | "assists_from_teammate" | "synergy";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function ChartTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm">
-      <p className="text-gray-300">{label}</p>
-      <p className="text-blue-400 font-medium">{payload[0].value} pts</p>
-    </div>
-  );
-}
 
 function PlayerDetailInner() {
   const searchParams = useSearchParams();
@@ -181,18 +173,8 @@ function PlayerDetailInner() {
     );
   }
 
-  const r1 = (n: number) => Math.round(n * 10) / 10;
-
   // Normalize stats to game-to-11
   const norm = (raw: number, ws: number) => raw * 11 / Math.max(ws, 1);
-
-  const chartData = games
-    .slice()
-    .reverse()
-    .map((g) => ({
-      date: formatSeasonGame(g.game_number),
-      pts: r1(norm(Number(g.points_scored), Number(g.winning_score))),
-    }));
 
   // Per-game stat arrays for distribution charts (normalized to game-to-11)
   const perGame = games.map((g) => {
@@ -203,6 +185,44 @@ function PlayerDetailInner() {
     const blk = Math.round(norm(Number(g.blocks), ws));
     return { pts, ast, stl, blk, fp: pts + ast + stl + blk };
   });
+
+  // Longest win/loss streaks (walk this player's games chronologically)
+  const streaks = (() => {
+    if (games.length === 0) return { longestWin: 0, longestLoss: 0 };
+    const sorted = [...games].sort((a, b) =>
+      a.start_time.localeCompare(b.start_time)
+    );
+    let longestWin = 0;
+    let longestLoss = 0;
+    let curW = 0;
+    let curL = 0;
+    for (const g of sorted) {
+      if (g.result === "W") {
+        curW += 1;
+        curL = 0;
+        if (curW > longestWin) longestWin = curW;
+      } else {
+        curL += 1;
+        curW = 0;
+        if (curL > longestLoss) longestLoss = curL;
+      }
+    }
+    return { longestWin, longestLoss };
+  })();
+
+  // Rank this player among all leaderboard players for a given numeric stat.
+  // Uses dense ranking: ties share the same rank.
+  function rankFor(key: keyof LeaderboardPlayer): { rank: number; total: number } | null {
+    if (!leaderboard.length || !id) return null;
+    const me = leaderboard.find((p) => p.id === id);
+    if (!me) return null;
+    const myVal = Number(me[key]);
+    const sorted = [...leaderboard]
+      .map((p) => Number(p[key]))
+      .sort((a, b) => b - a);
+    const better = sorted.filter((v) => v > myVal).length;
+    return { rank: better + 1, total: leaderboard.length };
+  }
 
   function buildHistogram(values: number[]): { bucket: string; count: number; value: number }[] {
     if (values.length === 0) return [];
@@ -302,21 +322,28 @@ function PlayerDetailInner() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {[
-          { label: "Win %", value: `${stats.win_pct}%` },
-          { label: "PPG", value: String(stats.ppg) },
-          { label: "Record", value: `${stats.wins}-${stats.losses}` },
-          { label: "Total Pts", value: String(stats.total_points) },
-          { label: "AST", value: String(stats.assists) },
-          { label: "STL", value: String(stats.steals) },
-          { label: "BLK", value: String(stats.blocks) },
-          { label: "Fantasy Pts", value: String(stats.fantasy_points) },
-        ].map(({ label, value }) => (
+          { label: "Win %", value: `${stats.win_pct}%`, rank: rankFor("win_pct") },
+          { label: "PPG", value: String(stats.ppg), rank: rankFor("ppg") },
+          { label: "Record", value: `${stats.wins}-${stats.losses}`, rank: null },
+          { label: "Total Pts", value: String(stats.total_points), rank: rankFor("total_points") },
+          { label: "AST", value: String(stats.assists), rank: rankFor("assists") },
+          { label: "STL", value: String(stats.steals), rank: rankFor("steals") },
+          { label: "BLK", value: String(stats.blocks), rank: rankFor("blocks") },
+          { label: "Fantasy Pts", value: String(stats.fantasy_points), rank: rankFor("fantasy_points") },
+          { label: "Longest W Streak", value: String(streaks.longestWin), rank: null },
+          { label: "Longest L Streak", value: String(streaks.longestLoss), rank: null },
+        ].map(({ label, value, rank }) => (
           <div
             key={label}
             className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center"
           >
             <div className="text-xs text-gray-500 mb-1">{label}</div>
             <div className="text-2xl font-bold font-display tabular-nums">{value}</div>
+            {rank && (
+              <div className="text-[10px] text-gray-500 mt-1 font-display uppercase tracking-wider tabular-nums">
+                #{rank.rank} of {rank.total}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -338,19 +365,6 @@ function PlayerDetailInner() {
           </div>
         </div>
       </div>
-
-      {chartData.length > 1 && (
-        <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 mb-8 bg-white dark:bg-transparent">
-          <h2 className="text-sm text-gray-500 dark:text-gray-400 mb-3">Scoring Trend</h2>
-          <ResponsiveContainer width="100%" height={140}>
-            <AreaChart data={chartData}>
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#6B7280" }} tickLine={false} axisLine={false} />
-              <Tooltip content={<ChartTooltip />} />
-              <Area type="monotone" dataKey="pts" stroke="#3B82F6" fill="rgba(59,130,246,0.2)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      )}
 
       {perGame.length > 1 && (() => {
         const distributions: { label: string; key: keyof typeof perGame[0]; color: string; avg: string }[] = [
