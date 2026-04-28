@@ -216,6 +216,35 @@ export async function initDb() {
     )
   `);
 
+  // Migration: MVP voting lifecycle (one row per season; closed_at NULL = open)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS mvp_voting (
+      season INTEGER PRIMARY KEY,
+      closed_at DATETIME
+    )
+  `);
+
+  // Migration: MVP ballots, one per (season, voter)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS mvp_votes (
+      id TEXT PRIMARY KEY,
+      season INTEGER NOT NULL,
+      voter_player_id TEXT NOT NULL,
+      pick_1_player_id TEXT NOT NULL,
+      pick_2_player_id TEXT NOT NULL,
+      pick_3_player_id TEXT NOT NULL,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(season, voter_player_id),
+      FOREIGN KEY (voter_player_id) REFERENCES players(id),
+      FOREIGN KEY (pick_1_player_id) REFERENCES players(id),
+      FOREIGN KEY (pick_2_player_id) REFERENCES players(id),
+      FOREIGN KEY (pick_3_player_id) REFERENCES players(id)
+    )
+  `);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_mvp_votes_season ON mvp_votes(season)`);
+
   // Backfill: link assist events to the score event that immediately precedes them
   await db.execute(`
     UPDATE game_events SET assisted_event_id = (

@@ -31,8 +31,60 @@ interface SeasonAwards {
   game_mvp_leader: AwardEntry;
   all_ymca_1st: AwardWinner[];
   all_ymca_2nd: AwardWinner[];
+  all_ymca_3rd: AwardWinner[];
   all_defensive: AwardWinner[];
 }
+
+// Voting state mirrors web/lib/votes.ts.
+interface VoteCandidate {
+  player_id: string;
+  name: string;
+}
+interface BallotSummary {
+  player_id: string;
+  name: string;
+  has_voted: boolean;
+}
+interface VoteTallyRow {
+  player_id: string;
+  name: string;
+  total_points: number;
+  first_votes: number;
+  second_votes: number;
+  third_votes: number;
+  fppg: number;
+  ppg: number;
+}
+interface BallotRow {
+  voter_player_id: string;
+  voter_name: string;
+  pick_1: { player_id: string; name: string };
+  pick_2: { player_id: string; name: string };
+  pick_3: { player_id: string; name: string };
+  created_at: string;
+}
+type VotingState =
+  | {
+      state: "open";
+      candidates: VoteCandidate[];
+      voters: BallotSummary[];
+      voted_count: number;
+      total_eligible: number;
+    }
+  | {
+      state: "closed";
+      closed_at: string;
+      candidates: VoteCandidate[];
+      voters: BallotSummary[];
+      results: VoteTallyRow[];
+      winner_player_id: string | null;
+      ballots: BallotRow[];
+    }
+  | {
+      state: "not_yet_open";
+      games_in_season: number;
+      total_games_in_season: number;
+    };
 
 interface SeasonMeta {
   totalGames: number;
@@ -174,17 +226,18 @@ function MvpCard({
   );
 }
 
-function TeamCard({ title, players, minGames }: { title: string; players: AwardWinner[]; minGames: number }) {
+function TeamCard({ title, players, minGames }: { title: string; players: AwardWinner[] | undefined; minGames: number }) {
+  const list = players ?? [];
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
       <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-4 border-b border-gray-200 dark:border-gray-800">
         {title}
       </h2>
-      {players.length === 0 ? (
+      {list.length === 0 ? (
         <p className="text-sm text-gray-500">Not enough qualified players yet (min {minGames} games).</p>
       ) : (
         <ol className="divide-y divide-gray-100 dark:divide-gray-900">
-          {players.map((p, i) => {
+          {list.map((p, i) => {
             const stat = splitStat(p.value_label);
             return (
               <li key={p.player_id} className="flex items-baseline gap-3 py-3 first:pt-0 last:pb-0">
@@ -323,6 +376,351 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
   );
 }
 
+// --- MVP Voting Panel ---
+
+const VOTED_LS_PREFIX = "bball:mvp-voted:";
+
+function MvpVotingPanel({
+  season,
+  isAdmin,
+  onVotingChange,
+}: {
+  season: number;
+  isAdmin: boolean;
+  onVotingChange: () => void;
+}) {
+  const [state, setState] = useState<VotingState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [voterId, setVoterId] = useState<string>("");
+  const [pick1, setPick1] = useState<string>("");
+  const [pick2, setPick2] = useState<string>("");
+  const [pick3, setPick3] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [localVotedId, setLocalVotedId] = useState<string | null>(null);
+
+  async function reload() {
+    try {
+      const r = await fetch(`${API_BASE}/seasons/${season}/votes`);
+      const data: VotingState = await r.json();
+      setState(data);
+    } catch {
+      setState(null);
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    if (typeof window !== "undefined") {
+      setLocalVotedId(localStorage.getItem(VOTED_LS_PREFIX + season));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [season]);
+
+  async function submitBallot() {
+    if (!voterId || !pick1 || !pick2 || !pick3) {
+      setError("Fill in your name and all three picks");
+      return;
+    }
+    if (new Set([pick1, pick2, pick3]).size !== 3) {
+      setError("You can't pick the same player twice");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const r = await fetch(`${API_BASE}/seasons/${season}/votes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          voter_player_id: voterId,
+          pick_1: pick1,
+          pick_2: pick2,
+          pick_3: pick3,
+        }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        setError(body?.error || `Error ${r.status}`);
+      } else {
+        if (typeof window !== "undefined") {
+          localStorage.setItem(VOTED_LS_PREFIX + season, voterId);
+          setLocalVotedId(voterId);
+        }
+        setVoterId("");
+        setPick1("");
+        setPick2("");
+        setPick3("");
+        await reload();
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function closeVoting() {
+    if (!confirm("Close MVP voting? This will set the season MVP automatically.")) return;
+    setClosing(true);
+    try {
+      await fetch(`${API_BASE}/seasons/${season}/votes/close`, { method: "POST" });
+      await reload();
+      onVotingChange();
+    } finally {
+      setClosing(false);
+    }
+  }
+
+  async function reopenVoting() {
+    if (!confirm("Reopen voting? The MVP will stay set until you change it manually.")) return;
+    setClosing(true);
+    try {
+      await fetch(`${API_BASE}/seasons/${season}/votes/reopen`, { method: "POST" });
+      await reload();
+      onVotingChange();
+    } finally {
+      setClosing(false);
+    }
+  }
+
+  if (!state) {
+    return (
+      <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+        <div className="text-sm text-gray-500">Loading MVP voting…</div>
+      </div>
+    );
+  }
+
+  if (state.state === "not_yet_open") {
+    return (
+      <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+        <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
+          MVP Voting
+        </h2>
+        <p className="text-sm text-gray-500">
+          MVP voting opens once the season finishes ({state.games_in_season} / {state.total_games_in_season} games played).
+        </p>
+        {isAdmin && (
+          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800">
+            <button
+              onClick={async () => {
+                if (!confirm("Force voting open now? Useful for testing — voters with ≥5 GP can vote immediately.")) return;
+                setClosing(true);
+                try {
+                  await fetch(`${API_BASE}/seasons/${season}/votes/open`, { method: "POST" });
+                  await reload();
+                } finally {
+                  setClosing(false);
+                }
+              }}
+              disabled={closing}
+              className="text-xs font-bold font-display uppercase tracking-wider px-3 py-1.5 rounded border border-amber-500/60 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-50"
+            >
+              {closing ? "Opening…" : "Force open voting (admin / testing)"}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (state.state === "open") {
+    const alreadyVoted = state.voters.find(
+      (v) => v.player_id === (voterId || localVotedId || ""),
+    )?.has_voted;
+    const votedNames = state.voters.filter((v) => v.has_voted).map((v) => v.name);
+    return (
+      <div className="border-2 border-blue-500/40 dark:border-blue-400/40 bg-blue-50/40 dark:bg-blue-900/10 rounded-lg p-5">
+        <div className="flex items-center justify-between gap-3 pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
+          <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white">
+            Vote for Season {season} MVP
+          </h2>
+          <span className="text-xs font-bold font-display uppercase tracking-wider px-2.5 py-1 rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+            Voting open
+          </span>
+        </div>
+
+        {alreadyVoted ? (
+          <div className="text-sm text-emerald-700 dark:text-emerald-300 font-bold mb-3">
+            ✓ You voted. Thanks!
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <label className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
+                Your name
+              </label>
+              <select
+                value={voterId}
+                onChange={(e) => setVoterId(e.target.value)}
+                className="w-full text-sm px-2 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-gray-900 dark:text-white"
+              >
+                <option value="">— select your name —</option>
+                {state.voters.map((v) => (
+                  <option key={v.player_id} value={v.player_id} disabled={v.has_voted}>
+                    {v.name}{v.has_voted ? " (voted)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {[
+              { label: "1st place (3 pts)", value: pick1, set: setPick1 },
+              { label: "2nd place (2 pts)", value: pick2, set: setPick2 },
+              { label: "3rd place (1 pt)", value: pick3, set: setPick3 },
+            ].map((row) => (
+              <div key={row.label}>
+                <label className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
+                  {row.label}
+                </label>
+                <select
+                  value={row.value}
+                  onChange={(e) => row.set(e.target.value)}
+                  className="w-full text-sm px-2 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-gray-900 dark:text-white"
+                >
+                  <option value="">— select —</option>
+                  {state.candidates.map((c) => (
+                    <option key={c.player_id} value={c.player_id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+            {error && <div className="text-sm text-red-600 dark:text-red-400">{error}</div>}
+            <button
+              onClick={submitBallot}
+              disabled={submitting}
+              className="w-full text-sm font-bold font-display uppercase tracking-wider px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white"
+            >
+              {submitting ? "Submitting…" : "Submit ballot"}
+            </button>
+          </div>
+        )}
+
+        <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
+          <div className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+            {state.voted_count} of {state.total_eligible} voters have voted
+          </div>
+          {votedNames.length > 0 && (
+            <div className="text-xs text-gray-700 dark:text-gray-300">
+              {votedNames.join(", ")}
+            </div>
+          )}
+        </div>
+
+        {isAdmin && (
+          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800">
+            <button
+              onClick={closeVoting}
+              disabled={closing}
+              className="text-xs font-bold font-display uppercase tracking-wider px-3 py-1.5 rounded border border-red-500/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+            >
+              {closing ? "Closing…" : "Close voting"}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // closed state
+  const winner = state.results.find((r) => r.player_id === state.winner_player_id) ?? null;
+  return (
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+      <div className="flex items-center justify-between gap-3 pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
+        <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white">
+          MVP Voting Results
+        </h2>
+        <span className="text-xs font-bold font-display uppercase tracking-wider px-2.5 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+          Closed
+        </span>
+      </div>
+
+      {winner ? (
+        <div className="mb-4">
+          <div className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+            Winner
+          </div>
+          <Link
+            href={`/player?id=${winner.player_id}`}
+            className="text-2xl font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+          >
+            {winner.name}
+          </Link>
+          <span className="ml-2 text-sm text-gray-500 tabular-nums">{winner.total_points} pts</span>
+        </div>
+      ) : state.results.length > 0 ? (
+        <div className="mb-4 text-sm text-amber-700 dark:text-amber-300">
+          Voting ended in a tie — admin must set the MVP manually below.
+        </div>
+      ) : (
+        <div className="mb-4 text-sm text-gray-500">No ballots were cast.</div>
+      )}
+
+      {state.results.length > 0 && (
+        <div className="mb-4">
+          <div className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+            Tally
+          </div>
+          <table className="w-full text-sm">
+            <thead className="text-[10px] uppercase tracking-wider text-gray-500">
+              <tr>
+                <th className="text-left py-1">Player</th>
+                <th className="text-right py-1">Pts</th>
+                <th className="text-right py-1">1st</th>
+                <th className="text-right py-1">2nd</th>
+                <th className="text-right py-1">3rd</th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.results.map((r) => (
+                <tr key={r.player_id} className="border-t border-gray-100 dark:border-gray-900">
+                  <td className="py-1.5 font-bold font-display">
+                    <Link href={`/player?id=${r.player_id}`} className="hover:text-blue-400">
+                      {r.name}
+                    </Link>
+                  </td>
+                  <td className="py-1.5 text-right tabular-nums font-bold">{r.total_points}</td>
+                  <td className="py-1.5 text-right tabular-nums">{r.first_votes}</td>
+                  <td className="py-1.5 text-right tabular-nums">{r.second_votes}</td>
+                  <td className="py-1.5 text-right tabular-nums">{r.third_votes}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {state.ballots.length > 0 && (
+        <details className="mt-4">
+          <summary className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer">
+            All ballots ({state.ballots.length})
+          </summary>
+          <div className="mt-2 text-xs space-y-1.5">
+            {state.ballots.map((b) => (
+              <div key={b.voter_player_id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span className="font-bold font-display text-gray-900 dark:text-white">{b.voter_name}:</span>
+                <span className="text-gray-700 dark:text-gray-300">
+                  1️⃣ {b.pick_1.name} · 2️⃣ {b.pick_2.name} · 3️⃣ {b.pick_3.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {isAdmin && (
+        <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
+          <button
+            onClick={reopenVoting}
+            disabled={closing}
+            className="text-xs font-bold font-display uppercase tracking-wider px-3 py-1.5 rounded border border-gray-400 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50"
+          >
+            {closing ? "Reopening…" : "Reopen voting"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- Per-season accordion ---
 
 function SeasonAccordion({
@@ -382,6 +780,11 @@ function SeasonAccordion({
       {/* Expanded full layout */}
       {expanded && (
         <div className="border-t border-gray-200 dark:border-gray-800 p-4 space-y-4">
+          <MvpVotingPanel
+            season={season}
+            isAdmin={isAdmin}
+            onVotingChange={onMvpUpdate}
+          />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <MvpCard winner={awards.mvp} minGames={awards.min_games_required}>
               {isAdmin && (
@@ -415,16 +818,21 @@ function SeasonAccordion({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <TeamCard
               title="All-YMCA First Team"
               players={awards.all_ymca_1st}
-              minGames={awards.min_games_required}
+              minGames={30}
             />
             <TeamCard
               title="All-YMCA Second Team"
               players={awards.all_ymca_2nd}
-              minGames={awards.min_games_required}
+              minGames={20}
+            />
+            <TeamCard
+              title="All-YMCA Third Team"
+              players={awards.all_ymca_3rd}
+              minGames={8}
             />
           </div>
 

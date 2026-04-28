@@ -3,10 +3,13 @@ import { getLeaderboard, getSeasonGameIds, type PlayerStats } from "./stats";
 import { GAMES_PER_SEASON } from "./seasons";
 
 // Minimum games played in the season to be eligible for any computed award.
-export const AWARDS_MIN_GAMES = 30;
-// Lower bar used only to fill remaining All-YMCA 2nd team slots when the
-// full-eligibility pool doesn't produce 10 qualified players.
-export const AWARDS_MIN_GAMES_FALLBACK = 10;
+// Same threshold gates 1st-team All-YMCA and most non-All-YMCA awards.
+export const AWARDS_MIN_GAMES_1ST = 30;
+// Looser bars for 2nd / 3rd All-YMCA teams (~25% / 10% of an 82-game season).
+export const AWARDS_MIN_GAMES_2ND = 20;
+export const AWARDS_MIN_GAMES_3RD = 8;
+// Back-compat alias so existing imports of `AWARDS_MIN_GAMES` keep working.
+export const AWARDS_MIN_GAMES = AWARDS_MIN_GAMES_1ST;
 
 export interface AwardWinner {
   player_id: string;
@@ -31,8 +34,9 @@ export interface SeasonAwards {
   defensive_pots: AwardEntry;
   clutch_pots: AwardEntry;
   game_mvp_leader: AwardEntry;          // most individual game MVPs
-  all_ymca_1st: AwardWinner[];          // top 5 by fantasy PPG
-  all_ymca_2nd: AwardWinner[];          // ranks 6-10 by fantasy PPG
+  all_ymca_1st: AwardWinner[];          // top 5 by fantasy PPG (≥ AWARDS_MIN_GAMES_1ST GP)
+  all_ymca_2nd: AwardWinner[];          // next 5 by fantasy PPG (≥ AWARDS_MIN_GAMES_2ND GP)
+  all_ymca_3rd: AwardWinner[];          // next 5 by fantasy PPG (≥ AWARDS_MIN_GAMES_3RD GP)
   all_defensive: AwardWinner[];         // top 5 by total steals + blocks
 }
 
@@ -106,7 +110,7 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
     season,
     games_in_season: meta.gamesInSeason,
     total_games_in_season: GAMES_PER_SEASON,
-    min_games_required: AWARDS_MIN_GAMES,
+    min_games_required: AWARDS_MIN_GAMES_1ST,
     mvp: null,
     scoring_leader: emptyEntry,
     defensive_pots: emptyEntry,
@@ -114,6 +118,7 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
     game_mvp_leader: emptyEntry,
     all_ymca_1st: [],
     all_ymca_2nd: [],
+    all_ymca_3rd: [],
     all_defensive: [],
   };
 
@@ -145,7 +150,7 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
   // Leaderboard scoped to the season's games — PPG/FPPG are already
   // normalized to game-to-11 via effective_games in getLeaderboard.
   const stats = await getLeaderboard(gameIds);
-  const eligible = stats.filter((p) => p.games_played >= AWARDS_MIN_GAMES);
+  const eligible = stats.filter((p) => p.games_played >= AWARDS_MIN_GAMES_1ST);
   const eligibleIds = new Set(eligible.map((p) => p.id));
 
   // Scoring leader — PPG (2dp), tiebreak total_points
@@ -181,32 +186,34 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
     runner_up: mvpCountSort[1] && mvpCountSort[1].mvp_count > 0 ? toGameMvpWinner(mvpCountSort[1]) : null,
   };
 
-  // All-YMCA 1st/2nd — by fantasy PPG (2dp), tiebreak fantasy_points.
-  // 1st team: strictly top 5 among players with ≥ AWARDS_MIN_GAMES.
-  // 2nd team: ranks 6–10 among the same eligible pool, then fill remaining
-  // slots from players with ≥ AWARDS_MIN_GAMES_FALLBACK GP (ranked below
-  // anyone who hit the full game requirement).
+  // All-YMCA 1st/2nd/3rd — by fantasy PPG (2dp), tiebreak fantasy_points.
+  // 1st team: top 5 among players with ≥ AWARDS_MIN_GAMES_1ST GP.
+  // 2nd team: top 5 among players with ≥ AWARDS_MIN_GAMES_2ND GP, excluding 1st team.
+  // 3rd team: top 5 among players with ≥ AWARDS_MIN_GAMES_3RD GP, excluding 1st/2nd team.
   const fpg2 = (p: PlayerStats) =>
     r2((p.total_points + p.assists + p.steals + p.blocks) / (p.effective_games || 1));
   const bySeasonFp = (a: PlayerStats, b: PlayerStats) =>
     (fpg2(b) - fpg2(a)) || (b.fantasy_points - a.fantasy_points);
 
-  const fpSort = [...eligible].sort(bySeasonFp);
-  const fallbackPool = stats
+  const firstPool = stats.filter((p) => p.games_played >= AWARDS_MIN_GAMES_1ST).sort(bySeasonFp);
+  const all_ymca_1st = firstPool.slice(0, 5).map(toAllYmcaWinner);
+  const firstIds = new Set(all_ymca_1st.map((w) => w.player_id));
+
+  const secondPool = stats
+    .filter((p) => p.games_played >= AWARDS_MIN_GAMES_2ND && !firstIds.has(p.id))
+    .sort(bySeasonFp);
+  const all_ymca_2nd = secondPool.slice(0, 5).map(toAllYmcaWinner);
+  const secondIds = new Set(all_ymca_2nd.map((w) => w.player_id));
+
+  const thirdPool = stats
     .filter(
       (p) =>
-        p.games_played >= AWARDS_MIN_GAMES_FALLBACK &&
-        p.games_played < AWARDS_MIN_GAMES,
+        p.games_played >= AWARDS_MIN_GAMES_3RD &&
+        !firstIds.has(p.id) &&
+        !secondIds.has(p.id),
     )
     .sort(bySeasonFp);
-
-  const all_ymca_1st = fpSort.slice(0, 5).map(toAllYmcaWinner);
-  const second_primary = fpSort.slice(5, 10);
-  const needed = Math.max(0, 5 - second_primary.length);
-  const all_ymca_2nd = [
-    ...second_primary,
-    ...fallbackPool.slice(0, needed),
-  ].map(toAllYmcaWinner);
+  const all_ymca_3rd = thirdPool.slice(0, 5).map(toAllYmcaWinner);
 
   // All-Defensive Team — top 5 by TOTAL steals + blocks, tiebreak per-game rate
   const defTotalSort = [...eligible].sort((a, b) => {
@@ -303,7 +310,7 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
     season,
     games_in_season: meta.gamesInSeason,
     total_games_in_season: GAMES_PER_SEASON,
-    min_games_required: AWARDS_MIN_GAMES,
+    min_games_required: AWARDS_MIN_GAMES_1ST,
     mvp,
     scoring_leader,
     defensive_pots,
@@ -311,6 +318,7 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
     game_mvp_leader,
     all_ymca_1st,
     all_ymca_2nd,
+    all_ymca_3rd,
     all_defensive,
   };
 }
