@@ -230,8 +230,11 @@ function TeamCard({ title, players, minGames }: { title: string; players: AwardW
   const list = players ?? [];
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
-      <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-4 border-b border-gray-200 dark:border-gray-800">
-        {title}
+      <h2 className="flex items-baseline justify-between gap-2 text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-4 border-b border-gray-200 dark:border-gray-800">
+        <span>{title}</span>
+        <span className="text-[10px] font-normal tracking-wider text-gray-500 dark:text-gray-400 tabular-nums">
+          min {minGames} GP
+        </span>
       </h2>
       {list.length === 0 ? (
         <p className="text-sm text-gray-500">Not enough qualified players yet (min {minGames} games).</p>
@@ -482,6 +485,26 @@ function MvpVotingPanel({
     }
   }
 
+  async function resetVoting() {
+    if (!confirm("Reset voting? This deletes ALL ballots and clears the MVP. There is no undo.")) return;
+    setClosing(true);
+    try {
+      await fetch(`${API_BASE}/seasons/${season}/votes/reset`, { method: "POST" });
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(VOTED_LS_PREFIX + season);
+        setLocalVotedId(null);
+      }
+      setVoterId("");
+      setPick1("");
+      setPick2("");
+      setPick3("");
+      await reload();
+      onVotingChange();
+    } finally {
+      setClosing(false);
+    }
+  }
+
   if (!state) {
     return (
       <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
@@ -606,13 +629,20 @@ function MvpVotingPanel({
         </div>
 
         {isAdmin && (
-          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800">
+          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800 flex flex-wrap gap-2">
             <button
               onClick={closeVoting}
               disabled={closing}
               className="text-xs font-bold font-display uppercase tracking-wider px-3 py-1.5 rounded border border-red-500/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
             >
               {closing ? "Closing…" : "Close voting"}
+            </button>
+            <button
+              onClick={resetVoting}
+              disabled={closing}
+              className="text-xs font-bold font-display uppercase tracking-wider px-3 py-1.5 rounded border border-gray-400 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50"
+            >
+              Reset voting
             </button>
           </div>
         )}
@@ -707,13 +737,20 @@ function MvpVotingPanel({
       )}
 
       {isAdmin && (
-        <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
+        <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-800 flex flex-wrap gap-2">
           <button
             onClick={reopenVoting}
             disabled={closing}
             className="text-xs font-bold font-display uppercase tracking-wider px-3 py-1.5 rounded border border-gray-400 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50"
           >
             {closing ? "Reopening…" : "Reopen voting"}
+          </button>
+          <button
+            onClick={resetVoting}
+            disabled={closing}
+            className="text-xs font-bold font-display uppercase tracking-wider px-3 py-1.5 rounded border border-gray-400 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50"
+          >
+            Reset voting
           </button>
         </div>
       )}

@@ -432,6 +432,26 @@ export async function reopenVoting(season: number): Promise<void> {
   });
 }
 
+/**
+ * Admin escape hatch: wipe all ballots, the lifecycle row, and any
+ * auto-set MVP for the season. Returns the panel to "not_yet_open"
+ * (or auto-open if the season is already complete). Intended for
+ * cleaning up after a force-open test or backing out a fraudulent vote.
+ */
+export async function resetVoting(season: number): Promise<void> {
+  await initDb();
+  const db = getDb();
+  await db.execute({
+    sql: "DELETE FROM mvp_votes WHERE season = ?",
+    args: [season],
+  });
+  await db.execute({
+    sql: "DELETE FROM mvp_voting WHERE season = ?",
+    args: [season],
+  });
+  await setSeasonMvp(season, null);
+}
+
 export async function tallyVotes(season: number): Promise<VoteTallyRow[]> {
   const ctx = await loadContext(season);
   return fillTally(ctx);
