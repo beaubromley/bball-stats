@@ -244,21 +244,21 @@ function TeamCard({ title, players, minGames }: { title: string; players: AwardW
             const stat = splitStat(p.value_label);
             return (
               <li key={p.player_id} className="flex items-baseline gap-3 py-3 first:pt-0 last:pb-0">
-                <span className="tabular-nums w-5 font-display font-bold text-sm text-gray-900 dark:text-white">
+                <span className="tabular-nums w-6 font-display font-bold text-base text-gray-900 dark:text-white">
                   {i + 1}
                 </span>
                 <Link
                   href={`/player?id=${p.player_id}`}
-                  className="flex-1 hover:text-blue-400 transition-colors font-bold font-display text-sm text-gray-900 dark:text-white"
+                  className="flex-1 hover:text-blue-400 transition-colors font-bold font-display text-base text-gray-900 dark:text-white"
                 >
                   {p.name}
-                  <span className="ml-2 text-[11px] font-normal text-gray-500 tabular-nums">
+                  <span className="ml-2 text-xs font-normal text-gray-500 tabular-nums">
                     · {p.games_played} GP
                   </span>
                 </Link>
-                <span className="tabular-nums font-bold text-sm text-gray-900 dark:text-white">
+                <span className="tabular-nums font-bold text-base text-gray-900 dark:text-white">
                   <span className="font-display">{stat.value}</span>
-                  {stat.unit && <span className="text-[11px] font-normal text-gray-500 ml-1 uppercase tracking-wider">{stat.unit}</span>}
+                  {stat.unit && <span className="text-xs font-normal text-gray-500 ml-1 uppercase tracking-wider">{stat.unit}</span>}
                 </span>
               </li>
             );
@@ -589,23 +589,35 @@ function MvpVotingPanel({
               { label: "1st place (3 pts)", value: pick1, set: setPick1 },
               { label: "2nd place (2 pts)", value: pick2, set: setPick2 },
               { label: "3rd place (1 pt)", value: pick3, set: setPick3 },
-            ].map((row) => (
-              <div key={row.label}>
-                <label className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
-                  {row.label}
-                </label>
-                <select
-                  value={row.value}
-                  onChange={(e) => row.set(e.target.value)}
-                  className="w-full text-sm px-2 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-gray-900 dark:text-white"
-                >
-                  <option value="">— select —</option>
-                  {state.candidates.map((c) => (
-                    <option key={c.player_id} value={c.player_id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
+            ].map((row) => {
+              // Disable any candidate already chosen in another slot,
+              // but keep the current slot's own selection enabled.
+              const otherPicks = new Set(
+                [pick1, pick2, pick3].filter((id) => id && id !== row.value),
+              );
+              return (
+                <div key={row.label}>
+                  <label className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
+                    {row.label}
+                  </label>
+                  <select
+                    value={row.value}
+                    onChange={(e) => row.set(e.target.value)}
+                    className="w-full text-sm px-2 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-gray-900 dark:text-white"
+                  >
+                    <option value="">— select —</option>
+                    {state.candidates.map((c) => {
+                      const taken = otherPicks.has(c.player_id);
+                      return (
+                        <option key={c.player_id} value={c.player_id} disabled={taken}>
+                          {c.name}{taken ? " (already picked)" : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              );
+            })}
             {error && <div className="text-sm text-red-600 dark:text-red-400">{error}</div>}
             <button
               onClick={submitBallot}
