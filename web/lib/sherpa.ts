@@ -4,7 +4,7 @@
  */
 
 const WASM_CDN =
-  "https://huggingface.co/spaces/k2-fsa/web-assembly-asr-sherpa-onnx-en/resolve/main";
+  "https://huggingface.co/spaces/k2-fsa/web-assembly-asr-sherpa-onnx-en/resolve/42ec20bb";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SherpaModule = any;
