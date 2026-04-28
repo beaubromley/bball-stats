@@ -561,6 +561,9 @@ function MvpVotingPanel({
             Voting open
           </span>
         </div>
+        <p className="text-xs italic text-gray-600 dark:text-gray-400 mb-4">
+          Votes are anonymous while voting is open — only voter names are shown. Once voting closes, every ballot becomes public.
+        </p>
 
         {alreadyVoted ? (
           <div className="text-sm text-emerald-700 dark:text-emerald-300 font-bold mb-3">
