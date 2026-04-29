@@ -39,6 +39,18 @@ interface SeasonAwards {
 interface VoteCandidate {
   player_id: string;
   name: string;
+  games_played: number;
+  total_points: number;
+  ppg: number;
+  total_assists: number;
+  apg: number;
+  total_steals: number;
+  spg: number;
+  total_blocks: number;
+  bpg: number;
+  fantasy_points: number;
+  fppg: number;
+  mvp_count: number;
 }
 interface BallotSummary {
   player_id: string;
@@ -383,6 +395,56 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
 
 const VOTED_LS_PREFIX = "bball:mvp-voted:";
 
+function CandidateStatsTable({ candidates }: { candidates: VoteCandidate[] }) {
+  if (candidates.length === 0) return null;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs tabular-nums">
+        <thead className="text-[10px] uppercase tracking-wider text-gray-500">
+          <tr className="border-b border-gray-200 dark:border-gray-800">
+            <th className="text-left py-1.5 pr-2 font-display">Candidate</th>
+            <th className="text-right py-1.5 px-1.5">GP</th>
+            <th className="text-right py-1.5 px-1.5">PTS</th>
+            <th className="text-right py-1.5 px-1.5">PPG</th>
+            <th className="text-right py-1.5 px-1.5">AST</th>
+            <th className="text-right py-1.5 px-1.5">APG</th>
+            <th className="text-right py-1.5 px-1.5">STL</th>
+            <th className="text-right py-1.5 px-1.5">SPG</th>
+            <th className="text-right py-1.5 px-1.5">BLK</th>
+            <th className="text-right py-1.5 px-1.5">BPG</th>
+            <th className="text-right py-1.5 px-1.5">FP</th>
+            <th className="text-right py-1.5 px-1.5">FPPG</th>
+            <th className="text-right py-1.5 pl-1.5">MVPs</th>
+          </tr>
+        </thead>
+        <tbody>
+          {candidates.map((c) => (
+            <tr key={c.player_id} className="border-b border-gray-100 dark:border-gray-900 last:border-0">
+              <td className="py-1.5 pr-2 font-bold font-display text-gray-900 dark:text-white whitespace-nowrap">
+                <Link href={`/player?id=${c.player_id}`} className="hover:text-blue-400">
+                  {c.name}
+                </Link>
+              </td>
+              <td className="text-right py-1.5 px-1.5">{c.games_played}</td>
+              <td className="text-right py-1.5 px-1.5">{c.total_points}</td>
+              <td className="text-right py-1.5 px-1.5">{c.ppg.toFixed(2)}</td>
+              <td className="text-right py-1.5 px-1.5">{c.total_assists}</td>
+              <td className="text-right py-1.5 px-1.5">{c.apg.toFixed(2)}</td>
+              <td className="text-right py-1.5 px-1.5">{c.total_steals}</td>
+              <td className="text-right py-1.5 px-1.5">{c.spg.toFixed(2)}</td>
+              <td className="text-right py-1.5 px-1.5">{c.total_blocks}</td>
+              <td className="text-right py-1.5 px-1.5">{c.bpg.toFixed(2)}</td>
+              <td className="text-right py-1.5 px-1.5">{c.fantasy_points}</td>
+              <td className="text-right py-1.5 px-1.5">{c.fppg.toFixed(2)}</td>
+              <td className="text-right py-1.5 pl-1.5">{c.mvp_count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function MvpVotingPanel({
   season,
   isAdmin,
@@ -565,6 +627,15 @@ function MvpVotingPanel({
           Votes are anonymous while voting is open — only voter names are shown. Once voting closes, every ballot becomes public.
         </p>
 
+        {state.candidates.length > 0 && (
+          <div className="mb-4">
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+              Candidate stats
+            </div>
+            <CandidateStatsTable candidates={state.candidates} />
+          </div>
+        )}
+
         {alreadyVoted ? (
           <div className="text-sm text-emerald-700 dark:text-emerald-300 font-bold mb-3">
             ✓ You voted. Thanks!
@@ -697,6 +768,15 @@ function MvpVotingPanel({
         </div>
       ) : (
         <div className="mb-4 text-sm text-gray-500">No ballots were cast.</div>
+      )}
+
+      {state.candidates.length > 0 && (
+        <div className="mb-4">
+          <div className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+            Candidate stats
+          </div>
+          <CandidateStatsTable candidates={state.candidates} />
+        </div>
       )}
 
       {state.results.length > 0 && (

@@ -16,6 +16,18 @@ export interface BallotSummary {
 export interface VoteCandidate {
   player_id: string;
   name: string;
+  games_played: number;
+  total_points: number;
+  ppg: number;
+  total_assists: number;
+  apg: number;
+  total_steals: number;
+  spg: number;
+  total_blocks: number;
+  bpg: number;
+  fantasy_points: number;
+  fppg: number;
+  mvp_count: number;
 }
 
 export interface VoteTallyRow {
@@ -87,12 +99,30 @@ async function loadContext(season: number): Promise<InternalContext> {
   const stats = gameIds.length > 0 ? await getLeaderboard(gameIds) : [];
 
   // Candidates = first-team All-YMCA. We share awards.ts so the rules
-  // stay in lockstep with what's displayed on the awards page.
+  // stay in lockstep with what's displayed on the awards page. We also
+  // attach the candidate's season stats so voters can compare numbers
+  // before they rank.
   const awards = await getSeasonAwards(season);
-  const candidates: VoteCandidate[] = awards.all_ymca_1st.map((w) => ({
-    player_id: w.player_id,
-    name: w.name,
-  }));
+  const candidates: VoteCandidate[] = awards.all_ymca_1st.map((w) => {
+    const s = stats.find((p) => p.id === w.player_id);
+    const eg = s?.effective_games || 1;
+    return {
+      player_id: w.player_id,
+      name: w.name,
+      games_played: s?.games_played ?? 0,
+      total_points: s?.total_points ?? 0,
+      ppg: s?.ppg ?? 0,
+      total_assists: s?.assists ?? 0,
+      apg: s ? r2(s.assists / eg) : 0,
+      total_steals: s?.steals ?? 0,
+      spg: s ? r2(s.steals / eg) : 0,
+      total_blocks: s?.blocks ?? 0,
+      bpg: s ? r2(s.blocks / eg) : 0,
+      fantasy_points: s?.fantasy_points ?? 0,
+      fppg: s ? r2(s.fantasy_points / eg) : 0,
+      mvp_count: s?.mvp_count ?? 0,
+    };
+  });
 
   // Eligible voters = anyone with ≥ VOTER_MIN_GAMES GP this season.
   const eligibleVoters = stats
