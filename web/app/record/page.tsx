@@ -179,6 +179,21 @@ export default function RecordPage() {
   const [interim, setInterim] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  // Manual input mode (button-driven instead of voice)
+  type InputMode = "voice" | "manual";
+  const [inputMode, setInputMode] = useState<InputMode>("voice");
+  const [selectedManualPlayer, setSelectedManualPlayer] = useState<string | null>(null);
+  // Hydrate inputMode from localStorage once on mount (client-only)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("bball.inputMode");
+      if (saved === "manual" || saved === "voice") setInputMode(saved);
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem("bball.inputMode", inputMode); } catch { /* ignore */ }
+  }, [inputMode]);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
@@ -1404,6 +1419,117 @@ export default function RecordPage() {
     handleVoiceResult("undo");
   }
 
+  // --- Manual (tap-driven) input handlers ---
+  // Mirror the voice path so events recorded via taps are indistinguishable
+  // from voice events on the API/DB side, except for a "[manual]" prefix in
+  // raw_transcript for later debugging/analytics.
+  function manualScore(points: number) {
+    const player = selectedManualPlayer;
+    if (!player || !game.gameId) return;
+    const cmd: ParsedCommand = {
+      type: "score",
+      playerName: player,
+      points,
+      rawTranscript: `[manual] ${player} +${points}`,
+      confidence: 1,
+    };
+    const raw = cmd.rawTranscript;
+    postScoreToApi(game.gameId, cmd, raw);
+    postFailedTranscript(game.gameId, null);
+    setGame((prev) => addScore(prev, cmd, raw));
+    showAcceptedCmd(`${player} +${points}`, "rgba(34,197,94,1)");
+    setSelectedManualPlayer(null);
+  }
+
+  function manualSteal() {
+    const player = selectedManualPlayer;
+    if (!player || !game.gameId) return;
+    const raw = `[manual] ${player} steal`;
+    postStealToApi(game.gameId, player, raw);
+    const cmd: ParsedCommand = {
+      type: "steal",
+      playerName: player,
+      rawTranscript: raw,
+      confidence: 1,
+    };
+    setGame((prev) => addSteal(prev, cmd, raw));
+    showAcceptedCmd(`${player} STL`, "rgba(234,179,8,1)");
+    setSelectedManualPlayer(null);
+  }
+
+  function manualBlock() {
+    const player = selectedManualPlayer;
+    if (!player || !game.gameId) return;
+    const raw = `[manual] ${player} block`;
+    postBlockToApi(game.gameId, player, raw);
+    const cmd: ParsedCommand = {
+      type: "block",
+      playerName: player,
+      rawTranscript: raw,
+      confidence: 1,
+    };
+    setGame((prev) => addBlock(prev, cmd, raw));
+    showAcceptedCmd(`${player} BLK`, "rgba(168,85,247,1)");
+    setSelectedManualPlayer(null);
+  }
+
+  function manualAssist() {
+    const player = selectedManualPlayer;
+    if (!player || !game.gameId) return;
+
+    // Bolt-on assist: attach to the most recent unassisted score not made by `player`
+    // (matches the rule used in handleVoiceResult, lines ~1174–1207).
+    const assistName = player.toLowerCase();
+    const scores = game.events.filter(
+      (e) =>
+        e.type === "score" &&
+        !e.undone &&
+        !e.assistBy &&
+        e.playerName.toLowerCase() !== assistName,
+    );
+    const target = scores[scores.length - 1];
+
+    if (!target) {
+      showRetryAlert("No unassisted score to attach assist to");
+      return;
+    }
+
+    fetch(`${API_BASE}/games/${game.gameId}/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        player_name: player,
+        event_type: "assist",
+        point_value: 0,
+        raw_transcript: `[manual] ${player} assist`,
+        assisted_event_id: target.apiId || target.id,
+      }),
+    }).catch(() => {});
+
+    setGame((prev) => ({
+      ...prev,
+      events: prev.events.map((e) =>
+        e.id === target.id ? { ...e, assistBy: player } : e,
+      ),
+    }));
+    showAcceptedCmd(`${player} AST → ${target.playerName}`, "rgba(59,130,246,1)");
+    setSelectedManualPlayer(null);
+  }
+
+  // Toggle between voice and manual input modes. Switching to manual stops the
+  // mic immediately; switching back to voice leaves the mic OFF (user must tap
+  // "Start Listening") to avoid surprise activation.
+  const switchInputMode = useCallback(
+    (mode: InputMode) => {
+      if (mode === "manual") {
+        stopListening();
+        setSelectedManualPlayer(null);
+      }
+      setInputMode(mode);
+    },
+    [stopListening],
+  );
+
   // --- Player assignment (setup) ---
   function cyclePlayer(name: string) {
     setAssignments((prev) => {
@@ -1693,21 +1819,54 @@ export default function RecordPage() {
         </div>
       </div>
 
-      {/* Listening indicator + scoreboard button */}
+      {/* Mode toggle (voice / manual) + listening indicator + scoreboard button */}
       {game.status === "active" && (
-        <div className="flex items-center justify-center gap-3 py-2">
-          <div
-            className={`w-2.5 h-2.5 rounded-full ${listening ? "bg-green-400 animate-pulse" : "bg-gray-600"}`}
-          />
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            {listening ? "Listening..." : "Mic off"}
-          </span>
-          <button
-            onClick={() => setShowScoreboard(true)}
-            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-700 px-2 py-0.5 rounded transition-colors"
-          >
-            Fullscreen
-          </button>
+        <div className="flex flex-col items-center gap-2 py-2">
+          {/* Input-mode segmented control */}
+          <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden text-sm">
+            <button
+              onClick={() => switchInputMode("voice")}
+              className={`px-4 py-1.5 font-semibold transition-colors ${
+                inputMode === "voice"
+                  ? "bg-blue-600 text-white"
+                  : "bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+              }`}
+            >
+              Voice
+            </button>
+            <button
+              onClick={() => switchInputMode("manual")}
+              className={`px-4 py-1.5 font-semibold transition-colors border-l border-gray-300 dark:border-gray-700 ${
+                inputMode === "manual"
+                  ? "bg-blue-600 text-white"
+                  : "bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+              }`}
+            >
+              Manual
+            </button>
+          </div>
+          <div className="flex items-center justify-center gap-3">
+            {inputMode === "voice" ? (
+              <>
+                <div
+                  className={`w-2.5 h-2.5 rounded-full ${listening ? "bg-green-400 animate-pulse" : "bg-gray-600"}`}
+                />
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {listening ? "Listening..." : "Mic off"}
+                </span>
+              </>
+            ) : (
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                Manual input
+              </span>
+            )}
+            <button
+              onClick={() => setShowScoreboard(true)}
+              className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-700 px-2 py-0.5 rounded transition-colors"
+            >
+              Fullscreen
+            </button>
+          </div>
         </div>
       )}
 
@@ -1993,76 +2152,185 @@ export default function RecordPage() {
       {/* --- Active: controls --- */}
       {game.status === "active" && (
         <div className="space-y-3 py-4">
-          {/* Speech engine selector */}
-          {!listening && (
+          {/* Voice-only controls */}
+          {inputMode === "voice" && (
             <>
-              <select
-                value={speechEngine}
-                onChange={(e) => setSpeechEngine(e.target.value as "browser" | "deepgram" | "sherpa")}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
+              {/* Speech engine selector */}
+              {!listening && (
+                <>
+                  <select
+                    value={speechEngine}
+                    onChange={(e) => setSpeechEngine(e.target.value as "browser" | "deepgram" | "sherpa")}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="deepgram">Deepgram</option>
+                    <option value="sherpa">Sherpa-ONNX (Local, Free)</option>
+                    <option value="browser">Browser Speech</option>
+                  </select>
+                  {speechEngine === "sherpa" && sherpaStatus !== "ready" && (
+                    <p className="text-xs text-gray-500 mt-1">~191MB download first time (larger model, cached permanently)</p>
+                  )}
+                  {speechEngine === "sherpa" && sherpaStatus === "ready" && (
+                    <p className="text-xs text-green-400 mt-1">Model loaded (runs locally, free)</p>
+                  )}
+                </>
+              )}
+
+
+              {/* Trigger word toggle */}
+              {!listening && (
+                <label className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={triggerWord}
+                    onChange={(e) => setTriggerWord(e.target.checked)}
+                    className="rounded"
+                  />
+                  Require &ldquo;STAT&rdquo; trigger word
+                </label>
+              )}
+
+              {/* Audio device selector */}
+              {!listening && (
+                <div className="flex gap-2">
+                  <select
+                    value={selectedDeviceId}
+                    onChange={(e) => setSelectedDeviceId(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">Default Microphone</option>
+                    {audioDevices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={refreshDevices}
+                    className="px-3 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-500 dark:text-gray-400 transition-colors"
+                    title="Refresh device list"
+                  >
+                    Refresh
+                  </button>
+                </div>
+              )}
+
+              <button
+                onClick={listening ? stopListening : startListening}
+                className={`w-full py-3 font-semibold rounded-lg transition-colors ${
+                  listening
+                    ? "bg-red-600 hover:bg-red-700 text-white"
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                }`}
               >
-                <option value="deepgram">Deepgram</option>
-                <option value="sherpa">Sherpa-ONNX (Local, Free)</option>
-                <option value="browser">Browser Speech</option>
-              </select>
-              {speechEngine === "sherpa" && sherpaStatus !== "ready" && (
-                <p className="text-xs text-gray-500 mt-1">~191MB download first time (larger model, cached permanently)</p>
-              )}
-              {speechEngine === "sherpa" && sherpaStatus === "ready" && (
-                <p className="text-xs text-green-400 mt-1">Model loaded (runs locally, free)</p>
-              )}
+                {listening ? "Stop Listening" : "Start Listening"}
+              </button>
             </>
           )}
 
+          {/* Manual input panel */}
+          {inputMode === "manual" && (() => {
+            const [smallPts, bigPts] =
+              game.scoringMode === "2s3s" ? [2, 3] : [1, 2];
+            const renderRoster = (
+              roster: string[],
+              label: string,
+              labelColor: string,
+            ) => (
+              <div className="flex-1">
+                <div className={`text-xs font-semibold mb-1 ${labelColor}`}>
+                  {label}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {roster.length === 0 ? (
+                    <div className="text-xs text-gray-400 dark:text-gray-600 italic px-1 py-2">
+                      No players
+                    </div>
+                  ) : (
+                    roster.map((name) => {
+                      const isSelected = selectedManualPlayer === name;
+                      return (
+                        <button
+                          key={name}
+                          onClick={() =>
+                            setSelectedManualPlayer((prev) =>
+                              prev === name ? null : name,
+                            )
+                          }
+                          className={`w-full py-3 px-3 rounded-lg text-base font-semibold transition-colors text-left ${
+                            isSelected
+                              ? "bg-blue-600 text-white ring-2 ring-blue-400"
+                              : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white"
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            );
+            return (
+              <div className="space-y-3">
+                <div className="flex gap-3">
+                  {renderRoster(game.teamA, "Team A", "text-blue-400")}
+                  {renderRoster(game.teamB, "Team B", "text-orange-400")}
+                </div>
 
-          {/* Trigger word toggle */}
-          {!listening && (
-            <label className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={triggerWord}
-                onChange={(e) => setTriggerWord(e.target.checked)}
-                className="rounded"
-              />
-              Require &ldquo;STAT&rdquo; trigger word
-            </label>
-          )}
-
-          {/* Audio device selector */}
-          {!listening && (
-            <div className="flex gap-2">
-              <select
-                value={selectedDeviceId}
-                onChange={(e) => setSelectedDeviceId(e.target.value)}
-                className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
-              >
-                <option value="">Default Microphone</option>
-                {audioDevices.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={refreshDevices}
-                className="px-3 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-500 dark:text-gray-400 transition-colors"
-                title="Refresh device list"
-              >
-                Refresh
-              </button>
-            </div>
-          )}
-
-          <button
-            onClick={listening ? stopListening : startListening}
-            className={`w-full py-3 font-semibold rounded-lg transition-colors ${
-              listening
-                ? "bg-red-600 hover:bg-red-700 text-white"
-                : "bg-blue-600 hover:bg-blue-700 text-white"
-            }`}
-          >
-            {listening ? "Stop Listening" : "Start Listening"}
-          </button>
+                {selectedManualPlayer && (
+                  <div className="space-y-2 p-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900/50">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">
+                        Selected:{" "}
+                        <span className="font-semibold text-gray-900 dark:text-white">
+                          {selectedManualPlayer}
+                        </span>
+                      </span>
+                      <button
+                        onClick={() => setSelectedManualPlayer(null)}
+                        className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white underline"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      <button
+                        onClick={() => manualScore(smallPts)}
+                        className="py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg text-sm transition-colors"
+                      >
+                        +{smallPts}
+                      </button>
+                      <button
+                        onClick={() => manualScore(bigPts)}
+                        className="py-2.5 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg text-sm transition-colors"
+                      >
+                        +{bigPts}
+                      </button>
+                      <button
+                        onClick={manualAssist}
+                        className="py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm transition-colors"
+                      >
+                        Assist
+                      </button>
+                      <button
+                        onClick={manualSteal}
+                        className="py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white font-semibold rounded-lg text-sm transition-colors"
+                      >
+                        Steal
+                      </button>
+                      <button
+                        onClick={manualBlock}
+                        className="py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg text-sm transition-colors"
+                      >
+                        Block
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Manual undo */}
           <button
