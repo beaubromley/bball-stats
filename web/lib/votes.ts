@@ -17,6 +17,9 @@ export interface VoteCandidate {
   player_id: string;
   name: string;
   games_played: number;
+  wins: number;
+  losses: number;
+  win_pct: number; // integer 0–100
   total_points: number;
   ppg: number;
   total_assists: number;
@@ -110,6 +113,9 @@ async function loadContext(season: number): Promise<InternalContext> {
       player_id: w.player_id,
       name: w.name,
       games_played: s?.games_played ?? 0,
+      wins: s?.wins ?? 0,
+      losses: s?.losses ?? 0,
+      win_pct: s?.win_pct ?? 0,
       total_points: s?.total_points ?? 0,
       ppg: s?.ppg ?? 0,
       total_assists: s?.assists ?? 0,

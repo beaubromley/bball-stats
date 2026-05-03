@@ -40,6 +40,9 @@ interface VoteCandidate {
   player_id: string;
   name: string;
   games_played: number;
+  wins: number;
+  losses: number;
+  win_pct: number;
   total_points: number;
   ppg: number;
   total_assists: number;
@@ -404,6 +407,8 @@ function CandidateStatsTable({ candidates }: { candidates: VoteCandidate[] }) {
           <tr className="border-b border-gray-200 dark:border-gray-800">
             <th className="text-left py-1.5 pr-2 font-display">Candidate</th>
             <th className="text-right py-1.5 px-1.5">GP</th>
+            <th className="text-right py-1.5 px-1.5">W-L</th>
+            <th className="text-right py-1.5 px-1.5">WIN%</th>
             <th className="text-right py-1.5 px-1.5">PTS</th>
             <th className="text-right py-1.5 px-1.5">PPG</th>
             <th className="text-right py-1.5 px-1.5">AST</th>
@@ -426,6 +431,8 @@ function CandidateStatsTable({ candidates }: { candidates: VoteCandidate[] }) {
                 </Link>
               </td>
               <td className="text-right py-1.5 px-1.5">{c.games_played}</td>
+              <td className="text-right py-1.5 px-1.5 whitespace-nowrap">{c.wins}-{c.losses}</td>
+              <td className="text-right py-1.5 px-1.5">{c.win_pct}%</td>
               <td className="text-right py-1.5 px-1.5">{c.total_points}</td>
               <td className="text-right py-1.5 px-1.5">{c.ppg.toFixed(2)}</td>
               <td className="text-right py-1.5 px-1.5">{c.total_assists}</td>
