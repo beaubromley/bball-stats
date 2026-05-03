@@ -82,6 +82,26 @@ When the user asks a question:
 
 For simple questions, use a single query. For complex questions, use multiple queries to show different angles.
 
+SQLite dialect (CRITICAL — this is SQLite via Turso/libSQL, NOT BigQuery, Snowflake, Postgres, or DuckDB):
+- DO NOT use QUALIFY. SQLite has no QUALIFY clause and the parser will reject it.
+  Wrong:  SELECT ... QUALIFY ROW_NUMBER() OVER (PARTITION BY x ORDER BY y) = 1
+  Right:  WITH ranked AS (
+              SELECT ..., ROW_NUMBER() OVER (PARTITION BY x ORDER BY y) AS rn FROM ...
+          )
+          SELECT * FROM ranked WHERE rn = 1
+- DO NOT use FULL OUTER JOIN or RIGHT JOIN. Use LEFT JOIN (reverse table order if needed),
+  or LEFT JOIN + UNION + LEFT JOIN to simulate FULL OUTER.
+- Window functions cannot be used in WHERE/HAVING — wrap them in a CTE and filter outside.
+- Date/time: use strftime('%Y-%m-%d', col) and date(col, '-6 hours'). DO NOT use DATE_TRUNC,
+  DATEPART, EXTRACT, or AT TIME ZONE.
+- String concat: use ||, not +.
+- Aggregating strings: use group_concat(...), not STRING_AGG / ARRAY_AGG.
+- Booleans: SQLite stores 0/1 integers — never compare to TRUE/FALSE literals.
+- LIMIT goes at the very end of the outermost query — never TOP N.
+- DO NOT use NULLS FIRST / NULLS LAST. SQLite's default is NULLS FIRST for ASC; if you need
+  the opposite, sort by (col IS NULL), col.
+- DO NOT use LATERAL joins.
+
 Rules:
 - Only SELECT queries (including WITH/CTE). Never INSERT, UPDATE, DELETE, DROP, or ALTER.
 - Use player name (p.name) for display, not player_id.
@@ -214,6 +234,47 @@ async function callGeminiSQL(
   );
 }
 
+// One-shot repair pass: when the first SQL attempt fails, send the failed
+// SQL + error back to Gemini and ask for a fix. The model's prompt already
+// covers SQLite dialect, but seeing the actual parser error usually nails
+// the specific issue (e.g. "QUALIFY not supported"). Returns null if no
+// repaired JSON could be parsed.
+async function callGeminiSqlRepair(
+  question: string,
+  failed: { label: string; sql: string; error: string }[],
+): Promise<{ text: string; model: string } | null> {
+  const failureSummary = failed
+    .map(
+      (f, i) =>
+        `Query ${i + 1} (${f.label}):\nSQL:\n${f.sql}\n\nError:\n${f.error}`,
+    )
+    .join("\n\n---\n\n");
+
+  const repairPrompt = `Your previous SQL failed against the SQLite/Turso database. Read the error(s) and return a corrected version. Common causes: using QUALIFY (not supported in SQLite — wrap in a CTE and filter on the row_number column), FULL OUTER JOIN, RIGHT JOIN, DATE_TRUNC, or a window function in WHERE.
+
+Original question: "${question}"
+
+${failureSummary}
+
+Return the same JSON shape as before:
+{"queries": [{"sql": "...", "label": "..."}], "explanation": "..."}
+Return ONLY the JSON object, no markdown, no code fences.`;
+
+  try {
+    return await callGeminiWithRotation(
+      SQL_MODELS,
+      {
+        contents: [{ role: "user", parts: [{ text: repairPrompt }] }],
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        generationConfig: { temperature: 0.1 },
+      },
+      (text) => tryParseSqlJson(text) !== null,
+    );
+  } catch {
+    return null;
+  }
+}
+
 async function callGeminiSummarize(
   question: string,
   results: unknown,
@@ -302,16 +363,56 @@ export async function POST(req: NextRequest) {
 
     // Step 2: Execute all queries
     const db = getDb();
-    const allResults: { label: string; sql: string; rows: Record<string, unknown>[] }[] = [];
 
-    for (const q of queries) {
-      const sqlUpper = q.sql.trim().toUpperCase();
-      if (!sqlUpper.startsWith("SELECT") && !sqlUpper.startsWith("WITH")) continue;
-      try {
-        const result = await db.execute(q.sql);
-        allResults.push({ label: q.label, sql: q.sql, rows: (result.rows as Record<string, unknown>[]).slice(0, 50) });
-      } catch (sqlErr) {
-        allResults.push({ label: q.label, sql: q.sql, rows: [{ error: String(sqlErr) }] });
+    type QueryResult = { label: string; sql: string; rows: Record<string, unknown>[]; error?: string };
+    async function runAll(qs: { sql: string; label: string }[]): Promise<QueryResult[]> {
+      const out: QueryResult[] = [];
+      for (const q of qs) {
+        const sqlUpper = q.sql.trim().toUpperCase();
+        if (!sqlUpper.startsWith("SELECT") && !sqlUpper.startsWith("WITH")) continue;
+        try {
+          const result = await db.execute(q.sql);
+          out.push({
+            label: q.label,
+            sql: q.sql,
+            rows: (result.rows as Record<string, unknown>[]).slice(0, 50),
+          });
+        } catch (sqlErr) {
+          const errStr = String(sqlErr);
+          out.push({ label: q.label, sql: q.sql, rows: [{ error: errStr }], error: errStr });
+        }
+      }
+      return out;
+    }
+
+    let allResults = await runAll(queries);
+    let repairUsed: string | null = null;
+
+    // Step 2b: One-shot repair if any query failed. Send the failed SQL + the
+    // parser error back to Gemini and re-execute. This catches dialect mistakes
+    // (QUALIFY, FULL OUTER JOIN, etc.) that the model can fix once it sees the
+    // actual error message.
+    const failures = allResults.filter((r) => r.error);
+    if (failures.length > 0) {
+      const repaired = await callGeminiSqlRepair(
+        question,
+        failures.map((f) => ({ label: f.label, sql: f.sql, error: f.error! })),
+      );
+      if (repaired) {
+        const repairedParsed = tryParseSqlJson(repaired.text);
+        const repairedQueries =
+          repairedParsed?.queries ||
+          (repairedParsed?.sql ? [{ sql: repairedParsed.sql, label: "Results" }] : []);
+        if (repairedQueries.length > 0) {
+          const retry = await runAll(repairedQueries);
+          // Only swap in the repaired results if they actually improved things
+          // (i.e. fewer errors). Otherwise keep the original failure for context.
+          const retryFailures = retry.filter((r) => r.error).length;
+          if (retryFailures < failures.length) {
+            allResults = retry;
+            repairUsed = repaired.model;
+          }
+        }
       }
     }
 
@@ -332,7 +433,9 @@ export async function POST(req: NextRequest) {
       sql: allResults.map((r) => `-- ${r.label}\n${r.sql}`).join("\n\n"),
       rows: allResults.length === 1 ? allResults[0].rows.slice(0, 20) : allResults.flatMap((r) => r.rows).slice(0, 20),
       sqlStepOutput: raw,
-      modelUsed: `${sqlModel} → ${summaryModel}`,
+      modelUsed: repairUsed
+        ? `${sqlModel} → repair:${repairUsed} → ${summaryModel}`
+        : `${sqlModel} → ${summaryModel}`,
     });
   } catch (err) {
     return NextResponse.json({
