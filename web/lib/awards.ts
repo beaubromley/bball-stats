@@ -1,6 +1,8 @@
+import { unstable_cache, revalidateTag } from "next/cache";
 import { initDb, getDb } from "./turso";
 import { getLeaderboard, getSeasonGameIds, type PlayerStats } from "./stats";
 import { GAMES_PER_SEASON } from "./seasons";
+import { TAG_STATS, votingTag } from "./cache-tags";
 
 // Minimum games played in the season to be eligible for any computed award.
 // Same threshold gates 1st-team All-YMCA and most non-All-YMCA awards.
@@ -99,7 +101,7 @@ function toAllYmcaWinner(p: PlayerStats): AwardWinner {
   };
 }
 
-export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
+async function _getSeasonAwards(season: number): Promise<SeasonAwards> {
   await initDb();
   const db = getDb();
 
@@ -323,6 +325,13 @@ export async function getSeasonAwards(season: number): Promise<SeasonAwards> {
   };
 }
 
+// Cached: season awards held until any stats-affecting write busts TAG_STATS.
+export const getSeasonAwards = unstable_cache(
+  _getSeasonAwards,
+  ["getSeasonAwards"],
+  { tags: [TAG_STATS], revalidate: 86400 },
+);
+
 export async function setSeasonMvp(season: number, playerId: string | null): Promise<void> {
   await initDb();
   const db = getDb();
@@ -331,16 +340,19 @@ export async function setSeasonMvp(season: number, playerId: string | null): Pro
       sql: "DELETE FROM season_awards WHERE season = ? AND award_type = 'mvp'",
       args: [season],
     });
-    return;
+  } else {
+    await db.execute({
+      sql: `
+        INSERT INTO season_awards (season, award_type, player_id)
+        VALUES (?, 'mvp', ?)
+        ON CONFLICT(season, award_type) DO UPDATE SET
+          player_id = excluded.player_id,
+          updated_at = CURRENT_TIMESTAMP
+      `,
+      args: [season, playerId],
+    });
   }
-  await db.execute({
-    sql: `
-      INSERT INTO season_awards (season, award_type, player_id)
-      VALUES (?, 'mvp', ?)
-      ON CONFLICT(season, award_type) DO UPDATE SET
-        player_id = excluded.player_id,
-        updated_at = CURRENT_TIMESTAMP
-    `,
-    args: [season, playerId],
-  });
+  // MVP affects awards data + per-season voting display; bust both.
+  revalidateTag(TAG_STATS, "default");
+  revalidateTag(votingTag(season), "default");
 }

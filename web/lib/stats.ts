@@ -1,6 +1,8 @@
+import { unstable_cache } from "next/cache";
 import { getDb } from "./turso";
 import { calculateFantasyPoints } from "./fantasy";
 import { getGameRangeForSeason, getSeasonInfo } from "./seasons";
+import { TAG_STATS } from "./cache-tags";
 
 export interface PlayerStats {
   id: string;
@@ -38,7 +40,7 @@ export interface SeasonMeta {
   gamesInSeason: number;
 }
 
-export async function getSeasonGameIds(season: number): Promise<{ gameIds: string[]; meta: SeasonMeta }> {
+async function _getSeasonGameIds(season: number): Promise<{ gameIds: string[]; meta: SeasonMeta }> {
   const db = getDb();
   const result = await db.execute(
     "SELECT id FROM games WHERE status = 'finished' ORDER BY start_time ASC"
@@ -55,7 +57,15 @@ export async function getSeasonGameIds(season: number): Promise<{ gameIds: strin
   };
 }
 
-export async function getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]> {
+// Cached: held forever (1-day safety net) until any game record / event /
+// roster change calls revalidateTag(TAG_STATS).
+export const getSeasonGameIds = unstable_cache(
+  _getSeasonGameIds,
+  ["getSeasonGameIds"],
+  { tags: [TAG_STATS], revalidate: 86400 },
+);
+
+async function _getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]> {
   const db = getDb();
 
   // If filtering to an empty set of games, return empty
@@ -306,12 +316,20 @@ export async function getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]>
   });
 }
 
+// Cached: leaderboard results held until a game/roster/event change triggers
+// revalidateTag(TAG_STATS). Different gameIds get different cache entries.
+export const getLeaderboard = unstable_cache(
+  _getLeaderboard,
+  ["getLeaderboard"],
+  { tags: [TAG_STATS], revalidate: 86400 },
+);
+
 export interface TodayStats {
   games_today: number;
   players: PlayerStats[];
 }
 
-export async function getTodayStats(dateStr: string): Promise<TodayStats> {
+async function _getTodayStats(dateStr: string): Promise<TodayStats> {
   const db = getDb();
 
   const countResult = await db.execute({
@@ -472,6 +490,12 @@ export async function getTodayStats(dateStr: string): Promise<TodayStats> {
 
   return { games_today, players };
 }
+
+export const getTodayStats = unstable_cache(
+  _getTodayStats,
+  ["getTodayStats"],
+  { tags: [TAG_STATS], revalidate: 86400 },
+);
 
 export async function getPlayerStats(playerId: string): Promise<PlayerStats | null> {
   const leaderboard = await getLeaderboard();

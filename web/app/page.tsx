@@ -868,11 +868,12 @@ export default function HomePage() {
           // Check MVP voting for the current season AND the previous one.
           // The current season is usually still in progress (state=not_yet_open),
           // but the just-completed prior season is where voting actually opens.
-          fetch(`${API_BASE}/seasons/${m.currentSeason}/votes`)
+          // Use the slim /votes/status endpoint — no leaderboard pipeline.
+          fetch(`${API_BASE}/seasons/${m.currentSeason}/votes/status`)
             .then((r) => r.json() as Promise<{ state?: string }>)
             .catch(() => null),
           m.currentSeason > 1
-            ? fetch(`${API_BASE}/seasons/${m.currentSeason - 1}/votes`)
+            ? fetch(`${API_BASE}/seasons/${m.currentSeason - 1}/votes/status`)
                 .then((r) => r.json() as Promise<{ state?: string }>)
                 .catch(() => null)
             : Promise.resolve(null),

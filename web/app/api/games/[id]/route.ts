@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb, getDb } from "@/lib/turso";
 import { getGameNumber } from "@/lib/stats";
 import { requireAuth } from "@/lib/auth";
+import { bustStatsCache } from "@/lib/cache-tags";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await initDb();
@@ -46,6 +47,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     args: [notes || null, id],
   });
 
+  bustStatsCache();
   return NextResponse.json({ ok: true });
 }
 
@@ -61,5 +63,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   await db.execute({ sql: "DELETE FROM rosters WHERE game_id = ?", args: [id] });
   await db.execute({ sql: "DELETE FROM games WHERE id = ?", args: [id] });
 
+  bustStatsCache();
   return NextResponse.json({ ok: true });
 }

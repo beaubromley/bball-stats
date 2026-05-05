@@ -1,6 +1,8 @@
+import { unstable_cache } from "next/cache";
 import { getDb } from "./turso";
 import { getLeaderboard, getSeasonGameIds } from "./stats";
 import { getSeasonInfo, getSeasonForGameNumber } from "./seasons";
+import { TAG_STATS } from "./cache-tags";
 
 // =======================================================================
 // Shared helpers
@@ -772,7 +774,7 @@ export async function getStreakRecords(): Promise<StreakRecord[]> {
 // Aggregate
 // =======================================================================
 
-export async function getAllRecords(): Promise<RecordsBundle> {
+async function _getAllRecords(): Promise<RecordsBundle> {
   const [single_game, season, game, streak, milestones] = await Promise.all([
     getSingleGameRecords(),
     getSeasonRecords(),
@@ -782,3 +784,10 @@ export async function getAllRecords(): Promise<RecordsBundle> {
   ]);
   return { single_game, season, game, streak, milestones };
 }
+
+// Cached: full records bundle held until any stats-affecting write busts TAG_STATS.
+export const getAllRecords = unstable_cache(
+  _getAllRecords,
+  ["getAllRecords"],
+  { tags: [TAG_STATS], revalidate: 86400 },
+);

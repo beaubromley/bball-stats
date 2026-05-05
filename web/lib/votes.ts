@@ -1,8 +1,10 @@
 import { v4 as uuid } from "uuid";
+import { unstable_cache, revalidateTag } from "next/cache";
 import { initDb, getDb } from "./turso";
 import { getLeaderboard, getSeasonGameIds, type PlayerStats } from "./stats";
 import { GAMES_PER_SEASON } from "./seasons";
 import { getSeasonAwards, setSeasonMvp } from "./awards";
+import { votingTag } from "./cache-tags";
 
 // Minimum games played in the season to be eligible to vote in MVP voting.
 export const VOTER_MIN_GAMES = 5;
@@ -287,7 +289,51 @@ async function loadBallots(ctx: InternalContext): Promise<BallotRow[]> {
 
 // ---------------- public API ----------------
 
-export async function getVotingState(season: number): Promise<VotingState> {
+// Cheap, single-purpose check used by the home-page banner.
+// Returns just whether voting is currently open, with no leaderboard
+// computation. Two tiny queries: one COUNT against mvp_voting, one
+// COUNT of finished games in the season's slice.
+export interface VotingStatusSummary {
+  state: "open" | "closed" | "not_yet_open";
+}
+
+async function _getVotingStatusSummary(
+  season: number,
+): Promise<VotingStatusSummary> {
+  await initDb();
+  const db = getDb();
+
+  // Lifecycle row tells us if voting was force-opened or closed.
+  const lifecycleRes = await db.execute({
+    sql: "SELECT closed_at FROM mvp_voting WHERE season = ?",
+    args: [season],
+  });
+  const lifecycleRowExists = lifecycleRes.rows.length > 0;
+  const closedAt =
+    lifecycleRes.rows[0]?.closed_at != null
+      ? String(lifecycleRes.rows[0].closed_at)
+      : null;
+
+  if (closedAt) return { state: "closed" };
+  if (lifecycleRowExists) return { state: "open" };
+
+  // Auto-open path: voting opens when the season has its full set of games.
+  // We use the same season-slice math as getSeasonGameIds, but without
+  // pulling any game_events / leaderboard data.
+  const { gameIds } = await getSeasonGameIds(season);
+  const seasonComplete = gameIds.length >= GAMES_PER_SEASON;
+
+  return { state: seasonComplete ? "open" : "not_yet_open" };
+}
+
+// Cached per-season. Busted by castVote / closeVoting / forceOpen / reset / setSeasonMvp.
+export const getVotingStatusSummary = unstable_cache(
+  _getVotingStatusSummary,
+  ["getVotingStatusSummary"],
+  { tags: ["voting"], revalidate: 86400 },
+);
+
+async function _getVotingState(season: number): Promise<VotingState> {
   const ctx = await loadContext(season);
 
   // Voting opens automatically when the season is mathematically complete,
@@ -344,6 +390,12 @@ export interface CastVoteArgs {
   ip_address: string | null;
   user_agent: string | null;
 }
+
+export const getVotingState = unstable_cache(
+  _getVotingState,
+  ["getVotingState"],
+  { tags: ["voting"], revalidate: 86400 },
+);
 
 export type CastVoteResult =
   | { ok: true }
@@ -408,6 +460,9 @@ export async function castVote(args: CastVoteArgs): Promise<CastVoteResult> {
     }
     return { ok: false, error: msg, status: 500 };
   }
+  // A new ballot affects voted_count + has_voted flags in the cached state.
+  revalidateTag(votingTag(args.season), "default");
+  revalidateTag("voting", "default");
   return { ok: true };
 }
 
@@ -438,6 +493,8 @@ export async function closeVoting(
   if (winner_player_id) {
     await setSeasonMvp(season, winner_player_id);
   }
+  revalidateTag(votingTag(season), "default");
+  revalidateTag("voting", "default");
   return { winner_player_id, tied };
 }
 
@@ -457,6 +514,8 @@ export async function forceOpenVoting(season: number): Promise<void> {
     `,
     args: [season],
   });
+  revalidateTag(votingTag(season), "default");
+  revalidateTag("voting", "default");
 }
 
 export async function reopenVoting(season: number): Promise<void> {
@@ -466,6 +525,8 @@ export async function reopenVoting(season: number): Promise<void> {
     sql: "UPDATE mvp_voting SET closed_at = NULL WHERE season = ?",
     args: [season],
   });
+  revalidateTag(votingTag(season), "default");
+  revalidateTag("voting", "default");
 }
 
 /**
@@ -486,6 +547,8 @@ export async function resetVoting(season: number): Promise<void> {
     args: [season],
   });
   await setSeasonMvp(season, null);
+  revalidateTag(votingTag(season), "default");
+  revalidateTag("voting", "default");
 }
 
 export async function tallyVotes(season: number): Promise<VoteTallyRow[]> {

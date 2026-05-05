@@ -1,5 +1,6 @@
 import { v4 as uuid } from "uuid";
 import { getDb } from "./turso";
+import { bustStatsCache } from "./cache-tags";
 
 export async function ensurePlayer(name: string, fullName?: string): Promise<string> {
   const db = getDb();
@@ -32,6 +33,7 @@ export async function createGame(location?: string, targetScore?: number, scorin
     sql: "INSERT INTO games (id, location, target_score, scoring_mode) VALUES (?, ?, ?, ?)",
     args: [id, location ?? null, targetScore ?? null, scoringMode ?? "1s2s"],
   });
+  bustStatsCache();
   return id;
 }
 
@@ -53,6 +55,7 @@ export async function setRoster(
       args: [gameId, playerId, team],
     });
   }
+  bustStatsCache();
 }
 
 export async function recordEvent(
@@ -87,6 +90,7 @@ export async function recordEvent(
     args: [today, playerId],
   });
 
+  bustStatsCache();
   return Number(result.lastInsertRowid);
 }
 
@@ -125,6 +129,7 @@ export async function deleteEvent(gameId: string, eventId: number) {
     sql: "DELETE FROM game_events WHERE game_id = ? AND id = ?",
     args: [gameId, eventId],
   });
+  bustStatsCache();
 }
 
 export async function deleteCorrectionFor(gameId: string, correctedEventId: number) {
@@ -133,6 +138,7 @@ export async function deleteCorrectionFor(gameId: string, correctedEventId: numb
     sql: "DELETE FROM game_events WHERE game_id = ? AND event_type = 'correction' AND corrected_event_id = ?",
     args: [gameId, correctedEventId],
   });
+  bustStatsCache();
 }
 
 export async function swapEventOrder(gameId: string, eventIdA: number, eventIdB: number) {
@@ -147,6 +153,7 @@ export async function swapEventOrder(gameId: string, eventIdA: number, eventIdB:
   if (!a || !b) return;
   await db.execute({ sql: "UPDATE game_events SET created_at = ? WHERE id = ?", args: [b.created_at, eventIdA] });
   await db.execute({ sql: "UPDATE game_events SET created_at = ? WHERE id = ?", args: [a.created_at, eventIdB] });
+  bustStatsCache();
 }
 
 export async function updateEvent(
@@ -168,6 +175,7 @@ export async function updateEvent(
       args: [updates.point_value, gameId, eventId],
     });
   }
+  bustStatsCache();
 }
 
 export async function endGame(gameId: string, winningTeam: "A" | "B") {
@@ -176,6 +184,7 @@ export async function endGame(gameId: string, winningTeam: "A" | "B") {
     sql: `UPDATE games SET status = 'finished', end_time = CURRENT_TIMESTAMP, winning_team = ? WHERE id = ?`,
     args: [winningTeam, gameId],
   });
+  bustStatsCache();
 }
 
 export async function getGameEvents(gameId: string) {
