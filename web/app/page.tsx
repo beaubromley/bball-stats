@@ -843,6 +843,8 @@ export default function HomePage() {
   const [today, setToday] = useState<TodayData | null>(null);
   const [records, setRecords] = useState<RecordsBundle | null>(null);
   const [loading, setLoading] = useState(true);
+  // MVP voting banner: which season has voting currently open, if any
+  const [mvpVotingOpenSeason, setMvpVotingOpenSeason] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -856,12 +858,17 @@ export default function HomePage() {
           timeZone: "America/Chicago",
         });
 
-        const [g, p, r, t] = await Promise.all([
+        const [g, p, r, t, votes] = await Promise.all([
           fetch(`${API_BASE}/games`).then((r) => r.json() as Promise<GameRow[]>),
           fetch(`${API_BASE}/players?season=${m.currentSeason}`).then((r) => r.json()),
           fetch(`${API_BASE}/records`).then((r) => r.json() as Promise<RecordsBundle>),
           fetch(`${API_BASE}/stats/today?date=${todayStr}`)
             .then((r) => r.json() as Promise<TodayData>)
+            .catch(() => null),
+          // Check whether MVP voting is currently open for the current season,
+          // so we can show a banner inviting people to vote.
+          fetch(`${API_BASE}/seasons/${m.currentSeason}/votes`)
+            .then((r) => r.json() as Promise<{ state?: string }>)
             .catch(() => null),
         ]);
         if (cancelled) return;
@@ -871,6 +878,7 @@ export default function HomePage() {
         setSeasonPlayers(players);
         setRecords(r);
         setToday(t);
+        setMvpVotingOpenSeason(votes && votes.state === "open" ? m.currentSeason : null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -912,6 +920,27 @@ export default function HomePage() {
           Full stats &amp; charts →
         </Link>
       </div>
+
+      {mvpVotingOpenSeason !== null && (
+        <Link
+          href="/awards"
+          className="block rounded-lg border border-blue-400/60 dark:border-blue-500/60 bg-blue-50 dark:bg-blue-900/30 px-4 py-3 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+        >
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="text-xs font-display uppercase tracking-wider text-blue-600 dark:text-blue-300">
+                MVP Voting Open
+              </div>
+              <div className="text-sm text-gray-700 dark:text-gray-200 mt-0.5">
+                Cast your ballot for Season {mvpVotingOpenSeason} MVP.
+              </div>
+            </div>
+            <div className="text-sm font-display uppercase tracking-wider text-blue-600 dark:text-blue-300">
+              Vote now →
+            </div>
+          </div>
+        </Link>
+      )}
 
       {liveGame && <LiveBanner game={liveGame} />}
       {latestFinished && <LatestGameHero game={latestFinished} />}

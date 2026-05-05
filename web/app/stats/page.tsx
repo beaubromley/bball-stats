@@ -188,6 +188,10 @@ export default function Home() {
   const { isAdmin, isViewer } = useAuth();
   const showAdvanced = isAdmin || isViewer;
   const [players, setPlayers] = useState<PlayerRow[]>([]);
+  // All-time copies used by charts that should never be filtered by the season toggle
+  // (Fantasy PPG vs Win%, Win Streaks). Loaded once on mount.
+  const [allTimePlayers, setAllTimePlayers] = useState<PlayerRow[]>([]);
+  const [allTimeStreakData, setAllTimeStreakData] = useState<StreakData | null>(null);
   const [todayStats, setTodayStats] = useState<TodayData | null>(null);
   const [streakData, setStreakData] = useState<StreakData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -268,12 +272,18 @@ export default function Home() {
         return Promise.all([
           fetch(`${API_BASE}/players?season=${seasonInfo.currentSeason}`).then((r) => r.json()),
           fetch(`${API_BASE}/stats/streaks?season=${seasonInfo.currentSeason}`).then((r) => r.json()).catch(() => null),
+          // Always-all-time data for the Fantasy-vs-Win% scatter and the Win Streak chart.
+          // These are independent of the season toggle.
+          fetch(`${API_BASE}/players`).then((r) => r.json()).catch(() => []),
+          fetch(`${API_BASE}/stats/streaks`).then((r) => r.json()).catch(() => null),
         ]);
       })
-      .then(([leaderboardRes, streaks]) => {
+      .then(([leaderboardRes, streaks, allTimeLeaderboard, allTimeStreaks]) => {
         setPlayers(leaderboardRes.data);
         setGamesInSeason(leaderboardRes.season.gamesInSeason);
         setStreakData(streaks);
+        setAllTimePlayers(Array.isArray(allTimeLeaderboard) ? allTimeLeaderboard : []);
+        setAllTimeStreakData(allTimeStreaks);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -357,8 +367,9 @@ export default function Home() {
     .sort((a, b) => b.bpg - a.bpg)
     .map((p) => ({ name: p.name, BLK: p.bpg }));
 
-  // Scatter
-  const scatterData = [...activePlayers]
+  // Scatter — always all-time, regardless of the season toggle
+  const scatterData = allTimePlayers
+    .filter((p) => p.games_played >= 1)
     .map((p) => ({ name: p.name, fpg: p.fpg, winPct: p.win_pct }));
   const SCATTER_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#A855F7", "#EC4899", "#06B6D4", "#F97316", "#84CC16", "#6366F1"];
 
@@ -453,18 +464,28 @@ export default function Home() {
         </div>
       )}
 
-      {/* Season Toggle */}
-      <div className="flex items-center gap-2 mb-6">
-        <button
-          onClick={() => { setViewMode("season"); fetchLeaderboard("season", currentSeason); }}
-          className={`px-4 py-1.5 text-sm font-display uppercase tracking-wide rounded-full transition-colors ${
-            viewMode === "season"
-              ? "bg-blue-600 text-white"
-              : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-700"
-          }`}
-        >
-          Season {currentSeason}
-        </button>
+      {/* Season Toggle — one pill per season + All-Time */}
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
+        {Array.from({ length: totalSeasons }, (_, i) => i + 1).map((s) => {
+          const isActive = viewMode === "season" && currentSeason === s;
+          return (
+            <button
+              key={s}
+              onClick={() => {
+                setViewMode("season");
+                setCurrentSeason(s);
+                fetchLeaderboard("season", s);
+              }}
+              className={`px-4 py-1.5 text-sm font-display uppercase tracking-wide rounded-full transition-colors ${
+                isActive
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-700"
+              }`}
+            >
+              Season {s}
+            </button>
+          );
+        })}
         <button
           onClick={() => { setViewMode("all-time"); fetchLeaderboard("all-time"); }}
           className={`px-4 py-1.5 text-sm font-display uppercase tracking-wide rounded-full transition-colors ${
@@ -783,8 +804,9 @@ export default function Home() {
         </div>
       )}
 
-      {/* Win Streak Chart (login required) */}
-      {showAdvanced && streakData && streakData.players.length > 0 && (() => {
+      {/* Win Streak Chart (login required) — always all-time */}
+      {showAdvanced && allTimeStreakData && allTimeStreakData.players.length > 0 && (() => {
+        const streakData = allTimeStreakData; // chart logic below reads `streakData` — alias to all-time copy
         const LINE_COLORS = [
           "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#A855F7",
           "#EC4899", "#06B6D4", "#F97316", "#84CC16", "#6366F1",
