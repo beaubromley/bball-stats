@@ -858,18 +858,24 @@ export default function HomePage() {
           timeZone: "America/Chicago",
         });
 
-        const [g, p, r, t, votes] = await Promise.all([
+        const [g, p, r, t, votes, prevVotes] = await Promise.all([
           fetch(`${API_BASE}/games`).then((r) => r.json() as Promise<GameRow[]>),
           fetch(`${API_BASE}/players?season=${m.currentSeason}`).then((r) => r.json()),
           fetch(`${API_BASE}/records`).then((r) => r.json() as Promise<RecordsBundle>),
           fetch(`${API_BASE}/stats/today?date=${todayStr}`)
             .then((r) => r.json() as Promise<TodayData>)
             .catch(() => null),
-          // Check whether MVP voting is currently open for the current season,
-          // so we can show a banner inviting people to vote.
+          // Check MVP voting for the current season AND the previous one.
+          // The current season is usually still in progress (state=not_yet_open),
+          // but the just-completed prior season is where voting actually opens.
           fetch(`${API_BASE}/seasons/${m.currentSeason}/votes`)
             .then((r) => r.json() as Promise<{ state?: string }>)
             .catch(() => null),
+          m.currentSeason > 1
+            ? fetch(`${API_BASE}/seasons/${m.currentSeason - 1}/votes`)
+                .then((r) => r.json() as Promise<{ state?: string }>)
+                .catch(() => null)
+            : Promise.resolve(null),
         ]);
         if (cancelled) return;
         setGames(Array.isArray(g) ? g : []);
@@ -878,7 +884,15 @@ export default function HomePage() {
         setSeasonPlayers(players);
         setRecords(r);
         setToday(t);
-        setMvpVotingOpenSeason(votes && votes.state === "open" ? m.currentSeason : null);
+        // Pick the highest-numbered season whose voting is currently open.
+        // (If both are open somehow, prefer the more recent one.)
+        const openSeason =
+          votes && votes.state === "open"
+            ? m.currentSeason
+            : prevVotes && prevVotes.state === "open"
+              ? m.currentSeason - 1
+              : null;
+        setMvpVotingOpenSeason(openSeason);
       } finally {
         if (!cancelled) setLoading(false);
       }
