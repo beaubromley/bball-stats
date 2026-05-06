@@ -73,165 +73,60 @@ async function _getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]> {
 
   const filtering = gameIds && gameIds.length > 0;
   const ph = filtering ? gameIds.map(() => "?").join(",") : "";
-  const gameClause = filtering ? `AND g.id IN (${ph})` : "";
-  const eventClause = filtering ? `WHERE ge.game_id IN (${ph})` : "";
 
-  // Effective games subquery: game-to-22 counts as 2 effective games, game-to-11 counts as 1
-  const egGameClause = filtering ? `AND g_eg.id IN (${ph})` : "";
-  const egEventClause = filtering ? `WHERE ge2.game_id IN (${ph})` : "";
+  // Read directly from the player_game_stats rollup. Two queries instead of
+  // four, both small (one row per (game,player), ~845 rows total). The math
+  // matches the old game_events-based queries exactly because refreshGameStats
+  // and the backfill use the same per-game logic.
+  //
+  // Plus/minus is filtered to finished games only (matches old behavior of
+  // the previous +/- query, which JOINed `g.status='finished'`). `won` is
+  // NULL on active games so wins/losses naturally exclude them.
 
-  const mainArgs: string[] = [];
-  if (filtering) mainArgs.push(...gameIds); // for gameClause
-  if (filtering) mainArgs.push(...gameIds); // for eventClause (scoring)
-  if (filtering) mainArgs.push(...gameIds); // for egGameClause
-  if (filtering) mainArgs.push(...gameIds); // for egEventClause (inside gws)
+  const mainSql = `
+    SELECT
+      p.id,
+      p.name,
+      COUNT(*) AS games_played,
+      COALESCE(SUM(pgs.effective_games), 0) AS effective_games,
+      COALESCE(SUM(CASE WHEN pgs.won = 1 THEN 1 ELSE 0 END), 0) AS wins,
+      COALESCE(SUM(CASE WHEN pgs.won = 0 THEN 1 ELSE 0 END), 0) AS losses,
+      COALESCE(SUM(pgs.points), 0) AS total_points,
+      COALESCE(SUM(pgs.ones_made), 0) AS ones_made,
+      COALESCE(SUM(pgs.twos_made), 0) AS twos_made,
+      COALESCE(SUM(pgs.assists), 0) AS assists,
+      COALESCE(SUM(pgs.steals), 0) AS steals,
+      COALESCE(SUM(pgs.blocks), 0) AS blocks,
+      COALESCE(SUM(CASE WHEN pgs.game_status = 'finished' THEN pgs.plus_minus ELSE 0 END), 0) AS plus_minus,
+      COALESCE(SUM(pgs.was_game_mvp), 0) AS mvp_count
+    FROM player_game_stats pgs
+    JOIN players p ON p.id = pgs.player_id
+    ${filtering ? `WHERE pgs.game_id IN (${ph})` : ""}
+    GROUP BY p.id
+    ORDER BY wins DESC, total_points DESC
+  `;
+  const mainArgs: string[] = filtering ? [...gameIds] : [];
 
-  // Compute raw +/- per player (independent query)
-  const pmArgs: string[] = filtering ? [...gameIds] : [];
-  const pmGameClause = filtering ? `AND g.id IN (${ph})` : "";
-
-  // Compute win/loss streaks (independent query)
+  const streakSql = `
+    SELECT player_id, won, start_time
+    FROM player_game_stats
+    WHERE won IS NOT NULL ${filtering ? `AND game_id IN (${ph})` : ""}
+    ORDER BY start_time DESC, game_id DESC
+  `;
   const streakArgs: string[] = filtering ? [...gameIds] : [];
-  const streakGameClause = filtering ? `AND g.id IN (${ph})` : "";
 
-  // Compute MVP counts (independent query)
-  const mvpArgs: string[] = filtering ? [...gameIds] : [];
-  const mvpGameClause = filtering ? `AND g.id IN (${ph})` : "";
-
-  // Run all four aggregation queries in parallel — they don't depend on each other.
-  // Saves ~3x roundtrip latency on every leaderboard hit.
-  const [result, pmResult, streakResult, mvpResult] = await Promise.all([
-    db.execute({
-      sql: `
-        SELECT
-          p.id,
-          p.name,
-          COUNT(DISTINCT r.game_id) as games_played,
-          COALESCE(SUM(CASE
-            WHEN g.status = 'finished' AND g.winning_team = r.team THEN 1
-            ELSE 0
-          END), 0) as wins,
-          COALESCE(SUM(CASE
-            WHEN g.status = 'finished' AND g.winning_team IS NOT NULL AND g.winning_team != r.team THEN 1
-            ELSE 0
-          END), 0) as losses,
-          COALESCE(scoring.total_points, 0) as total_points,
-          COALESCE(scoring.ones_made, 0) as ones_made,
-          COALESCE(scoring.twos_made, 0) as twos_made,
-          COALESCE(scoring.assists, 0) as assists,
-          COALESCE(scoring.steals, 0) as steals,
-          COALESCE(scoring.blocks, 0) as blocks,
-          COALESCE(eg.effective_games, 1.0) as effective_games
-        FROM players p
-        JOIN rosters r ON p.id = r.player_id
-        JOIN games g ON r.game_id = g.id ${gameClause}
-        LEFT JOIN (
-          SELECT
-            ge.player_id,
-            SUM(ge.point_value) as total_points,
-            SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 1 THEN 1 ELSE 0 END)
-              - SUM(CASE WHEN ge.event_type = 'correction' AND ge.point_value = -1 THEN 1 ELSE 0 END) as ones_made,
-            SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 2 THEN 1 ELSE 0 END)
-              - SUM(CASE WHEN ge.event_type = 'correction' AND ge.point_value = -2 THEN 1 ELSE 0 END) as twos_made,
-            SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END) as assists,
-            SUM(CASE WHEN ge.event_type = 'steal' THEN 1 ELSE 0 END) as steals,
-            SUM(CASE WHEN ge.event_type = 'block' THEN 1 ELSE 0 END) as blocks
-          FROM game_events ge
-          ${eventClause}
-          GROUP BY ge.player_id
-        ) scoring ON p.id = scoring.player_id
-        LEFT JOIN (
-          SELECT r_eg.player_id, SUM(COALESCE(gws.winning_score, 11) / 11.0) as effective_games
-          FROM rosters r_eg
-          JOIN games g_eg ON r_eg.game_id = g_eg.id AND g_eg.status = 'finished' ${egGameClause}
-          LEFT JOIN (
-            SELECT ts.game_id, MAX(ts.team_score) as winning_score
-            FROM (
-              SELECT r2.game_id, r2.team, SUM(ge2.point_value) as team_score
-              FROM game_events ge2
-              JOIN rosters r2 ON ge2.game_id = r2.game_id AND ge2.player_id = r2.player_id
-              ${egEventClause}
-              GROUP BY r2.game_id, r2.team
-            ) ts
-            GROUP BY ts.game_id
-          ) gws ON r_eg.game_id = gws.game_id
-          GROUP BY r_eg.player_id
-        ) eg ON p.id = eg.player_id
-        GROUP BY p.id
-        ORDER BY wins DESC, total_points DESC
-      `,
-      args: mainArgs,
-    }),
-    db.execute({
-      sql: `
-        SELECT
-          r.player_id,
-          SUM(
-            CASE WHEN r.team = 'A' THEN COALESCE(sa.score, 0) - COALESCE(sb.score, 0)
-                 ELSE COALESCE(sb.score, 0) - COALESCE(sa.score, 0)
-            END
-          ) as plus_minus
-        FROM rosters r
-        JOIN games g ON r.game_id = g.id AND g.status = 'finished' ${pmGameClause}
-        LEFT JOIN (
-          SELECT ge.game_id, SUM(ge.point_value) as score
-          FROM game_events ge
-          JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id AND r2.team = 'A'
-          GROUP BY ge.game_id
-        ) sa ON r.game_id = sa.game_id
-        LEFT JOIN (
-          SELECT ge.game_id, SUM(ge.point_value) as score
-          FROM game_events ge
-          JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id AND r2.team = 'B'
-          GROUP BY ge.game_id
-        ) sb ON r.game_id = sb.game_id
-        GROUP BY r.player_id
-      `,
-      args: pmArgs,
-    }),
-    db.execute({
-      sql: `
-        SELECT r.player_id, g.winning_team, r.team, g.start_time
-        FROM rosters r
-        JOIN games g ON r.game_id = g.id
-        WHERE g.status = 'finished' AND g.winning_team IS NOT NULL ${streakGameClause}
-        ORDER BY g.start_time DESC
-      `,
-      args: streakArgs,
-    }),
-    db.execute({
-      sql: `
-        SELECT
-          r.player_id,
-          p.name,
-          r.game_id,
-          r.team,
-          g.winning_team,
-          COALESCE(SUM(CASE WHEN ge.event_type IN ('score','correction') THEN ge.point_value ELSE 0 END), 0) as pts,
-          COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0) as asts,
-          COALESCE(SUM(CASE WHEN ge.event_type IN ('score','correction') THEN ge.point_value ELSE 0 END), 0)
-            + COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0)
-            + COALESCE(SUM(CASE WHEN ge.event_type = 'steal' THEN 1 ELSE 0 END), 0)
-            + COALESCE(SUM(CASE WHEN ge.event_type = 'block' THEN 1 ELSE 0 END), 0) as fp
-        FROM rosters r
-        JOIN players p ON r.player_id = p.id
-        JOIN games g ON r.game_id = g.id
-        LEFT JOIN game_events ge ON ge.game_id = r.game_id AND ge.player_id = r.player_id
-        WHERE g.status = 'finished' AND g.winning_team IS NOT NULL AND r.team = g.winning_team ${mvpGameClause}
-        GROUP BY r.player_id, r.game_id
-      `,
-      args: mvpArgs,
-    }),
+  const [result, streakResult] = await Promise.all([
+    db.execute({ sql: mainSql, args: mainArgs }),
+    db.execute({ sql: streakSql, args: streakArgs }),
   ]);
 
-  const pmMap = new Map<string, number>();
-  for (const row of pmResult.rows) {
-    pmMap.set(row.player_id as string, Number(row.plus_minus));
-  }
+  // Build streak strings ("W3" / "L2" / "-") from the ordered won/lost sequence.
+  // Note: each (player, game) pair has its own row, so iterating in returned
+  // order gives us the player's W/L history in chronological-reverse order.
   const playerGames = new Map<string, boolean[]>();
   for (const row of streakResult.rows) {
     const pid = row.player_id as string;
-    const won = row.winning_team === row.team;
+    const won = Number(row.won) === 1;
     if (!playerGames.has(pid)) playerGames.set(pid, []);
     playerGames.get(pid)!.push(won);
   }
@@ -247,31 +142,13 @@ async function _getLeaderboard(gameIds?: string[]): Promise<PlayerStats[]> {
     streakMap.set(pid, `${first ? "W" : "L"}${count}`);
   }
 
-  // Deterministic MVP tiebreaker: fp DESC, pts DESC, asts DESC, player_id ASC
-  // (mvpResult was already fetched above as part of the parallel batch)
-  const gameBest = new Map<string, { player_id: string; fp: number; pts: number; asts: number }>();
-  for (const row of mvpResult.rows) {
-    const gameId = row.game_id as string;
-    const cand = {
-      player_id: row.player_id as string,
-      fp: Number(row.fp),
-      pts: Number(row.pts),
-      asts: Number(row.asts),
-    };
-    const current = gameBest.get(gameId);
-    if (
-      !current ||
-      cand.fp > current.fp ||
-      (cand.fp === current.fp && cand.pts > current.pts) ||
-      (cand.fp === current.fp && cand.pts === current.pts && cand.asts > current.asts) ||
-      (cand.fp === current.fp && cand.pts === current.pts && cand.asts === current.asts && cand.player_id < current.player_id)
-    ) {
-      gameBest.set(gameId, cand);
-    }
-  }
+  // pmMap and mvpCountMap kept as Maps for parity with the old code path —
+  // values are now read straight from the main query.
+  const pmMap = new Map<string, number>();
   const mvpCountMap = new Map<string, number>();
-  for (const { player_id } of gameBest.values()) {
-    mvpCountMap.set(player_id, (mvpCountMap.get(player_id) || 0) + 1);
+  for (const row of result.rows) {
+    pmMap.set(row.id as string, Number(row.plus_minus));
+    mvpCountMap.set(row.id as string, Number(row.mvp_count));
   }
 
   const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -332,81 +209,38 @@ export interface TodayStats {
 async function _getTodayStats(dateStr: string): Promise<TodayStats> {
   const db = getDb();
 
+  // First: how many games started today (Central time). Cheap — uses games table directly.
   const countResult = await db.execute({
     sql: "SELECT COUNT(DISTINCT id) as cnt FROM games WHERE date(start_time, '-6 hours') = ?",
     args: [dateStr],
   });
   const games_today = Number(countResult.rows[0]?.cnt ?? 0);
+  if (games_today === 0) return { games_today: 0, players: [] };
 
-  if (games_today === 0) {
-    return { games_today: 0, players: [] };
-  }
-
+  // Now read the rollup, filtering by today (start_time is denormalized on each row).
   const result = await db.execute({
     sql: `
       SELECT
         p.id,
         p.name,
-        COUNT(DISTINCT r.game_id) as games_played,
-        COALESCE(SUM(CASE
-          WHEN g.status = 'finished' AND g.winning_team = r.team THEN 1
-          ELSE 0
-        END), 0) as wins,
-        COALESCE(SUM(CASE
-          WHEN g.status = 'finished' AND g.winning_team IS NOT NULL AND g.winning_team != r.team THEN 1
-          ELSE 0
-        END), 0) as losses,
-        COALESCE(scoring.total_points, 0) as total_points,
-        COALESCE(scoring.ones_made, 0) as ones_made,
-        COALESCE(scoring.twos_made, 0) as twos_made,
-        COALESCE(scoring.assists, 0) as assists,
-        COALESCE(scoring.steals, 0) as steals,
-        COALESCE(scoring.blocks, 0) as blocks,
-        COALESCE(eg.effective_games, 1.0) as effective_games
-      FROM players p
-      JOIN rosters r ON p.id = r.player_id
-      JOIN games g ON r.game_id = g.id
-      LEFT JOIN (
-        SELECT
-          ge.player_id,
-          SUM(ge.point_value) as total_points,
-          SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 1
-            AND ge.id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL)
-            THEN 1 ELSE 0 END) as ones_made,
-          SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 2
-            AND ge.id NOT IN (SELECT corrected_event_id FROM game_events WHERE corrected_event_id IS NOT NULL)
-            THEN 1 ELSE 0 END) as twos_made,
-          SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END) as assists,
-          SUM(CASE WHEN ge.event_type = 'steal' THEN 1 ELSE 0 END) as steals,
-          SUM(CASE WHEN ge.event_type = 'block' THEN 1 ELSE 0 END) as blocks
-        FROM game_events ge
-        JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id
-        JOIN games g2 ON r2.game_id = g2.id
-        WHERE date(g2.start_time, '-6 hours') = ?
-        GROUP BY ge.player_id
-      ) scoring ON p.id = scoring.player_id
-      LEFT JOIN (
-        SELECT r_eg.player_id, SUM(COALESCE(gws.winning_score, 11) / 11.0) as effective_games
-        FROM rosters r_eg
-        JOIN games g_eg ON r_eg.game_id = g_eg.id AND g_eg.status = 'finished'
-        LEFT JOIN (
-          SELECT ts.game_id, MAX(ts.team_score) as winning_score
-          FROM (
-            SELECT r3.game_id, r3.team, SUM(ge3.point_value) as team_score
-            FROM game_events ge3
-            JOIN rosters r3 ON ge3.game_id = r3.game_id AND ge3.player_id = r3.player_id
-            GROUP BY r3.game_id, r3.team
-          ) ts
-          GROUP BY ts.game_id
-        ) gws ON r_eg.game_id = gws.game_id
-        WHERE date(g_eg.start_time, '-6 hours') = ?
-        GROUP BY r_eg.player_id
-      ) eg ON p.id = eg.player_id
-      WHERE date(g.start_time, '-6 hours') = ?
+        COUNT(*) AS games_played,
+        COALESCE(SUM(pgs.effective_games), 0) AS effective_games,
+        COALESCE(SUM(CASE WHEN pgs.won = 1 THEN 1 ELSE 0 END), 0) AS wins,
+        COALESCE(SUM(CASE WHEN pgs.won = 0 THEN 1 ELSE 0 END), 0) AS losses,
+        COALESCE(SUM(pgs.points), 0) AS total_points,
+        COALESCE(SUM(pgs.ones_made), 0) AS ones_made,
+        COALESCE(SUM(pgs.twos_made), 0) AS twos_made,
+        COALESCE(SUM(pgs.assists), 0) AS assists,
+        COALESCE(SUM(pgs.steals), 0) AS steals,
+        COALESCE(SUM(pgs.blocks), 0) AS blocks,
+        COALESCE(SUM(CASE WHEN pgs.game_status = 'finished' THEN pgs.plus_minus ELSE 0 END), 0) AS plus_minus
+      FROM player_game_stats pgs
+      JOIN players p ON p.id = pgs.player_id
+      WHERE date(pgs.start_time, '-6 hours') = ?
       GROUP BY p.id
       ORDER BY total_points DESC
     `,
-    args: [dateStr, dateStr, dateStr],
+    args: [dateStr],
   });
 
   const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -420,6 +254,7 @@ async function _getTodayStats(dateStr: string): Promise<TodayStats> {
     const assists = Number(row.assists);
     const steals = Number(row.steals);
     const blocks = Number(row.blocks);
+    const pm = Number(row.plus_minus);
     return {
       id: row.id as string,
       name: row.name as string,
@@ -436,8 +271,8 @@ async function _getTodayStats(dateStr: string): Promise<TodayStats> {
       steals,
       blocks,
       fantasy_points: calculateFantasyPoints({ points: totalPoints, assists, steals, blocks }),
-      plus_minus: 0,
-      plus_minus_per_game: 0,
+      plus_minus: pm,
+      plus_minus_per_game: r1(pm / effectiveGames),
       streak: "-",
       mvp_count: 0,
       apg: r1(assists / effectiveGames),
@@ -448,45 +283,6 @@ async function _getTodayStats(dateStr: string): Promise<TodayStats> {
       twos_pg: r1(twosMade / effectiveGames),
     };
   });
-
-  // Compute raw +/- for today's games
-  const pmResult = await db.execute({
-    sql: `
-      SELECT
-        r.player_id,
-        SUM(
-          CASE WHEN r.team = 'A' THEN COALESCE(sa.score, 0) - COALESCE(sb.score, 0)
-               ELSE COALESCE(sb.score, 0) - COALESCE(sa.score, 0)
-          END
-        ) as plus_minus
-      FROM rosters r
-      JOIN games g ON r.game_id = g.id AND g.status = 'finished'
-      LEFT JOIN (
-        SELECT ge.game_id, SUM(ge.point_value) as score
-        FROM game_events ge
-        JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id AND r2.team = 'A'
-        GROUP BY ge.game_id
-      ) sa ON r.game_id = sa.game_id
-      LEFT JOIN (
-        SELECT ge.game_id, SUM(ge.point_value) as score
-        FROM game_events ge
-        JOIN rosters r2 ON ge.game_id = r2.game_id AND ge.player_id = r2.player_id AND r2.team = 'B'
-        GROUP BY ge.game_id
-      ) sb ON r.game_id = sb.game_id
-      WHERE date(g.start_time, '-6 hours') = ?
-      GROUP BY r.player_id
-    `,
-    args: [dateStr],
-  });
-  for (const row of pmResult.rows) {
-    const p = players.find((pl) => pl.id === row.player_id);
-    if (p) {
-      const pm = Number(row.plus_minus);
-      const eg = Number(p.games_played > 0 ? result.rows.find((r) => r.id === p.id)?.effective_games : 1) || 1;
-      p.plus_minus = pm;
-      p.plus_minus_per_game = r1(pm / eg);
-    }
-  }
 
   return { games_today, players };
 }

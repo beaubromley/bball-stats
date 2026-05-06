@@ -152,7 +152,8 @@ def refresh_game(game_id: str):
     team_a_score = sum(a['points'] for a in by_player.values() if a['team'] == 'A')
     team_b_score = sum(a['points'] for a in by_player.values() if a['team'] == 'B')
     winning_score = max(team_a_score, team_b_score)
-    effective_games = max(winning_score, 11) / 11.0 if game['status'] == 'finished' else 1.0
+    # Match legacy SQL: COALESCE(winning_score, 11) / 11.0. No min cap.
+    effective_games = (winning_score or 11) / 11.0 if game['status'] == 'finished' else 1.0
 
     # MVP tiebreaker: fp DESC, pts DESC, asts DESC, player_id ASC. Only winning team eligible.
     mvp_player_id = None

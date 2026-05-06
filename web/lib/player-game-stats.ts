@@ -138,9 +138,13 @@ export async function refreshGameStats(gameId: string): Promise<void> {
   }
   const winningScore = Math.max(teamAScore, teamBScore);
   // game-to-22 in 2s3s mode → 2.0 effective games. game-to-11 → 1.0.
-  // Active games default to 1.0; we only normalize when finished.
+  // Active games default to 1.0; finished games normalize to winning_score / 11.
+  // Matches the legacy SQL exactly: COALESCE(winning_score, 11) / 11.0.
+  // (No min cap — a finished game whose net winning score < 11, due to
+  // unrecorded corrections or similar data issues, contributes < 1.0
+  // effective games. That matches the prior behavior.)
   const effectiveGames =
-    game.status === "finished" ? Math.max(winningScore, 11) / 11.0 : 1.0;
+    game.status === "finished" ? (winningScore || 11) / 11.0 : 1.0;
 
   // 6. Pick the game MVP using the same tiebreaker as lib/stats.ts:
   //    fantasy_points DESC, points DESC, assists DESC, player_id ASC.
