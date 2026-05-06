@@ -253,6 +253,40 @@ export async function initDb() {
   `);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mvp_votes_season ON mvp_votes(season)`);
 
+  // Per-player per-game rollup. Maintained by refreshGameStats() — every
+  // write site that touches game_events / rosters / games for a given gameId
+  // calls refreshGameStats(gameId), which recomputes that game's rows from
+  // scratch (idempotent). Read-side queries aggregate over this table
+  // instead of scanning the play-by-play.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS player_game_stats (
+      game_id          TEXT    NOT NULL,
+      player_id        TEXT    NOT NULL,
+      team             TEXT    NOT NULL,
+      game_status      TEXT    NOT NULL,
+      start_time       DATETIME NOT NULL,
+      scoring_mode     TEXT    NOT NULL,
+      won              INTEGER,
+      points           INTEGER NOT NULL,
+      ones_made        INTEGER NOT NULL,
+      twos_made        INTEGER NOT NULL,
+      assists          INTEGER NOT NULL,
+      steals           INTEGER NOT NULL,
+      blocks           INTEGER NOT NULL,
+      fantasy_points   INTEGER NOT NULL,
+      team_score       INTEGER NOT NULL,
+      opp_score        INTEGER NOT NULL,
+      plus_minus       INTEGER NOT NULL,
+      effective_games  REAL    NOT NULL,
+      was_game_mvp     INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (game_id, player_id),
+      FOREIGN KEY (game_id) REFERENCES games(id),
+      FOREIGN KEY (player_id) REFERENCES players(id)
+    )
+  `);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_pgs_player ON player_game_stats(player_id)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_pgs_status ON player_game_stats(game_status)`);
+
   // NOTE: a one-shot UPDATE used to live here that backfilled assisted_event_id
   // on old assist rows. It was confirmed to have already populated all rows
   // (every assist now has the link set at insert time), but was still running

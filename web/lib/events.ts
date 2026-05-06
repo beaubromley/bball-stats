@@ -1,6 +1,7 @@
 import { v4 as uuid } from "uuid";
 import { getDb } from "./turso";
 import { bustStatsCache } from "./cache-tags";
+import { refreshGameStats } from "./player-game-stats";
 
 export async function ensurePlayer(name: string, fullName?: string): Promise<string> {
   const db = getDb();
@@ -55,6 +56,7 @@ export async function setRoster(
       args: [gameId, playerId, team],
     });
   }
+  await refreshGameStats(gameId);
   bustStatsCache();
 }
 
@@ -90,6 +92,7 @@ export async function recordEvent(
     args: [today, playerId],
   });
 
+  await refreshGameStats(gameId);
   bustStatsCache();
   return Number(result.lastInsertRowid);
 }
@@ -129,6 +132,7 @@ export async function deleteEvent(gameId: string, eventId: number) {
     sql: "DELETE FROM game_events WHERE game_id = ? AND id = ?",
     args: [gameId, eventId],
   });
+  await refreshGameStats(gameId);
   bustStatsCache();
 }
 
@@ -138,6 +142,7 @@ export async function deleteCorrectionFor(gameId: string, correctedEventId: numb
     sql: "DELETE FROM game_events WHERE game_id = ? AND event_type = 'correction' AND corrected_event_id = ?",
     args: [gameId, correctedEventId],
   });
+  await refreshGameStats(gameId);
   bustStatsCache();
 }
 
@@ -153,6 +158,7 @@ export async function swapEventOrder(gameId: string, eventIdA: number, eventIdB:
   if (!a || !b) return;
   await db.execute({ sql: "UPDATE game_events SET created_at = ? WHERE id = ?", args: [b.created_at, eventIdA] });
   await db.execute({ sql: "UPDATE game_events SET created_at = ? WHERE id = ?", args: [a.created_at, eventIdB] });
+  await refreshGameStats(gameId);
   bustStatsCache();
 }
 
@@ -175,6 +181,7 @@ export async function updateEvent(
       args: [updates.point_value, gameId, eventId],
     });
   }
+  await refreshGameStats(gameId);
   bustStatsCache();
 }
 
@@ -184,6 +191,7 @@ export async function endGame(gameId: string, winningTeam: "A" | "B") {
     sql: `UPDATE games SET status = 'finished', end_time = CURRENT_TIMESTAMP, winning_team = ? WHERE id = ?`,
     args: [winningTeam, gameId],
   });
+  await refreshGameStats(gameId);
   bustStatsCache();
 }
 

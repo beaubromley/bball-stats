@@ -4,6 +4,7 @@ import { setRoster, ensurePlayer } from "@/lib/events";
 import { getDb } from "@/lib/turso";
 import { requireAuth } from "@/lib/auth";
 import { bustStatsCache } from "@/lib/cache-tags";
+import { refreshGameStats } from "@/lib/player-game-stats";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireAuth(req);
@@ -40,6 +41,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     sql: "INSERT OR REPLACE INTO rosters (game_id, player_id, team) VALUES (?, ?, ?)",
     args: [id, playerId, new_team],
   });
+  await refreshGameStats(id);
   bustStatsCache();
   return NextResponse.json({ ok: true });
 }
