@@ -62,6 +62,10 @@ export async function initDb() {
     // does a full scan of game_events. Verified: cuts that lookup from
     // ~510ms to ~150ms on the live DB.
     `CREATE INDEX IF NOT EXISTS idx_events_corrected ON game_events(corrected_event_id)`,
+    // Functional index for case-insensitive player lookups. ensurePlayer
+    // does WHERE LOWER(name) = LOWER(?) which previously full-scanned the
+    // players table (~5.6M rows read across 153K calls last month).
+    `CREATE INDEX IF NOT EXISTS idx_players_name_lower ON players(LOWER(name))`,
     `CREATE TABLE IF NOT EXISTS game_transcripts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       game_id TEXT NOT NULL,
@@ -249,17 +253,11 @@ export async function initDb() {
   `);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mvp_votes_season ON mvp_votes(season)`);
 
-  // Backfill: link assist events to the score event that immediately precedes them
-  await db.execute(`
-    UPDATE game_events SET assisted_event_id = (
-      SELECT ge2.id FROM game_events ge2
-      WHERE ge2.game_id = game_events.game_id
-        AND ge2.event_type = 'score'
-        AND ge2.created_at <= game_events.created_at
-        AND ge2.id < game_events.id
-      ORDER BY ge2.created_at DESC, ge2.id DESC
-      LIMIT 1
-    )
-    WHERE event_type = 'assist' AND assisted_event_id IS NULL
-  `);
+  // NOTE: a one-shot UPDATE used to live here that backfilled assisted_event_id
+  // on old assist rows. It was confirmed to have already populated all rows
+  // (every assist now has the link set at insert time), but was still running
+  // on every API request because initDb() is called from every route. Turso
+  // analytics showed it accounted for ~75% of monthly row reads. Removed.
+  // If we ever need to re-run that migration, it belongs in a one-off script,
+  // not initDb().
 }
