@@ -140,6 +140,9 @@ const MILESTONES: Record<MilestoneStat, number[]> = {
 
 const APPROACHING_THRESHOLD = 10;
 const RECENT_DAYS = 7;
+// "Approaching X" alerts only show for players who've played within this window.
+// Otherwise we'd surface stale alerts for people who haven't shown up in months.
+const APPROACHING_ACTIVE_DAYS = 14;
 
 function nextMilestone(value: number, list: number[]): number | null {
   for (const m of list) if (value < m) return m;
@@ -184,32 +187,50 @@ export async function getMilestoneWatch(): Promise<MilestoneAlert[]> {
   const recentCutoff = new Date(
     Date.now() - RECENT_DAYS * 24 * 60 * 60 * 1000
   ).toISOString();
+  const approachingCutoff = new Date(
+    Date.now() - APPROACHING_ACTIVE_DAYS * 24 * 60 * 60 * 1000
+  ).toISOString();
+
+  // Per-player most recent game start_time, used to gate "approaching" alerts
+  // to currently-active players. We already loaded byPlayer above sorted by
+  // start_time ASC, so the last entry is the most recent game.
+  const lastPlayed = new Map<string, string>();
+  for (const [pid, games] of byPlayer) {
+    if (games.length > 0) lastPlayed.set(pid, games[games.length - 1].start_time);
+  }
 
   const alerts: MilestoneAlert[] = [];
 
   for (const p of lb) {
-    // ── Approaching: within APPROACHING_THRESHOLD of next milestone ──
-    const checks: { stat: MilestoneStat; value: number }[] = [
-      { stat: "points", value: p.total_points },
-      { stat: "assists", value: p.assists },
-      { stat: "steals", value: p.steals },
-      { stat: "blocks", value: p.blocks },
-      { stat: "games", value: p.games_played },
-    ];
-    for (const c of checks) {
-      const next = nextMilestone(c.value, MILESTONES[c.stat]);
-      if (next === null) continue;
-      const remaining = next - c.value;
-      if (remaining > 0 && remaining <= APPROACHING_THRESHOLD) {
-        alerts.push({
-          player_id: p.id,
-          player_name: p.name,
-          stat: c.stat,
-          current: c.value,
-          next_milestone: next,
-          remaining,
-          kind: "approaching",
-        });
+    const playerActiveRecently =
+      (lastPlayed.get(p.id) ?? "") >= approachingCutoff;
+
+    // ── Approaching: within APPROACHING_THRESHOLD of next milestone.
+    //    Only surface if the player has played in the last APPROACHING_ACTIVE_DAYS;
+    //    otherwise the alert is stale (player hasn't shown up in weeks).
+    if (playerActiveRecently) {
+      const checks: { stat: MilestoneStat; value: number }[] = [
+        { stat: "points", value: p.total_points },
+        { stat: "assists", value: p.assists },
+        { stat: "steals", value: p.steals },
+        { stat: "blocks", value: p.blocks },
+        { stat: "games", value: p.games_played },
+      ];
+      for (const c of checks) {
+        const next = nextMilestone(c.value, MILESTONES[c.stat]);
+        if (next === null) continue;
+        const remaining = next - c.value;
+        if (remaining > 0 && remaining <= APPROACHING_THRESHOLD) {
+          alerts.push({
+            player_id: p.id,
+            player_name: p.name,
+            stat: c.stat,
+            current: c.value,
+            next_milestone: next,
+            remaining,
+            kind: "approaching",
+          });
+        }
       }
     }
 

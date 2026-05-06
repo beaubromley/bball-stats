@@ -728,12 +728,22 @@ function StreakSection({ records }: { records: StreakRecord[] }) {
 }
 
 function relativeDays(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const ms = Date.now() - then;
-  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
-  if (days <= 0) return "today";
+  // Compare *calendar days* in Central Time, not elapsed-ms. A game at 9pm
+  // last night should read "yesterday" the entire next day, not "today" until
+  // 9pm because <24h elapsed.
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return "";
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+  const thenDay = fmt(then);
+  const todayDay = fmt(new Date());
+  if (thenDay === todayDay) return "today";
+  // Calendar-day diff (parse YYYY-MM-DD as date-only)
+  const t = new Date(thenDay + "T00:00:00Z").getTime();
+  const n = new Date(todayDay + "T00:00:00Z").getTime();
+  const days = Math.round((n - t) / (24 * 60 * 60 * 1000));
   if (days === 1) return "yesterday";
+  if (days < 0) return ""; // future timestamp — shouldn't happen
   return `${days}d ago`;
 }
 
