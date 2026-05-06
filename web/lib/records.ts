@@ -151,21 +151,14 @@ export async function getMilestoneWatch(): Promise<MilestoneAlert[]> {
   const lb = await getLeaderboard();
 
   // Per-player per-game stat deltas (chronological) so we can detect when a
-  // player crossed each milestone and surface "just achieved" alerts.
+  // player crossed each milestone and surface "just achieved" alerts. Pulled
+  // directly from the rollup — columns are pre-aggregated already.
   const perGameRes = await db.execute(`
-    SELECT
-      r.player_id,
-      g.start_time,
-      g.id AS game_id,
-      COALESCE(SUM(CASE WHEN ge.event_type IN ('score','correction') THEN ge.point_value ELSE 0 END), 0) AS pts,
-      COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0) AS asts,
-      COALESCE(SUM(CASE WHEN ge.event_type = 'steal'  THEN 1 ELSE 0 END), 0) AS stls,
-      COALESCE(SUM(CASE WHEN ge.event_type = 'block'  THEN 1 ELSE 0 END), 0) AS blks
-    FROM rosters r
-    JOIN games g ON g.id = r.game_id AND g.status = 'finished'
-    LEFT JOIN game_events ge ON ge.game_id = r.game_id AND ge.player_id = r.player_id
-    GROUP BY r.player_id, g.id, g.start_time
-    ORDER BY r.player_id, g.start_time ASC, g.id ASC
+    SELECT player_id, start_time, game_id,
+           points AS pts, assists AS asts, steals AS stls, blocks AS blks
+    FROM player_game_stats
+    WHERE game_status = 'finished'
+    ORDER BY player_id, start_time ASC, game_id ASC
   `);
 
   type PerGame = {
@@ -284,21 +277,15 @@ export async function getSingleGameRecords(): Promise<SingleGameRecord[]> {
   const db = getDb();
   const numberMap = await getGameNumberMap();
 
+  // Read directly from the rollup. ~845 rows for the entire DB versus the
+  // ~26K rows the old query touched.
   const result = await db.execute(`
-    SELECT
-      r.game_id,
-      r.player_id,
-      p.name AS player_name,
-      g.start_time,
-      COALESCE(SUM(CASE WHEN ge.event_type IN ('score','correction') THEN ge.point_value ELSE 0 END), 0) AS pts,
-      COALESCE(SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END), 0) AS asts,
-      COALESCE(SUM(CASE WHEN ge.event_type = 'steal'  THEN 1 ELSE 0 END), 0) AS stls,
-      COALESCE(SUM(CASE WHEN ge.event_type = 'block'  THEN 1 ELSE 0 END), 0) AS blks
-    FROM rosters r
-    JOIN players p ON p.id = r.player_id
-    JOIN games g ON g.id = r.game_id AND g.status = 'finished'
-    LEFT JOIN game_events ge ON ge.game_id = r.game_id AND ge.player_id = r.player_id
-    GROUP BY r.game_id, r.player_id, p.name, g.start_time
+    SELECT pgs.game_id, pgs.player_id, p.name AS player_name, pgs.start_time,
+           pgs.points AS pts, pgs.assists AS asts, pgs.steals AS stls, pgs.blocks AS blks,
+           pgs.fantasy_points AS fp
+    FROM player_game_stats pgs
+    JOIN players p ON p.id = pgs.player_id
+    WHERE pgs.game_status = 'finished'
   `);
 
   const rows = result.rows.map((row) => ({
@@ -310,7 +297,7 @@ export async function getSingleGameRecords(): Promise<SingleGameRecord[]> {
     asts: Number(row.asts),
     stls: Number(row.stls),
     blks: Number(row.blks),
-    fp: Number(row.pts) + Number(row.asts) + Number(row.stls) + Number(row.blks),
+    fp: Number(row.fp),
   }));
 
   if (rows.length === 0) return [];
@@ -436,86 +423,20 @@ export async function getGameLevelRecords(): Promise<GameRecord[]> {
   const db = getDb();
   const numberMap = await getGameNumberMap();
 
-  // Pull every score AND correction event for finished, decided games.
-  // We need both because:
-  //   1. Scores that were later undone shouldn't count toward final score
-  //      OR toward the running total used for comeback peaks. (Otherwise
-  //      Team A might transiently appear up 11–6 before dropping back to
-  //      10–6, and that phantom 5-point "deficit" would get counted as a
-  //      comeback for Team B.)
-  //   2. We can't just rely on corrected_event_id pointing at the right
-  //      score id — older client builds wrote the row index instead of
-  //      the DB id, leaving 4 corrections with non-resolvable ids. So we
-  //      do a two-pass match: trust corrected_event_id when it lands on
-  //      a real score, then fall back to (player, opposite pv, earlier
-  //      created_at) for the rest.
-  const scoresResult = await db.execute(`
-    SELECT
-      ge.id,
-      ge.game_id,
-      ge.player_id,
-      ge.point_value,
-      ge.created_at,
-      r.team
-    FROM game_events ge
-    JOIN rosters r ON r.game_id = ge.game_id AND r.player_id = ge.player_id
-    JOIN games g ON g.id = ge.game_id
-    WHERE g.status = 'finished'
-      AND g.winning_team IS NOT NULL
-      AND ge.event_type = 'score'
-    ORDER BY ge.game_id, ge.created_at ASC, ge.id ASC
+  // Read straight from the rollup. Each row already has team_score, opp_score,
+  // and max_winner_deficit (computed during refreshGameStats), so margin and
+  // comeback are immediate. Also pull team + name so we can group rosters per
+  // team without a second query.
+  const result = await db.execute(`
+    SELECT pgs.game_id, pgs.start_time, pgs.team, pgs.team_score, pgs.opp_score,
+           pgs.max_winner_deficit, p.name AS player_name,
+           CASE WHEN pgs.won = 1 THEN pgs.team ELSE NULL END AS won_team
+    FROM player_game_stats pgs
+    JOIN players p ON p.id = pgs.player_id
+    JOIN games g ON g.id = pgs.game_id
+    WHERE pgs.game_status = 'finished' AND g.winning_team IS NOT NULL
   `);
 
-  const correctionsResult = await db.execute(`
-    SELECT
-      ge.id,
-      ge.game_id,
-      ge.player_id,
-      ge.point_value,
-      ge.corrected_event_id,
-      ge.created_at
-    FROM game_events ge
-    JOIN games g ON g.id = ge.game_id
-    WHERE g.status = 'finished'
-      AND g.winning_team IS NOT NULL
-      AND ge.event_type = 'correction'
-    ORDER BY ge.game_id, ge.created_at ASC, ge.id ASC
-  `);
-
-  // Game metadata (rosters + winning team + start time)
-  const gamesResult = await db.execute(`
-    SELECT
-      g.id,
-      g.start_time,
-      g.winning_team,
-      GROUP_CONCAT(CASE WHEN r.team = 'A' THEN p.name END) AS team_a_players,
-      GROUP_CONCAT(CASE WHEN r.team = 'B' THEN p.name END) AS team_b_players
-    FROM games g
-    JOIN rosters r ON r.game_id = g.id
-    JOIN players p ON p.id = r.player_id
-    WHERE g.status = 'finished' AND g.winning_team IS NOT NULL
-    GROUP BY g.id
-  `);
-
-  type Meta = {
-    game_id: string;
-    start_time: string;
-    winning_team: "A" | "B";
-    team_a_players: string[];
-    team_b_players: string[];
-  };
-  const meta = new Map<string, Meta>();
-  for (const row of gamesResult.rows) {
-    meta.set(row.id as string, {
-      game_id: row.id as string,
-      start_time: row.start_time as string,
-      winning_team: row.winning_team as "A" | "B",
-      team_a_players: row.team_a_players ? String(row.team_a_players).split(",") : [],
-      team_b_players: row.team_b_players ? String(row.team_b_players).split(",") : [],
-    });
-  }
-
-  // Walk events per game, computing final scores + max deficit faced by winner.
   type GameStat = {
     game_id: string;
     start_time: string;
@@ -527,125 +448,37 @@ export async function getGameLevelRecords(): Promise<GameRecord[]> {
     comeback: number;
     margin: number;
   };
-  type ScoreEvent = {
-    id: number;
-    player_id: string;
-    pv: number;
-    created_at: string;
-    team: "A" | "B";
-  };
-  type Correction = {
-    id: number;
-    player_id: string;
-    pv: number;
-    corrected_event_id: number | null;
-    created_at: string;
-  };
-
-  const scoresByGame = new Map<string, ScoreEvent[]>();
-  for (const row of scoresResult.rows) {
+  const byGame = new Map<string, GameStat>();
+  for (const row of result.rows) {
     const gid = row.game_id as string;
-    if (!scoresByGame.has(gid)) scoresByGame.set(gid, []);
-    scoresByGame.get(gid)!.push({
-      id: Number(row.id),
-      player_id: row.player_id as string,
-      pv: Number(row.point_value),
-      created_at: row.created_at as string,
-      team: row.team as "A" | "B",
-    });
-  }
-
-  const correctionsByGame = new Map<string, Correction[]>();
-  for (const row of correctionsResult.rows) {
-    const gid = row.game_id as string;
-    if (!correctionsByGame.has(gid)) correctionsByGame.set(gid, []);
-    correctionsByGame.get(gid)!.push({
-      id: Number(row.id),
-      player_id: row.player_id as string,
-      pv: Number(row.point_value),
-      corrected_event_id:
-        row.corrected_event_id !== null && row.corrected_event_id !== undefined
-          ? Number(row.corrected_event_id)
-          : null,
-      created_at: row.created_at as string,
-    });
-  }
-
-  // Build set of undone score IDs per game.
-  // Pass 1: trust corrected_event_id when it resolves to a real score in this game.
-  // Pass 2: heuristic — match leftover corrections to most recent unmatched score
-  //         by same player + opposite point value + earlier timestamp.
-  function computeUndoneIds(
-    scores: ScoreEvent[],
-    corrections: Correction[]
-  ): Set<number> {
-    const undone = new Set<number>();
-    const scoreIds = new Set(scores.map((s) => s.id));
-    const remaining: Correction[] = [];
-    for (const c of corrections) {
-      if (
-        c.corrected_event_id !== null &&
-        scoreIds.has(c.corrected_event_id) &&
-        !undone.has(c.corrected_event_id)
-      ) {
-        undone.add(c.corrected_event_id);
-      } else {
-        remaining.push(c);
-      }
+    const team = row.team as "A" | "B";
+    if (!byGame.has(gid)) {
+      // team_score is *this row's* team's final score; we'll capture both sides
+      // as we iterate. Margin is symmetric so |team_score - opp_score| is enough,
+      // but to render correctly we need final_a and final_b separately.
+      byGame.set(gid, {
+        game_id: gid,
+        start_time: row.start_time as string,
+        winning_team: "A", // placeholder, set below
+        team_a_players: [],
+        team_b_players: [],
+        final_a: 0,
+        final_b: 0,
+        comeback: Number(row.max_winner_deficit),
+        margin: Math.abs(Number(row.team_score) - Number(row.opp_score)),
+      });
     }
-    for (const c of remaining) {
-      const candidates = scores
-        .filter(
-          (s) =>
-            s.player_id === c.player_id &&
-            s.pv === -c.pv &&
-            s.created_at < c.created_at &&
-            !undone.has(s.id)
-        )
-        .sort(
-          (a, b) =>
-            b.created_at.localeCompare(a.created_at) || b.id - a.id
-        );
-      if (candidates.length > 0) {
-        undone.add(candidates[0].id);
-      }
-      // Otherwise the data is too inconsistent to recover; drop the correction.
+    const g = byGame.get(gid)!;
+    if (team === "A") {
+      g.final_a = Number(row.team_score);
+      g.team_a_players.push(row.player_name as string);
+    } else {
+      g.final_b = Number(row.team_score);
+      g.team_b_players.push(row.player_name as string);
     }
-    return undone;
+    if (row.won_team) g.winning_team = row.won_team as "A" | "B";
   }
-
-  const stats: GameStat[] = [];
-  for (const [gid, scores] of scoresByGame) {
-    const m = meta.get(gid);
-    if (!m) continue;
-    const corrections = correctionsByGame.get(gid) ?? [];
-    const undone = computeUndoneIds(scores, corrections);
-
-    let a = 0;
-    let b = 0;
-    let maxDef = 0;
-    for (const e of scores) {
-      if (undone.has(e.id)) continue;
-      if (e.team === "A") a += e.pv;
-      else b += e.pv;
-      const winner = m.winning_team === "A" ? a : b;
-      const loser = m.winning_team === "A" ? b : a;
-      const def = loser - winner;
-      if (def > maxDef) maxDef = def;
-    }
-    stats.push({
-      game_id: gid,
-      start_time: m.start_time,
-      winning_team: m.winning_team,
-      team_a_players: m.team_a_players,
-      team_b_players: m.team_b_players,
-      final_a: a,
-      final_b: b,
-      comeback: maxDef,
-      margin: Math.abs(a - b),
-    });
-  }
-
+  const stats = [...byGame.values()];
   if (stats.length === 0) return [];
 
   function build(stat: GameRecordStat, key: "margin" | "comeback"): GameRecord[] {
@@ -682,19 +515,14 @@ export async function getGameLevelRecords(): Promise<GameRecord[]> {
 export async function getStreakRecords(): Promise<StreakRecord[]> {
   const db = getDb();
   const numberMap = await getGameNumberMap();
+  // Read won/lost outcomes directly from the rollup, ordered for streak walking.
   const result = await db.execute(`
-    SELECT
-      r.player_id,
-      p.name AS player_name,
-      r.team,
-      r.game_id,
-      g.winning_team,
-      g.start_time
-    FROM rosters r
-    JOIN players p ON p.id = r.player_id
-    JOIN games g ON g.id = r.game_id
-    WHERE g.status = 'finished' AND g.winning_team IS NOT NULL
-    ORDER BY r.player_id, g.start_time ASC
+    SELECT pgs.player_id, p.name AS player_name,
+           pgs.won, pgs.start_time, pgs.game_id
+    FROM player_game_stats pgs
+    JOIN players p ON p.id = pgs.player_id
+    WHERE pgs.won IS NOT NULL
+    ORDER BY pgs.player_id, pgs.start_time ASC, pgs.game_id ASC
   `);
 
   type Run = {
@@ -713,7 +541,7 @@ export async function getStreakRecords(): Promise<StreakRecord[]> {
   for (const row of result.rows) {
     const pid = row.player_id as string;
     const name = row.player_name as string;
-    const won = row.team === row.winning_team;
+    const won = Number(row.won) === 1;
     const t = row.start_time as string;
     const gid = row.game_id as string;
 

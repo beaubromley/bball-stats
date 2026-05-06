@@ -287,6 +287,22 @@ export async function initDb() {
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_pgs_player ON player_game_stats(player_id)`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_pgs_status ON player_game_stats(game_status)`);
 
+  // Stage-3 add: max running deficit faced by the eventual winner over the
+  // course of the game (used for the "biggest comeback" record). One column
+  // per row even though it's a per-game value — keeps the rollup schema
+  // single-table and SUM/MAX queries trivial. Idempotent: skip if the
+  // column already exists.
+  try {
+    await db.execute(`
+      ALTER TABLE player_game_stats
+      ADD COLUMN max_winner_deficit INTEGER NOT NULL DEFAULT 0
+    `);
+  } catch (err) {
+    // SQLite throws "duplicate column name" if the column already exists.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/duplicate column/i.test(msg)) throw err;
+  }
+
   // NOTE: a one-shot UPDATE used to live here that backfilled assisted_event_id
   // on old assist rows. It was confirmed to have already populated all rows
   // (every assist now has the link set at insert time), but was still running

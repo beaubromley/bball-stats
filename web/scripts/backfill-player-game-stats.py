@@ -93,6 +93,60 @@ def ensure_schema():
     """)
     execute("CREATE INDEX IF NOT EXISTS idx_pgs_player ON player_game_stats(player_id)")
     execute("CREATE INDEX IF NOT EXISTS idx_pgs_status ON player_game_stats(game_status)")
+    # Stage-3 add: max_winner_deficit (idempotent ALTER).
+    try:
+        execute("ALTER TABLE player_game_stats ADD COLUMN max_winner_deficit INTEGER NOT NULL DEFAULT 0")
+    except RuntimeError as e:
+        if 'duplicate column' not in str(e).lower():
+            raise
+
+
+def max_winner_deficit(events, player_to_team, winning_team):
+    """Mirror lib/player-game-stats.ts maxWinnerDeficit() exactly."""
+    scores = [{
+        'id': e['id'], 'player_id': e['player_id'], 'pv': e['point_value'],
+        'created_at': e['created_at'],
+        'team': player_to_team.get(e['player_id']),
+    } for e in events if e['event_type'] == 'score']
+    scores = [s for s in scores if s['team'] in ('A', 'B')]
+    scores.sort(key=lambda s: (s['created_at'], s['id']))
+
+    corrections = [{
+        'id': e['id'], 'player_id': e['player_id'], 'pv': e['point_value'],
+        'corrected_event_id': e['corrected_event_id'],
+        'created_at': e['created_at'],
+    } for e in events if e['event_type'] == 'correction']
+    corrections.sort(key=lambda c: (c['created_at'], c['id']))
+
+    undone = set()
+    score_ids = {s['id'] for s in scores}
+    remaining = []
+    for c in corrections:
+        cid = c['corrected_event_id']
+        if cid is not None and cid in score_ids and cid not in undone:
+            undone.add(cid)
+        else:
+            remaining.append(c)
+    for c in remaining:
+        cands = [s for s in scores
+                 if s['player_id'] == c['player_id']
+                 and s['pv'] == -c['pv']
+                 and s['created_at'] < c['created_at']
+                 and s['id'] not in undone]
+        cands.sort(key=lambda s: (s['created_at'], s['id']), reverse=True)
+        if cands:
+            undone.add(cands[0]['id'])
+
+    a = b = max_def = 0
+    for s in scores:
+        if s['id'] in undone: continue
+        if s['team'] == 'A': a += s['pv']
+        else: b += s['pv']
+        winner = a if winning_team == 'A' else b
+        loser = b if winning_team == 'A' else a
+        d = loser - winner
+        if d > max_def: max_def = d
+    return max_def
 
 
 def fantasy_points(pts: int, asts: int, stls: int, blks: int) -> int:
@@ -118,11 +172,12 @@ def refresh_game(game_id: str):
         return ('no_roster', 0)
 
     events = execute(
-        "SELECT id, player_id, event_type, point_value FROM game_events WHERE game_id = ?",
+        "SELECT id, player_id, event_type, point_value, corrected_event_id, created_at FROM game_events WHERE game_id = ?",
         [game_id],
     )
 
     by_player: dict = {}
+    player_to_team: dict = {}
     for r in roster:
         by_player[r['player_id']] = {
             'player_id': r['player_id'],
@@ -130,6 +185,7 @@ def refresh_game(game_id: str):
             'points': 0, 'ones_made': 0, 'twos_made': 0,
             'assists': 0, 'steals': 0, 'blocks': 0,
         }
+        player_to_team[r['player_id']] = r['team']
 
     for e in events:
         agg = by_player.get(e['player_id'])
@@ -172,6 +228,12 @@ def refresh_game(game_id: str):
                 best = cand
         mvp_player_id = best['player_id'] if best else None
 
+    # Comeback metric — only for finished, decided games.
+    if game['status'] == 'finished' and game['winning_team'] in ('A', 'B'):
+        max_def = max_winner_deficit(events, player_to_team, game['winning_team'])
+    else:
+        max_def = 0
+
     written = 0
     for a in by_player.values():
         team_score = team_a_score if a['team'] == 'A' else team_b_score
@@ -187,12 +249,12 @@ def refresh_game(game_id: str):
                 game_id, player_id, team, game_status, start_time, scoring_mode,
                 won, points, ones_made, twos_made, assists, steals, blocks,
                 fantasy_points, team_score, opp_score, plus_minus, effective_games,
-                was_game_mvp
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                was_game_mvp, max_winner_deficit
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, [
             game_id, a['player_id'], a['team'], game['status'], game['start_time'], game['scoring_mode'],
             won, a['points'], a['ones_made'], a['twos_made'], a['assists'], a['steals'], a['blocks'],
-            fp, team_score, opp_score, team_score - opp_score, effective_games, was_mvp,
+            fp, team_score, opp_score, team_score - opp_score, effective_games, was_mvp, max_def,
         ])
         written += 1
     return ('refreshed', written)

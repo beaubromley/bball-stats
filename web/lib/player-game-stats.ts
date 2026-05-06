@@ -31,6 +31,8 @@ interface EventRow {
   player_id: string;
   event_type: "score" | "correction" | "assist" | "steal" | "block";
   point_value: number;
+  corrected_event_id: number | null;
+  created_at: string;
 }
 
 interface PerPlayerAgg {
@@ -42,6 +44,85 @@ interface PerPlayerAgg {
   assists: number;
   steals: number;
   blocks: number;
+}
+
+// Walk score events chronologically, applying corrections, to find the
+// maximum running deficit faced by the eventual winning team. Mirrors the
+// logic in getGameLevelRecords (two-pass corrected_event_id resolution +
+// fallback heuristic) so the rollup column matches what records.ts used to
+// compute on the fly.
+function maxWinnerDeficit(
+  events: EventRow[],
+  playerToTeam: Map<string, "A" | "B">,
+  winningTeam: "A" | "B",
+): number {
+  const scores = events
+    .filter((e) => e.event_type === "score")
+    .map((e) => ({
+      id: e.id,
+      player_id: e.player_id,
+      pv: e.point_value,
+      created_at: e.created_at,
+      team: playerToTeam.get(e.player_id),
+    }))
+    .filter((s) => s.team === "A" || s.team === "B")
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id - b.id);
+
+  const corrections = events
+    .filter((e) => e.event_type === "correction")
+    .map((e) => ({
+      id: e.id,
+      player_id: e.player_id,
+      pv: e.point_value,
+      corrected_event_id: e.corrected_event_id,
+      created_at: e.created_at,
+    }))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id - b.id);
+
+  // Pass 1: trust corrected_event_id when it lands on a real score.
+  // Pass 2: fall back to (player, opposite pv, earlier ts) heuristic.
+  const undone = new Set<number>();
+  const scoreIds = new Set(scores.map((s) => s.id));
+  const remaining: typeof corrections = [];
+  for (const c of corrections) {
+    if (
+      c.corrected_event_id !== null &&
+      scoreIds.has(c.corrected_event_id) &&
+      !undone.has(c.corrected_event_id)
+    ) {
+      undone.add(c.corrected_event_id);
+    } else {
+      remaining.push(c);
+    }
+  }
+  for (const c of remaining) {
+    const cands = scores
+      .filter(
+        (s) =>
+          s.player_id === c.player_id &&
+          s.pv === -c.pv &&
+          s.created_at < c.created_at &&
+          !undone.has(s.id),
+      )
+      .sort((a, b) =>
+        b.created_at.localeCompare(a.created_at) || b.id - a.id,
+      );
+    if (cands.length > 0) undone.add(cands[0].id);
+  }
+
+  let a = 0;
+  let b = 0;
+  let maxDef = 0;
+  for (const s of scores) {
+    if (undone.has(s.id)) continue;
+    if (s.team === "A") a += s.pv;
+    else b += s.pv;
+    const winner = winningTeam === "A" ? a : b;
+    const loser = winningTeam === "A" ? b : a;
+    const def = loser - winner;
+    if (def > maxDef) maxDef = def;
+  }
+  return maxDef;
 }
 
 export async function refreshGameStats(gameId: string): Promise<void> {
@@ -78,9 +159,10 @@ export async function refreshGameStats(gameId: string): Promise<void> {
     return;
   }
 
-  // 3. Events for this game
+  // 3. Events for this game (need created_at + corrected_event_id for the
+  //    deficit walk; we still aggregate non-score events too).
   const eventsRes = await db.execute({
-    sql: `SELECT id, player_id, event_type, point_value
+    sql: `SELECT id, player_id, event_type, point_value, corrected_event_id, created_at
           FROM game_events WHERE game_id = ?`,
     args: [gameId],
   });
@@ -89,6 +171,7 @@ export async function refreshGameStats(gameId: string): Promise<void> {
   // 4. Build per-player aggregates. Initialize every roster member at zero
   //    so non-scoring players still get a row.
   const byPlayer = new Map<string, PerPlayerAgg>();
+  const playerToTeam = new Map<string, "A" | "B">();
   for (const r of roster) {
     byPlayer.set(r.player_id, {
       player_id: r.player_id,
@@ -100,6 +183,7 @@ export async function refreshGameStats(gameId: string): Promise<void> {
       steals: 0,
       blocks: 0,
     });
+    playerToTeam.set(r.player_id, r.team);
   }
 
   for (const e of events) {
@@ -140,9 +224,6 @@ export async function refreshGameStats(gameId: string): Promise<void> {
   // game-to-22 in 2s3s mode → 2.0 effective games. game-to-11 → 1.0.
   // Active games default to 1.0; finished games normalize to winning_score / 11.
   // Matches the legacy SQL exactly: COALESCE(winning_score, 11) / 11.0.
-  // (No min cap — a finished game whose net winning score < 11, due to
-  // unrecorded corrections or similar data issues, contributes < 1.0
-  // effective games. That matches the prior behavior.)
   const effectiveGames =
     game.status === "finished" ? (winningScore || 11) / 11.0 : 1.0;
 
@@ -181,7 +262,14 @@ export async function refreshGameStats(gameId: string): Promise<void> {
     mvpPlayerId = best?.player_id ?? null;
   }
 
-  // 7. Write each row with INSERT OR REPLACE (idempotent).
+  // 7. Comeback metric (max deficit faced by the eventual winning team).
+  //    Only meaningful for finished, decided games.
+  const maxDef =
+    game.status === "finished" && (game.winning_team === "A" || game.winning_team === "B")
+      ? maxWinnerDeficit(events, playerToTeam, game.winning_team)
+      : 0;
+
+  // 8. Write each row with INSERT OR REPLACE (idempotent).
   for (const a of byPlayer.values()) {
     const teamScore = a.team === "A" ? teamAScore : teamBScore;
     const oppScore = a.team === "A" ? teamBScore : teamAScore;
@@ -205,8 +293,8 @@ export async function refreshGameStats(gameId: string): Promise<void> {
           game_id, player_id, team, game_status, start_time, scoring_mode,
           won, points, ones_made, twos_made, assists, steals, blocks,
           fantasy_points, team_score, opp_score, plus_minus, effective_games,
-          was_game_mvp
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          was_game_mvp, max_winner_deficit
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       args: [
         gameId,
@@ -228,6 +316,7 @@ export async function refreshGameStats(gameId: string): Promise<void> {
         teamScore - oppScore,
         effectiveGames,
         wasMvp,
+        maxDef,
       ],
     });
   }
