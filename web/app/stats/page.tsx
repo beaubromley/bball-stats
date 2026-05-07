@@ -306,13 +306,31 @@ export default function Home() {
   const activePlayers = players.filter((p) => p.games_played >= 1);
   const r1 = (n: number) => Math.round(n * 10) / 10;
 
-  // Fantasy Points
+  // Fantasy Points — split PTS into 1-pt and 2-pt point contributions
+  // (each 2-pointer counts as 2 fantasy points). Keys are "1s (pts)" and
+  // "2s (pts)" so the legend / tooltip read correctly.
   const fpData = [...players]
     .sort((a, b) => b.fantasy_points - a.fantasy_points)
-    .map((p) => ({ name: p.name, PTS: p.total_points, AST: p.assists, STL: p.steals, BLK: p.blocks, total: p.fantasy_points }));
+    .map((p) => ({
+      name: p.name,
+      "1s": p.ones_made,
+      "2s": p.twos_made * 2,
+      AST: p.assists,
+      STL: p.steals,
+      BLK: p.blocks,
+      total: p.fantasy_points,
+    }));
   const fpPerGameData = [...activePlayers]
     .sort((a, b) => b.fpg - a.fpg)
-    .map((p) => ({ name: p.name, PTS: p.ppg, AST: p.apg, STL: p.spg, BLK: p.bpg, total: p.fpg }));
+    .map((p) => ({
+      name: p.name,
+      "1s": p.ones_pg,
+      "2s": r1(p.twos_pg * 2),
+      AST: p.apg,
+      STL: p.spg,
+      BLK: p.bpg,
+      total: p.fpg,
+    }));
 
   // Points
   const ptsData = [...players]
@@ -578,7 +596,7 @@ export default function Home() {
         {viewMode === "season" ? `Season ${currentSeason}` : "All-Time"}
       </h2>
 
-      {/* Fantasy Points */}
+      {/* Fantasy Points — point contributions split by 1s (light green) / 2s (dark green) */}
       <TabbedChart title="Fantasy Points" tabs={[
         { label: "Per Game", data: fpPerGameData, render: (data) => (
           <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
@@ -587,7 +605,8 @@ export default function Home() {
             <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
             <Legend wrapperStyle={{ fontSize: "11px" }} />
-            <Bar dataKey="PTS" stackId="fp" fill="#10B981" />
+            <Bar dataKey="1s" stackId="fp" fill="#86EFAC" />
+            <Bar dataKey="2s" stackId="fp" fill="#059669" />
             <Bar dataKey="AST" stackId="fp" fill="#3B82F6" />
             <Bar dataKey="STL" stackId="fp" fill="#EAB308" />
             <Bar dataKey="BLK" stackId="fp" fill="#A855F7" radius={[0, 4, 4, 0]}>
@@ -602,7 +621,8 @@ export default function Home() {
             <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
             <Legend wrapperStyle={{ fontSize: "11px" }} />
-            <Bar dataKey="PTS" stackId="fp" fill="#10B981" />
+            <Bar dataKey="1s" stackId="fp" fill="#86EFAC" />
+            <Bar dataKey="2s" stackId="fp" fill="#059669" />
             <Bar dataKey="AST" stackId="fp" fill="#3B82F6" />
             <Bar dataKey="STL" stackId="fp" fill="#EAB308" />
             <Bar dataKey="BLK" stackId="fp" fill="#A855F7" radius={[0, 4, 4, 0]}>
