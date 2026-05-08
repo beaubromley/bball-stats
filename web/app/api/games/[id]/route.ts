@@ -3,7 +3,6 @@ import { initDb, getDb } from "@/lib/turso";
 import { getGameNumber } from "@/lib/stats";
 import { requireAuth } from "@/lib/auth";
 import { bustStatsCache } from "@/lib/cache-tags";
-import { refreshGameStats } from "@/lib/player-game-stats";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await initDb();
@@ -59,12 +58,16 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
   const db = getDb();
 
+  // Order matters: Turso enforces foreign keys (foreign_keys=1), so all
+  // tables that reference games(id) must be cleared before the games row.
+  // player_game_stats was added later than the original DELETE order, so
+  // it's listed explicitly here. Without this, DELETE FROM games throws
+  // SQLITE_CONSTRAINT and the whole request 500s.
+  await db.execute({ sql: "DELETE FROM player_game_stats WHERE game_id = ?", args: [id] });
   await db.execute({ sql: "DELETE FROM game_transcripts WHERE game_id = ?", args: [id] });
   await db.execute({ sql: "DELETE FROM game_events WHERE game_id = ?", args: [id] });
   await db.execute({ sql: "DELETE FROM rosters WHERE game_id = ?", args: [id] });
   await db.execute({ sql: "DELETE FROM games WHERE id = ?", args: [id] });
-  // refreshGameStats() detects the missing game and clears the rollup rows.
-  await refreshGameStats(id);
 
   bustStatsCache();
   return NextResponse.json({ ok: true });
