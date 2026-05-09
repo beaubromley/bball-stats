@@ -191,12 +191,12 @@ function computeMaddenRatings(
   };
 }
 
-/** Color tier matching Madden conventions. Calibrated for the 60–99 band:
- *  90+ gold (elite), 80+ emerald (above average), 70+ blue (average), below 70 gray. */
+/** Color tier — green tops the scale (gold/yellow read as middling at a glance):
+ *  90+ emerald (elite), 80+ blue (above average), 70+ amber (average), below 70 gray. */
 function ratingTone(value: number): { fg: string; bg: string; ring: string } {
-  if (value >= 90) return { fg: "text-yellow-400", bg: "bg-yellow-500/10", ring: "ring-yellow-500/30" };
-  if (value >= 80) return { fg: "text-emerald-400", bg: "bg-emerald-500/10", ring: "ring-emerald-500/30" };
-  if (value >= 70) return { fg: "text-blue-400", bg: "bg-blue-500/10", ring: "ring-blue-500/30" };
+  if (value >= 90) return { fg: "text-emerald-400", bg: "bg-emerald-500/10", ring: "ring-emerald-500/30" };
+  if (value >= 80) return { fg: "text-blue-400", bg: "bg-blue-500/10", ring: "ring-blue-500/30" };
+  if (value >= 70) return { fg: "text-amber-400", bg: "bg-amber-500/10", ring: "ring-amber-500/30" };
   return { fg: "text-gray-300", bg: "bg-gray-500/10", ring: "ring-gray-500/30" };
 }
 
