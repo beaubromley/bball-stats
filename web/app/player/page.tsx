@@ -7,6 +7,7 @@ import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell, LabelL
 
 import { computeLeagueAvg, computeNBAComp } from "@/lib/nba-comps";
 import { GAMES_PER_SEASON } from "@/lib/seasons";
+import { useAuth } from "@/app/components/AuthProvider";
 
 function formatSeasonGame(gameNumber: number): string {
   if (!gameNumber || gameNumber < 1) return "";
@@ -129,10 +130,13 @@ interface MaddenRatings {
   hustle: MaddenRating;
 }
 
-/** Map a percentile (0..1) to a 50–99 rating, rounded. */
+/** Map a percentile (0..1) to a 75–99 rating, rounded. Compressed band
+ *  reflects that everyone playing in this league is at minimum a solid
+ *  starter on a recreational basis — top of the board sits at 93–94,
+ *  league median around 87–88, lowest eligible player around 80. */
 function pctToRating(p: number): number {
-  if (!Number.isFinite(p)) return 50;
-  return Math.max(50, Math.min(99, Math.round(50 + p * 49)));
+  if (!Number.isFinite(p)) return 75;
+  return Math.max(75, Math.min(99, Math.round(75 + p * 24)));
 }
 
 /** Compute percentile of a value against a sorted list of all eligible values.
@@ -187,13 +191,13 @@ function computeMaddenRatings(
   };
 }
 
-/** Color tier matching Madden conventions. */
+/** Color tier matching Madden conventions. Calibrated for the 60–99 band:
+ *  90+ gold (elite), 80+ emerald (above average), 70+ blue (average), below 70 gray. */
 function ratingTone(value: number): { fg: string; bg: string; ring: string } {
   if (value >= 90) return { fg: "text-yellow-400", bg: "bg-yellow-500/10", ring: "ring-yellow-500/30" };
   if (value >= 80) return { fg: "text-emerald-400", bg: "bg-emerald-500/10", ring: "ring-emerald-500/30" };
   if (value >= 70) return { fg: "text-blue-400", bg: "bg-blue-500/10", ring: "ring-blue-500/30" };
-  if (value >= 60) return { fg: "text-gray-300", bg: "bg-gray-500/10", ring: "ring-gray-500/30" };
-  return { fg: "text-red-400", bg: "bg-red-500/10", ring: "ring-red-500/30" };
+  return { fg: "text-gray-300", bg: "bg-gray-500/10", ring: "ring-gray-500/30" };
 }
 
 function MaddenRatingsCard({
@@ -224,7 +228,7 @@ function MaddenRatingsCard({
           Player Ratings
         </h2>
         <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-          50–99 scale · {leaderboard.filter((p) => p.games_played >= MADDEN_ELIGIBILITY_GP).length} peers
+          75–99 scale · {leaderboard.filter((p) => p.games_played >= MADDEN_ELIGIBILITY_GP).length} peers
         </span>
       </div>
       <div className="flex items-stretch gap-4">
@@ -266,6 +270,7 @@ function MaddenRatingsCard({
 
 
 function PlayerDetailInner() {
+  const { isAdmin } = useAuth();
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
   const [stats, setStats] = useState<PlayerStats | null>(null);
@@ -475,8 +480,10 @@ function PlayerDetailInner() {
       </div>
 
       {/* Madden ratings — percentile-mapped 50–99 scale against the eligible
-          leaderboard (>=5 GP). Recomputed live from leaderboard each render. */}
-      <MaddenRatingsCard stats={stats} leaderboard={leaderboard} />
+          leaderboard (>=5 GP). Recomputed live from leaderboard each render.
+          Admin-only: ratings are opinionated/comparative and not for public
+          display until the formula has been polished and approved. */}
+      {isAdmin && <MaddenRatingsCard stats={stats} leaderboard={leaderboard} />}
 
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
