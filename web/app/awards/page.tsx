@@ -77,7 +77,10 @@ interface BallotRow {
   pick_2: { player_id: string; name: string };
   pick_3: { player_id: string; name: string };
   created_at: string;
+  explanation: string | null;
 }
+
+const MAX_EXPLANATION_LENGTH = 280;
 type VotingState =
   | {
       state: "open";
@@ -467,6 +470,7 @@ function MvpVotingPanel({
   const [pick1, setPick1] = useState<string>("");
   const [pick2, setPick2] = useState<string>("");
   const [pick3, setPick3] = useState<string>("");
+  const [explanation, setExplanation] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [closing, setClosing] = useState(false);
   const [localVotedId, setLocalVotedId] = useState<string | null>(null);
@@ -509,6 +513,7 @@ function MvpVotingPanel({
           pick_1: pick1,
           pick_2: pick2,
           pick_3: pick3,
+          explanation: explanation.trim() || undefined,
         }),
       });
       if (!r.ok) {
@@ -523,6 +528,7 @@ function MvpVotingPanel({
         setPick1("");
         setPick2("");
         setPick3("");
+        setExplanation("");
         await reload();
       }
     } finally {
@@ -699,6 +705,24 @@ function MvpVotingPanel({
                 </div>
               );
             })}
+            {/* Optional voter rationale — published with the ballot once
+                voting closes. Capped to MAX_EXPLANATION_LENGTH server-side. */}
+            <div>
+              <label className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
+                Why? (optional)
+              </label>
+              <textarea
+                value={explanation}
+                onChange={(e) => setExplanation(e.target.value.slice(0, MAX_EXPLANATION_LENGTH))}
+                maxLength={MAX_EXPLANATION_LENGTH}
+                rows={2}
+                placeholder="Make your case in a sentence or two. Visible after voting closes."
+                className="w-full text-sm px-2 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 resize-none"
+              />
+              <div className="text-[10px] text-gray-400 dark:text-gray-500 text-right mt-0.5 tabular-nums">
+                {explanation.length}/{MAX_EXPLANATION_LENGTH}
+              </div>
+            </div>
             {error && <div className="text-sm text-red-600 dark:text-red-400">{error}</div>}
             <button
               onClick={submitBallot}
@@ -825,13 +849,20 @@ function MvpVotingPanel({
           <summary className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer">
             All ballots ({state.ballots.length})
           </summary>
-          <div className="mt-2 text-xs space-y-1.5">
+          <div className="mt-2 text-xs space-y-2">
             {state.ballots.map((b) => (
-              <div key={b.voter_player_id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <span className="font-bold font-display text-gray-900 dark:text-white">{b.voter_name}:</span>
-                <span className="text-gray-700 dark:text-gray-300">
-                  1️⃣ {b.pick_1.name} · 2️⃣ {b.pick_2.name} · 3️⃣ {b.pick_3.name}
-                </span>
+              <div key={b.voter_player_id}>
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="font-bold font-display text-gray-900 dark:text-white">{b.voter_name}:</span>
+                  <span className="text-gray-700 dark:text-gray-300">
+                    1️⃣ {b.pick_1.name} · 2️⃣ {b.pick_2.name} · 3️⃣ {b.pick_3.name}
+                  </span>
+                </div>
+                {b.explanation && (
+                  <div className="text-gray-600 dark:text-gray-400 italic ml-2 mt-0.5 leading-snug">
+                    “{b.explanation}”
+                  </div>
+                )}
               </div>
             ))}
           </div>

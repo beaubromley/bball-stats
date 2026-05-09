@@ -53,6 +53,8 @@ export interface BallotRow {
   pick_2: { player_id: string; name: string };
   pick_3: { player_id: string; name: string };
   created_at: string;
+  /** Optional voter rationale — blank for older ballots, capped at 280 chars. */
+  explanation: string | null;
 }
 
 export interface OpenVotingState {
@@ -266,7 +268,7 @@ async function loadBallots(ctx: InternalContext): Promise<BallotRow[]> {
         v.pick_1_player_id, p1.name AS pick_1_name,
         v.pick_2_player_id, p2.name AS pick_2_name,
         v.pick_3_player_id, p3.name AS pick_3_name,
-        v.created_at
+        v.created_at, v.explanation
       FROM mvp_votes v
       JOIN players vp ON vp.id = v.voter_player_id
       JOIN players p1 ON p1.id = v.pick_1_player_id
@@ -284,6 +286,7 @@ async function loadBallots(ctx: InternalContext): Promise<BallotRow[]> {
     pick_2: { player_id: r.pick_2_player_id as string, name: r.pick_2_name as string },
     pick_3: { player_id: r.pick_3_player_id as string, name: r.pick_3_name as string },
     created_at: String(r.created_at),
+    explanation: (r.explanation as string | null) ?? null,
   }));
 }
 
@@ -389,7 +392,12 @@ export interface CastVoteArgs {
   pick_3: string;
   ip_address: string | null;
   user_agent: string | null;
+  /** Optional voter rationale; trimmed and capped server-side. */
+  explanation?: string | null;
 }
+
+/** Hard cap on voter explanations. Visible after voting closes. */
+export const MAX_EXPLANATION_LENGTH = 280;
 
 export const getVotingState = unstable_cache(
   _getVotingState,
@@ -434,13 +442,19 @@ export async function castVote(args: CastVoteArgs): Promise<CastVoteResult> {
     return { ok: false, error: "duplicate pick", status: 400 };
   }
 
+  // Trim + cap voter explanation; store NULL when empty so older ballots
+  // and non-explainers display identically.
+  const explanation = args.explanation
+    ? args.explanation.trim().slice(0, MAX_EXPLANATION_LENGTH) || null
+    : null;
+
   const db = getDb();
   try {
     await db.execute({
       sql: `
         INSERT INTO mvp_votes
-          (id, season, voter_player_id, pick_1_player_id, pick_2_player_id, pick_3_player_id, ip_address, user_agent)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          (id, season, voter_player_id, pick_1_player_id, pick_2_player_id, pick_3_player_id, ip_address, user_agent, explanation)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       args: [
         uuid(),
@@ -451,6 +465,7 @@ export async function castVote(args: CastVoteArgs): Promise<CastVoteResult> {
         args.pick_3,
         args.ip_address,
         args.user_agent,
+        explanation,
       ],
     });
   } catch (err) {

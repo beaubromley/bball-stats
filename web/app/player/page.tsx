@@ -111,6 +111,160 @@ interface BoxScore {
 
 type TeammateSort = "games_together" | "win_pct" | "assists_to_teammate" | "assists_from_teammate" | "synergy";
 
+// Minimum GP to be included in the percentile pool. Below this, a player is
+// shown but their *peers* in the comparison are the same eligible group.
+const MADDEN_ELIGIBILITY_GP = 5;
+
+interface MaddenRating {
+  label: string;
+  value: number;          // 50–99
+  blurb: string;          // one-line explanation
+}
+interface MaddenRatings {
+  overall: MaddenRating;
+  scoring: MaddenRating;
+  playmaking: MaddenRating;
+  defense: MaddenRating;
+  winning: MaddenRating;
+  hustle: MaddenRating;
+}
+
+/** Map a percentile (0..1) to a 50–99 rating, rounded. */
+function pctToRating(p: number): number {
+  if (!Number.isFinite(p)) return 50;
+  return Math.max(50, Math.min(99, Math.round(50 + p * 49)));
+}
+
+/** Compute percentile of a value against a sorted list of all eligible values.
+ *  Returns 0..1 — fraction of peers strictly worse than this value. */
+function percentile(value: number, allValues: number[]): number {
+  if (allValues.length === 0) return 0.5;
+  const worse = allValues.filter((v) => v < value).length;
+  const equal = allValues.filter((v) => v === value).length;
+  // Mid-rank percentile: count strictly-worse + half of ties
+  return (worse + equal / 2) / allValues.length;
+}
+
+function computeMaddenRatings(
+  stats: PlayerStats,
+  leaderboard: LeaderboardPlayer[],
+): MaddenRatings {
+  // Eligible peer pool — exclude rare-appearance players so percentiles aren't
+  // skewed by single-game cameos.
+  const eligible = leaderboard.filter(
+    (p) => p.games_played >= MADDEN_ELIGIBILITY_GP,
+  );
+
+  const ppgVals = eligible.map((p) => p.ppg);
+  const apgVals = eligible.map((p) => p.apg);
+  const defVals = eligible.map((p) => p.spg + p.bpg);
+  const winVals = eligible.map((p) => p.win_pct);
+  const gpVals = eligible.map((p) => p.games_played);
+
+  const scoring = pctToRating(percentile(stats.ppg, ppgVals));
+  const playmaking = pctToRating(percentile(stats.apg, apgVals));
+  const defense = pctToRating(percentile(stats.spg + stats.bpg, defVals));
+  const winning = pctToRating(percentile(stats.win_pct, winVals));
+  const hustle = pctToRating(percentile(stats.games_played, gpVals));
+
+  // Weighted Overall, leaning slightly toward production (scoring + playmaking)
+  // but rewarding both ends of the floor and showing up.
+  const overall = Math.round(
+    scoring * 0.30 +
+    playmaking * 0.20 +
+    defense * 0.20 +
+    winning * 0.20 +
+    hustle * 0.10,
+  );
+
+  return {
+    overall: { label: "Overall", value: overall, blurb: "Weighted blend" },
+    scoring: { label: "Scoring", value: scoring, blurb: `${stats.ppg.toFixed(1)} PPG` },
+    playmaking: { label: "Playmaking", value: playmaking, blurb: `${stats.apg.toFixed(1)} APG` },
+    defense: { label: "Defense", value: defense, blurb: `${(stats.spg + stats.bpg).toFixed(1)} SPG+BPG` },
+    winning: { label: "Winning", value: winning, blurb: `${stats.win_pct}% W` },
+    hustle: { label: "Hustle", value: hustle, blurb: `${stats.games_played} GP` },
+  };
+}
+
+/** Color tier matching Madden conventions. */
+function ratingTone(value: number): { fg: string; bg: string; ring: string } {
+  if (value >= 90) return { fg: "text-yellow-400", bg: "bg-yellow-500/10", ring: "ring-yellow-500/30" };
+  if (value >= 80) return { fg: "text-emerald-400", bg: "bg-emerald-500/10", ring: "ring-emerald-500/30" };
+  if (value >= 70) return { fg: "text-blue-400", bg: "bg-blue-500/10", ring: "ring-blue-500/30" };
+  if (value >= 60) return { fg: "text-gray-300", bg: "bg-gray-500/10", ring: "ring-gray-500/30" };
+  return { fg: "text-red-400", bg: "bg-red-500/10", ring: "ring-red-500/30" };
+}
+
+function MaddenRatingsCard({
+  stats,
+  leaderboard,
+}: {
+  stats: PlayerStats;
+  leaderboard: LeaderboardPlayer[];
+}) {
+  if (leaderboard.length === 0) return null;
+  const r = computeMaddenRatings(stats, leaderboard);
+  const overallTone = ratingTone(r.overall.value);
+
+  // Order matters for the visual hierarchy. Overall first, then production
+  // categories, then situational (winning, hustle).
+  const categories: MaddenRating[] = [
+    r.scoring,
+    r.playmaking,
+    r.defense,
+    r.winning,
+    r.hustle,
+  ];
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 mb-6 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900/50 dark:to-transparent">
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+          Player Ratings
+        </h2>
+        <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+          50–99 scale · {leaderboard.filter((p) => p.games_played >= MADDEN_ELIGIBILITY_GP).length} peers
+        </span>
+      </div>
+      <div className="flex items-stretch gap-4">
+        {/* Overall — large hero */}
+        <div className={`flex flex-col items-center justify-center min-w-[88px] py-3 px-3 rounded-lg ${overallTone.bg} ring-1 ${overallTone.ring}`}>
+          <div className={`text-5xl font-bold font-display tabular-nums ${overallTone.fg}`}>
+            {r.overall.value}
+          </div>
+          <div className="text-[10px] uppercase tracking-widest text-gray-500 dark:text-gray-400 mt-1">
+            Overall
+          </div>
+        </div>
+        {/* Sub-ratings */}
+        <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-2">
+          {categories.map((cat) => {
+            const tone = ratingTone(cat.value);
+            return (
+              <div
+                key={cat.label}
+                className={`flex flex-col items-center py-2 px-2 rounded-lg ${tone.bg}`}
+              >
+                <div className={`text-2xl font-bold font-display tabular-nums leading-none ${tone.fg}`}>
+                  {cat.value}
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 mt-1.5">
+                  {cat.label}
+                </div>
+                <div className="text-[10px] text-gray-400 dark:text-gray-600 mt-0.5 tabular-nums">
+                  {cat.blurb}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function PlayerDetailInner() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
@@ -319,6 +473,11 @@ function PlayerDetailInner() {
           <div><span className="font-bold tabular-nums">{comp.bpg}</span> <span className="text-gray-500">BPG</span></div>
         </div>
       </div>
+
+      {/* Madden ratings — percentile-mapped 50–99 scale against the eligible
+          leaderboard (>=5 GP). Recomputed live from leaderboard each render. */}
+      <MaddenRatingsCard stats={stats} leaderboard={leaderboard} />
+
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {[

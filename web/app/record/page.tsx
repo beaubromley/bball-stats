@@ -2694,23 +2694,33 @@ export default function RecordPage() {
                     minute: "2-digit",
                   })}
                 </span>
-                {game.status === "finished" && evt.type === "score" && (
+                {/* Mid-game (and post-game) edit controls. Hidden for system-
+                    generated correction rows and for score rows that have been
+                    undone. Actions update both the API and local state so the
+                    scoreboard reflects the change immediately. */}
+                {evt.type !== "correction" && !evt.undone && (
                   <div className="flex gap-1 ml-1">
                     <button
                       onClick={() => {
-                        const newName = prompt("Player name:", evt.playerName);
+                        const allRosterPlayers = [...game.teamA, ...game.teamB];
+                        const promptHint = `Player (${allRosterPlayers.join(", ")}):`;
+                        const newName = prompt(promptHint, evt.playerName);
                         if (!newName || newName === evt.playerName) return;
+                        const matchedName =
+                          allRosterPlayers.find(
+                            (p) => p.toLowerCase() === newName.toLowerCase(),
+                          ) ?? newName;
                         const evtId = evt.apiId || evt.id;
                         if (game.gameId) {
                           fetch(`${API_BASE}/games/${game.gameId}/events/${evtId}`, {
                             method: "PATCH",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ player_name: newName }),
+                            body: JSON.stringify({ player_name: matchedName }),
                           }).catch(() => {});
                         }
                         setGame((prev) => {
                           const events = prev.events.map((e) =>
-                            e.id === evt.id ? { ...e, playerName: newName, team: getTeam(prev, newName) } : e
+                            e.id === evt.id ? { ...e, playerName: matchedName, team: getTeam(prev, matchedName) } : e
                           );
                           const scores = calcScores(events.filter((e) => e.type === "score"), { ...prev, events });
                           return { ...prev, events, ...scores };
@@ -2721,9 +2731,50 @@ export default function RecordPage() {
                     >
                       &#9998;
                     </button>
+                    {evt.type === "score" && (
+                      <button
+                        onClick={() => {
+                          const small = game.scoringMode === "2s3s" ? 2 : 1;
+                          const big = game.scoringMode === "2s3s" ? 3 : 2;
+                          const input = prompt(
+                            `Point value (${small} or ${big}):`,
+                            String(evt.points),
+                          );
+                          const newPts = input ? parseInt(input, 10) : NaN;
+                          if (!Number.isFinite(newPts) || newPts === evt.points) return;
+                          if (newPts !== small && newPts !== big) {
+                            alert(`Point value must be ${small} or ${big}.`);
+                            return;
+                          }
+                          const evtId = evt.apiId || evt.id;
+                          if (game.gameId) {
+                            fetch(`${API_BASE}/games/${game.gameId}/events/${evtId}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ point_value: newPts }),
+                            }).catch(() => {});
+                          }
+                          setGame((prev) => {
+                            const events = prev.events.map((e) =>
+                              e.id === evt.id ? { ...e, points: newPts } : e
+                            );
+                            const scores = calcScores(events.filter((e) => e.type === "score"), { ...prev, events });
+                            return { ...prev, events, ...scores };
+                          });
+                        }}
+                        className="text-xs text-gray-400 dark:text-gray-600 hover:text-green-400 font-bold"
+                        title="Edit points"
+                      >
+                        #
+                      </button>
+                    )}
                     <button
                       onClick={() => {
-                        if (!confirm(`Delete ${evt.playerName} +${evt.points}?`)) return;
+                        const label =
+                          evt.type === "score"
+                            ? `${evt.playerName} +${evt.points}`
+                            : `${evt.playerName} ${evt.type.toUpperCase()}`;
+                        if (!confirm(`Delete ${label}?`)) return;
                         const evtId = evt.apiId || evt.id;
                         if (game.gameId) {
                           fetch(`${API_BASE}/games/${game.gameId}/events/${evtId}`, {

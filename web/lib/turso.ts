@@ -253,6 +253,17 @@ export async function initDb() {
   `);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mvp_votes_season ON mvp_votes(season)`);
 
+  // Optional voter explanation — short text supplied at vote time.
+  // Idempotent ALTER (skip if column already exists).
+  try {
+    await db.execute(
+      `ALTER TABLE mvp_votes ADD COLUMN explanation TEXT`,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/duplicate column/i.test(msg)) throw err;
+  }
+
   // Per-player per-game rollup. Maintained by refreshGameStats() — every
   // write site that touches game_events / rosters / games for a given gameId
   // calls refreshGameStats(gameId), which recomputes that game's rows from

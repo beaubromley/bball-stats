@@ -35,6 +35,8 @@ export async function POST(
   const pick_1 = typeof body?.pick_1 === "string" ? body.pick_1 : "";
   const pick_2 = typeof body?.pick_2 === "string" ? body.pick_2 : "";
   const pick_3 = typeof body?.pick_3 === "string" ? body.pick_3 : "";
+  const explanation =
+    typeof body?.explanation === "string" ? body.explanation : null;
   if (!voter_player_id || !pick_1 || !pick_2 || !pick_3) {
     return NextResponse.json({ error: "missing required field" }, { status: 400 });
   }
@@ -53,6 +55,7 @@ export async function POST(
     pick_3,
     ip_address,
     user_agent,
+    explanation,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
