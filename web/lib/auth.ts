@@ -95,16 +95,27 @@ export async function getRole(req: NextRequest): Promise<Role | null> {
 
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return null;
+  try { return await verifyToken(token); } catch { return null; }
+}
+
+/**
+ * Explicit session-extension helper. Call this from route handlers
+ * where you want "this action keeps me logged in" semantics. Today
+ * it's wired into POST /api/games so starting a new game refreshes
+ * your 7-day cookie clock; everything else lets the session age
+ * naturally.
+ *
+ * Idempotent and safe — if there's no valid cookie, no-op.
+ */
+export async function extendSession(req: NextRequest): Promise<void> {
+  const token = req.cookies.get(COOKIE_NAME)?.value;
+  if (!token) return;
   try {
     const role = await verifyToken(token);
-    if (role) {
-      // Sliding session: extend the cookie for another COOKIE_MAX_AGE
-      // every time a valid cookie is accepted. Idempotent — no-op if
-      // we're not in a context that can write cookies.
-      await refreshSessionCookie(token);
-    }
-    return role;
-  } catch { return null; }
+    if (role) await refreshSessionCookie(token);
+  } catch {
+    // Invalid cookie — let it expire on its own.
+  }
 }
 
 export async function isAuthenticated(req: NextRequest): Promise<boolean> {
