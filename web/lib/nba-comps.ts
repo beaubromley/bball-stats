@@ -5,10 +5,21 @@ export interface NBAPlayer {
   apg: number;
   spg: number;
   bpg: number;
+  /** Team abbreviation (e.g. "BOS"). Optional — the all-time pool of
+   *  legends often spans multiple teams over a career so we leave it off. */
+  team?: string;
+  /** Primary position ("PG" | "SG" | "SF" | "PF" | "C"). Optional for
+   *  the same reason. */
+  pos?: string;
 }
 
-// Pool of NBA legends and current starters with career per-game averages
-// tpg = career 3-pointers made per game
+// Pool of NBA legends and current starters with career per-game averages.
+// tpg = career 3-pointers made per game.
+//
+// This is the default pool. A second pool (NBA_COMP_POOL_PLAYOFFS_2026) is
+// declared further down — to switch, change one line in app/player/page.tsx
+// (see the import + ACTIVE_NBA_POOL constant there). To undo the playoff
+// theme entirely, delete that block and revert the import.
 export const NBA_COMP_POOL: NBAPlayer[] = [
   // ── Legends ──
   { name: "Kobe Bryant", ppg: 25.0, tpg: 1.4, apg: 4.7, spg: 1.4, bpg: 0.5 },
@@ -111,7 +122,187 @@ export const NBA_COMP_POOL: NBAPlayer[] = [
   { name: "Adrian Dantley", ppg: 24.3, tpg: 0.0, apg: 3.0, spg: 0.7, bpg: 0.1 },
 ];
 
-// Average NBA starter per-game stats (used as scaling reference)
+// =======================================================================
+// 2026 NBA Playoffs pool (temporary theme)
+// =======================================================================
+//
+// Self-contained block — delete it (and remove the import + ACTIVE_NBA_POOL
+// line in app/player/page.tsx) to undo the playoff theme entirely.
+//
+// Snapshot from basketball-reference.com 2026 playoffs per-game table,
+// fetched 2026-05-14. All 162 players with at least 5 playoff games.
+//
+// To refresh as the playoffs continue, re-run the helper:
+//   mobile/scripts (not yet ported) or use the inline script from the
+//   commit that added this block.
+export const NBA_COMP_POOL_PLAYOFFS_2026: NBAPlayer[] = [
+  { name: "Cade Cunningham", team: "DET", pos: "PG", ppg: 30.0, tpg: 3.0, apg: 7.7, spg: 1.1, bpg: 0.7 },
+  { name: "Shai Gilgeous-Alexander", team: "OKC", pos: "PG", ppg: 29.1, tpg: 1.3, apg: 7.1, spg: 0.8, bpg: 0.9 },
+  { name: "Jalen Brunson", team: "NYK", pos: "PG", ppg: 27.4, tpg: 2.7, apg: 6.1, spg: 0.9, bpg: 0.0 },
+  { name: "Paolo Banchero", team: "ORL", pos: "PF", ppg: 26.3, tpg: 2.0, apg: 6.3, spg: 1.4, bpg: 0.7 },
+  { name: "Donovan Mitchell", team: "CLE", pos: "SG", ppg: 26.3, tpg: 2.8, apg: 2.9, spg: 0.8, bpg: 0.2 },
+  { name: "Nikola Jokić", team: "DEN", pos: "C", ppg: 25.8, tpg: 1.2, apg: 9.5, spg: 1.0, bpg: 0.8 },
+  { name: "Jaylen Brown", team: "BOS", pos: "SF", ppg: 25.7, tpg: 2.4, apg: 3.3, spg: 0.9, bpg: 1.1 },
+  { name: "Scottie Barnes", team: "TOR", pos: "PF", ppg: 24.1, tpg: 1.1, apg: 8.6, spg: 1.1, bpg: 1.7 },
+  { name: "RJ Barrett", team: "TOR", pos: "SF", ppg: 24.1, tpg: 2.4, apg: 4.0, spg: 1.3, bpg: 0.3 },
+  { name: "Joel Embiid", team: "PHI", pos: "C", ppg: 24.0, tpg: 0.7, apg: 5.4, spg: 0.3, bpg: 0.9 },
+  { name: "Tyrese Maxey", team: "PHI", pos: "PG", ppg: 23.7, tpg: 2.4, apg: 5.9, spg: 0.8, bpg: 0.4 },
+  { name: "Jamal Murray", team: "DEN", pos: "PG", ppg: 23.7, tpg: 1.8, apg: 5.7, spg: 0.8, bpg: 0.3 },
+  { name: "Jayson Tatum", team: "BOS", pos: "PF", ppg: 23.3, tpg: 3.2, apg: 6.8, spg: 1.2, bpg: 0.0 },
+  { name: "LeBron James", team: "LAL", pos: "SF", ppg: 23.2, tpg: 1.7, apg: 7.3, spg: 1.3, bpg: 0.3 },
+  { name: "Deni Avdija", team: "POR", pos: "SF", ppg: 22.2, tpg: 1.4, apg: 4.6, spg: 0.4, bpg: 0.6 },
+  { name: "OG Anunoby", team: "NYK", pos: "PF", ppg: 21.4, tpg: 2.6, apg: 1.3, spg: 1.9, bpg: 1.1 },
+  { name: "Anthony Edwards", team: "MIN", pos: "SG", ppg: 21.3, tpg: 2.0, apg: 2.8, spg: 0.2, bpg: 0.8 },
+  { name: "James Harden", team: "CLE", pos: "PG", ppg: 20.8, tpg: 2.5, apg: 6.4, spg: 1.8, bpg: 0.8 },
+  { name: "Victor Wembanyama", team: "SAS", pos: "C", ppg: 20.4, tpg: 1.6, apg: 2.4, spg: 0.7, bpg: 4.2 },
+  { name: "Alperen Şengün", team: "HOU", pos: "C", ppg: 20.3, tpg: 0.2, apg: 4.7, spg: 1.8, bpg: 1.3 },
+  { name: "Tobias Harris", team: "DET", pos: "PF", ppg: 20.2, tpg: 1.6, apg: 1.5, spg: 1.5, bpg: 0.8 },
+  { name: "Austin Reaves", team: "LAL", pos: "SG", ppg: 20.0, tpg: 1.5, apg: 5.8, spg: 0.0, bpg: 1.2 },
+  { name: "Jalen Johnson", team: "ATL", pos: "SF", ppg: 19.5, tpg: 1.5, apg: 5.2, spg: 0.8, bpg: 0.3 },
+  { name: "CJ McCollum", team: "ATL", pos: "PG", ppg: 19.2, tpg: 1.7, apg: 2.0, spg: 1.0, bpg: 1.2 },
+  { name: "Amen Thompson", team: "HOU", pos: "PG", ppg: 19.2, tpg: 0.3, apg: 5.7, spg: 2.0, bpg: 1.2 },
+  { name: "Ajay Mitchell", team: "OKC", pos: "SG", ppg: 18.8, tpg: 1.6, apg: 4.9, spg: 1.4, bpg: 0.0 },
+  { name: "Stephon Castle", team: "SAS", pos: "PG", ppg: 18.7, tpg: 1.7, apg: 6.1, spg: 0.9, bpg: 0.4 },
+  { name: "De'Aaron Fox", team: "SAS", pos: "PG", ppg: 18.6, tpg: 1.5, apg: 5.5, spg: 1.2, bpg: 0.2 },
+  { name: "Chet Holmgren", team: "OKC", pos: "PF", ppg: 18.6, tpg: 1.5, apg: 1.3, spg: 1.4, bpg: 1.8 },
+  { name: "Desmond Bane", team: "ORL", pos: "SG", ppg: 18.1, tpg: 3.6, apg: 1.9, spg: 1.9, bpg: 0.3 },
+  { name: "Rui Hachimura", team: "LAL", pos: "PF", ppg: 17.5, tpg: 3.3, apg: 1.7, spg: 0.9, bpg: 0.6 },
+  { name: "Jabari Smith Jr.", team: "HOU", pos: "PF", ppg: 17.5, tpg: 3.2, apg: 1.8, spg: 1.0, bpg: 0.7 },
+  { name: "Karl-Anthony Towns", team: "NYK", pos: "C", ppg: 17.4, tpg: 1.4, apg: 6.6, spg: 1.1, bpg: 1.5 },
+  { name: "Julius Randle", team: "MIN", pos: "PF", ppg: 17.2, tpg: 0.9, apg: 3.0, spg: 0.5, bpg: 0.1 },
+  { name: "Jaden McDaniels", team: "MIN", pos: "PF", ppg: 16.6, tpg: 0.7, apg: 2.4, spg: 0.5, bpg: 0.6 },
+  { name: "Evan Mobley", team: "CLE", pos: "PF", ppg: 16.6, tpg: 1.3, apg: 4.2, spg: 1.0, bpg: 1.8 },
+  { name: "Paul George", team: "PHI", pos: "PF", ppg: 16.4, tpg: 3.2, apg: 3.0, spg: 1.3, bpg: 0.5 },
+  { name: "Jrue Holiday", team: "POR", pos: "PG", ppg: 16.4, tpg: 2.4, apg: 7.2, spg: 1.4, bpg: 0.4 },
+  { name: "Ayo Dosunmu", team: "MIN", pos: "SG", ppg: 16.2, tpg: 1.9, apg: 3.6, spg: 1.0, bpg: 0.4 },
+  { name: "Scoot Henderson", team: "POR", pos: "PG", ppg: 15.0, tpg: 2.6, apg: 1.2, spg: 0.8, bpg: 0.2 },
+  { name: "Payton Pritchard", team: "BOS", pos: "PG", ppg: 14.6, tpg: 2.4, apg: 5.1, spg: 0.4, bpg: 0.0 },
+  { name: "Collin Murray-Boyles", team: "TOR", pos: "PF", ppg: 14.4, tpg: 0.0, apg: 2.4, spg: 1.3, bpg: 1.1 },
+  { name: "Cameron Johnson", team: "DEN", pos: "SF", ppg: 14.2, tpg: 1.8, apg: 2.3, spg: 1.0, bpg: 0.3 },
+  { name: "VJ Edgecombe", team: "PHI", pos: "SG", ppg: 14.0, tpg: 1.9, apg: 3.4, spg: 1.0, bpg: 0.4 },
+  { name: "Tari Eason", team: "HOU", pos: "PF", ppg: 13.8, tpg: 1.7, apg: 1.7, spg: 2.5, bpg: 0.7 },
+  { name: "Nickeil Alexander-Walker", team: "ATL", pos: "SG", ppg: 13.7, tpg: 3.0, apg: 2.7, spg: 0.5, bpg: 0.8 },
+  { name: "Jonathan Kuminga", team: "ATL", pos: "PF", ppg: 13.7, tpg: 0.8, apg: 1.0, spg: 0.5, bpg: 0.5 },
+  { name: "Dylan Harper", team: "SAS", pos: "SG", ppg: 13.6, tpg: 0.8, apg: 2.2, spg: 1.3, bpg: 0.3 },
+  { name: "Mikal Bridges", team: "NYK", pos: "SF", ppg: 13.0, tpg: 1.1, apg: 2.4, spg: 1.0, bpg: 0.2 },
+  { name: "Marcus Smart", team: "LAL", pos: "SG", ppg: 12.9, tpg: 1.7, apg: 5.1, spg: 2.4, bpg: 1.0 },
+  { name: "Devin Vassell", team: "SAS", pos: "SG", ppg: 12.6, tpg: 1.8, apg: 2.7, spg: 1.4, bpg: 0.8 },
+  { name: "Onyeka Okongwu", team: "ATL", pos: "C", ppg: 12.5, tpg: 1.7, apg: 2.3, spg: 1.2, bpg: 0.8 },
+  { name: "Jarrett Allen", team: "CLE", pos: "C", ppg: 12.3, tpg: 0.0, apg: 1.1, spg: 1.0, bpg: 2.0 },
+  { name: "Reed Sheppard", team: "HOU", pos: "SG", ppg: 12.2, tpg: 2.7, apg: 4.7, spg: 2.2, bpg: 0.8 },
+  { name: "Naz Reid", team: "MIN", pos: "C", ppg: 12.1, tpg: 1.7, apg: 2.2, spg: 0.5, bpg: 0.4 },
+  { name: "Brandon Ingram", team: "TOR", pos: "SF", ppg: 12.0, tpg: 1.0, apg: 2.2, spg: 0.6, bpg: 0.8 },
+  { name: "Kelly Oubre Jr.", team: "PHI", pos: "SF", ppg: 11.6, tpg: 0.9, apg: 1.1, spg: 0.5, bpg: 0.5 },
+  { name: "Luke Kennard", team: "LAL", pos: "SG", ppg: 11.5, tpg: 1.8, apg: 2.3, spg: 0.9, bpg: 0.1 },
+  { name: "Duncan Robinson", team: "DET", pos: "SG", ppg: 11.5, tpg: 3.1, apg: 2.5, spg: 1.5, bpg: 0.3 },
+  { name: "Jalen Suggs", team: "ORL", pos: "PG", ppg: 11.1, tpg: 1.9, apg: 4.1, spg: 1.9, bpg: 0.6 },
+  { name: "Ja'Kobe Walter", team: "TOR", pos: "SG", ppg: 11.1, tpg: 2.4, apg: 1.4, spg: 2.0, bpg: 0.3 },
+  { name: "Derrick White", team: "BOS", pos: "SG", ppg: 11.1, tpg: 2.1, apg: 3.1, spg: 0.9, bpg: 1.4 },
+  { name: "Wendell Carter Jr.", team: "ORL", pos: "C", ppg: 11.0, tpg: 0.7, apg: 2.9, spg: 0.6, bpg: 1.7 },
+  { name: "Tim Hardaway Jr.", team: "DEN", pos: "SG", ppg: 10.8, tpg: 1.3, apg: 0.8, spg: 0.7, bpg: 0.3 },
+  { name: "Terrence Shannon Jr.", team: "MIN", pos: "SG", ppg: 10.6, tpg: 0.9, apg: 1.4, spg: 0.4, bpg: 0.0 },
+  { name: "Max Strus", team: "CLE", pos: "SF", ppg: 10.5, tpg: 2.3, apg: 2.0, spg: 0.8, bpg: 0.3 },
+  { name: "Jerami Grant", team: "POR", pos: "PF", ppg: 10.4, tpg: 1.0, apg: 0.4, spg: 1.0, bpg: 0.2 },
+  { name: "Josh Hart", team: "NYK", pos: "SF", ppg: 10.3, tpg: 1.1, apg: 4.2, spg: 1.6, bpg: 0.2 },
+  { name: "Julian Champagnie", team: "SAS", pos: "SF", ppg: 10.2, tpg: 2.4, apg: 1.4, spg: 1.4, bpg: 0.4 },
+  { name: "Jalen Duren", team: "DET", pos: "C", ppg: 10.1, tpg: 0.0, apg: 2.3, spg: 0.7, bpg: 1.0 },
+  { name: "Deandre Ayton", team: "LAL", pos: "C", ppg: 10.0, tpg: 0.0, apg: 0.9, spg: 0.2, bpg: 0.8 },
+  { name: "Isaiah Hartenstein", team: "OKC", pos: "C", ppg: 9.9, tpg: 0.0, apg: 2.5, spg: 1.3, bpg: 0.9 },
+  { name: "Robert Williams", team: "POR", pos: "C", ppg: 9.6, tpg: 0.6, apg: 2.6, spg: 0.6, bpg: 1.2 },
+  { name: "Neemias Queta", team: "BOS", pos: "C", ppg: 9.3, tpg: 0.0, apg: 0.6, spg: 0.1, bpg: 0.9 },
+  { name: "Jamal Shead", team: "TOR", pos: "PG", ppg: 9.0, tpg: 2.0, apg: 5.0, spg: 1.4, bpg: 0.1 },
+  { name: "Keldon Johnson", team: "SAS", pos: "SF", ppg: 8.7, tpg: 0.8, apg: 1.1, spg: 0.9, bpg: 0.3 },
+  { name: "Anthony Black", team: "ORL", pos: "PG", ppg: 8.6, tpg: 1.0, apg: 1.4, spg: 2.1, bpg: 0.7 },
+  { name: "Christian Braun", team: "DEN", pos: "SG", ppg: 8.3, tpg: 1.0, apg: 1.7, spg: 1.0, bpg: 0.8 },
+  { name: "Ausar Thompson", team: "DET", pos: "SF", ppg: 8.3, tpg: 0.0, apg: 3.3, spg: 2.0, bpg: 1.8 },
+  { name: "Daniss Jenkins", team: "DET", pos: "PG", ppg: 8.0, tpg: 0.9, apg: 2.8, spg: 0.5, bpg: 0.4 },
+  { name: "Rudy Gobert", team: "MIN", pos: "C", ppg: 7.8, tpg: 0.0, apg: 2.5, spg: 1.3, bpg: 1.2 },
+  { name: "Sam Hauser", team: "BOS", pos: "PF", ppg: 7.7, tpg: 2.3, apg: 0.9, spg: 0.1, bpg: 0.1 },
+  { name: "Alex Caruso", team: "OKC", pos: "SG", ppg: 7.6, tpg: 1.6, apg: 1.6, spg: 1.5, bpg: 0.1 },
+  { name: "Miles McBride", team: "NYK", pos: "SG", ppg: 7.5, tpg: 2.2, apg: 1.0, spg: 0.5, bpg: 0.2 },
+  { name: "Dyson Daniels", team: "ATL", pos: "SG", ppg: 7.3, tpg: 0.7, apg: 5.0, spg: 1.8, bpg: 0.3 },
+  { name: "Jared McCain", team: "OKC", pos: "SG", ppg: 7.3, tpg: 1.6, apg: 0.5, spg: 0.0, bpg: 0.0 },
+  { name: "Cason Wallace", team: "OKC", pos: "SG", ppg: 7.3, tpg: 1.5, apg: 2.1, spg: 1.8, bpg: 0.5 },
+  { name: "Shaedon Sharpe", team: "POR", pos: "SG", ppg: 7.2, tpg: 0.6, apg: 0.6, spg: 0.4, bpg: 0.4 },
+  { name: "Toumani Camara", team: "POR", pos: "PF", ppg: 7.0, tpg: 1.4, apg: 1.2, spg: 1.4, bpg: 0.6 },
+  { name: "Donovan Clingan", team: "POR", pos: "C", ppg: 7.0, tpg: 1.0, apg: 2.2, spg: 0.2, bpg: 0.6 },
+  { name: "Jakob Poeltl", team: "TOR", pos: "C", ppg: 7.0, tpg: 0.0, apg: 1.4, spg: 0.9, bpg: 0.9 },
+  { name: "Dennis Schröder", team: "CLE", pos: "PG", ppg: 6.8, tpg: 0.8, apg: 2.1, spg: 0.3, bpg: 0.3 },
+  { name: "Quentin Grimes", team: "PHI", pos: "SG", ppg: 6.7, tpg: 1.3, apg: 2.3, spg: 0.3, bpg: 0.5 },
+  { name: "Isaiah Joe", team: "OKC", pos: "SG", ppg: 6.6, tpg: 1.7, apg: 1.1, spg: 0.6, bpg: 0.0 },
+  { name: "Paul Reed", team: "DET", pos: "C", ppg: 6.6, tpg: 0.1, apg: 0.4, spg: 0.1, bpg: 0.7 },
+  { name: "Jordan Clarkson", team: "NYK", pos: "SG", ppg: 6.5, tpg: 0.0, apg: 1.0, spg: 0.3, bpg: 0.0 },
+  { name: "Luguentz Dort", team: "OKC", pos: "SF", ppg: 6.5, tpg: 1.9, apg: 1.4, spg: 0.5, bpg: 0.1 },
+  { name: "Spencer Jones", team: "DEN", pos: "SF", ppg: 6.5, tpg: 1.5, apg: 0.3, spg: 0.7, bpg: 1.2 },
+  { name: "Sam Merrill", team: "CLE", pos: "SG", ppg: 6.5, tpg: 1.5, apg: 1.1, spg: 0.5, bpg: 0.0 },
+  { name: "Bruce Brown", team: "DEN", pos: "SG", ppg: 6.3, tpg: 0.5, apg: 1.7, spg: 1.7, bpg: 0.0 },
+  { name: "Nikola Vučević", team: "BOS", pos: "C", ppg: 6.2, tpg: 1.2, apg: 2.3, spg: 0.2, bpg: 0.5 },
+  { name: "Jaxson Hayes", team: "LAL", pos: "C", ppg: 5.7, tpg: 0.0, apg: 0.7, spg: 0.3, bpg: 0.8 },
+  { name: "Mitchell Robinson", team: "NYK", pos: "C", ppg: 5.7, tpg: 0.0, apg: 0.3, spg: 0.3, bpg: 0.8 },
+  { name: "Luke Kornet", team: "SAS", pos: "C", ppg: 5.6, tpg: 0.1, apg: 1.0, spg: 0.9, bpg: 0.9 },
+  { name: "Caris LeVert", team: "DET", pos: "SG", ppg: 5.3, tpg: 0.5, apg: 1.0, spg: 0.5, bpg: 0.5 },
+  { name: "Sandro Mamukelashvili", team: "TOR", pos: "C", ppg: 5.0, tpg: 0.6, apg: 1.0, spg: 0.7, bpg: 0.4 },
+  { name: "Jose Alvarado", team: "NYK", pos: "PG", ppg: 4.9, tpg: 1.0, apg: 1.2, spg: 0.8, bpg: 0.1 },
+  { name: "Jamison Battle", team: "TOR", pos: "SF", ppg: 4.8, tpg: 1.2, apg: 0.2, spg: 0.0, bpg: 0.0 },
+  { name: "Bones Hyland", team: "MIN", pos: "PG", ppg: 4.8, tpg: 0.9, apg: 1.7, spg: 0.4, bpg: 0.1 },
+  { name: "Josh Okogie", team: "HOU", pos: "SG", ppg: 4.8, tpg: 0.8, apg: 0.8, spg: 1.2, bpg: 0.0 },
+  { name: "Jaylon Tyson", team: "CLE", pos: "SG", ppg: 4.8, tpg: 0.8, apg: 1.6, spg: 0.2, bpg: 0.1 },
+  { name: "Dean Wade", team: "CLE", pos: "PF", ppg: 4.8, tpg: 1.0, apg: 0.4, spg: 0.8, bpg: 0.0 },
+  { name: "Jamal Cain", team: "ORL", pos: "SF", ppg: 4.6, tpg: 0.4, apg: 0.6, spg: 0.3, bpg: 0.4 },
+  { name: "Luka Garza", team: "BOS", pos: "C", ppg: 4.4, tpg: 0.6, apg: 0.9, spg: 0.0, bpg: 0.1 },
+  { name: "Isaiah Stewart", team: "DET", pos: "C", ppg: 4.4, tpg: 0.3, apg: 0.3, spg: 0.1, bpg: 1.2 },
+  { name: "Mike Conley", team: "MIN", pos: "PG", ppg: 4.3, tpg: 1.0, apg: 2.5, spg: 0.5, bpg: 0.0 },
+  { name: "Baylor Scheierman", team: "BOS", pos: "SG", ppg: 4.3, tpg: 1.1, apg: 0.6, spg: 0.9, bpg: 0.1 },
+  { name: "Gabe Vincent", team: "ATL", pos: "PG", ppg: 4.3, tpg: 1.0, apg: 1.2, spg: 0.3, bpg: 0.2 },
+  { name: "Tristan Da Silva", team: "ORL", pos: "SF", ppg: 4.1, tpg: 0.7, apg: 0.1, spg: 0.1, bpg: 0.0 },
+  { name: "Landry Shamet", team: "NYK", pos: "SG", ppg: 4.1, tpg: 1.0, apg: 0.4, spg: 0.2, bpg: 0.0 },
+  { name: "Jeremy Sochan", team: "NYK", pos: "PF", ppg: 4.0, tpg: 0.2, apg: 0.4, spg: 0.2, bpg: 0.2 },
+  { name: "Andre Drummond", team: "PHI", pos: "C", ppg: 3.9, tpg: 0.4, apg: 0.6, spg: 0.4, bpg: 0.2 },
+  { name: "Jaylin Williams", team: "OKC", pos: "PF", ppg: 3.6, tpg: 1.0, apg: 1.4, spg: 0.8, bpg: 0.4 },
+  { name: "Justin Edwards", team: "PHI", pos: "SF", ppg: 3.3, tpg: 0.4, apg: 0.4, spg: 0.0, bpg: 0.1 },
+  { name: "Tyler Kolek", team: "NYK", pos: "PG", ppg: 3.3, tpg: 0.3, apg: 1.8, spg: 0.0, bpg: 0.2 },
+  { name: "Jake LaRavia", team: "LAL", pos: "PF", ppg: 3.3, tpg: 0.3, apg: 0.8, spg: 0.5, bpg: 0.8 },
+  { name: "Carter Bryant", team: "SAS", pos: "PF", ppg: 3.2, tpg: 0.8, apg: 1.2, spg: 0.0, bpg: 0.3 },
+  { name: "Dominick Barlow", team: "PHI", pos: "PF", ppg: 2.9, tpg: 0.0, apg: 0.1, spg: 0.2, bpg: 0.4 },
+  { name: "Jarred Vanderbilt", team: "LAL", pos: "PF", ppg: 2.9, tpg: 0.1, apg: 0.3, spg: 0.3, bpg: 0.0 },
+  { name: "Trendon Watford", team: "PHI", pos: "PF", ppg: 2.9, tpg: 0.0, apg: 0.4, spg: 0.4, bpg: 0.0 },
+  { name: "Goga Bitadze", team: "ORL", pos: "C", ppg: 2.8, tpg: 0.0, apg: 0.3, spg: 0.3, bpg: 1.7 },
+  { name: "Pacôme Dadiet", team: "NYK", pos: "SG", ppg: 2.8, tpg: 0.4, apg: 0.6, spg: 0.2, bpg: 0.0 },
+  { name: "Harrison Barnes", team: "SAS", pos: "PF", ppg: 2.7, tpg: 0.2, apg: 0.2, spg: 0.1, bpg: 0.1 },
+  { name: "Javonte Green", team: "DET", pos: "SG", ppg: 2.7, tpg: 0.6, apg: 0.3, spg: 0.5, bpg: 0.5 },
+  { name: "Aaron Holiday", team: "HOU", pos: "PG", ppg: 2.7, tpg: 0.7, apg: 0.5, spg: 0.3, bpg: 0.2 },
+  { name: "Nick Smith Jr.", team: "LAL", pos: "SG", ppg: 2.7, tpg: 0.5, apg: 0.2, spg: 0.2, bpg: 0.2 },
+  { name: "Adem Bona", team: "PHI", pos: "C", ppg: 2.6, tpg: 0.0, apg: 0.1, spg: 0.1, bpg: 0.7 },
+  { name: "Corey Kispert", team: "ATL", pos: "SF", ppg: 2.2, tpg: 0.2, apg: 1.2, spg: 0.4, bpg: 0.0 },
+  { name: "Lindy Waters III", team: "SAS", pos: "SG", ppg: 2.2, tpg: 0.6, apg: 0.2, spg: 0.0, bpg: 0.0 },
+  { name: "Ariel Hukporti", team: "NYK", pos: "C", ppg: 2.1, tpg: 0.0, apg: 0.1, spg: 0.1, bpg: 0.7 },
+  { name: "Dalton Knecht", team: "LAL", pos: "SF", ppg: 2.0, tpg: 0.4, apg: 0.6, spg: 0.0, bpg: 0.0 },
+  { name: "Jae'Sean Tate", team: "HOU", pos: "SF", ppg: 2.0, tpg: 0.0, apg: 0.0, spg: 0.2, bpg: 0.0 },
+  { name: "Kyle Anderson", team: "MIN", pos: "SF", ppg: 1.9, tpg: 0.0, apg: 1.7, spg: 0.3, bpg: 0.0 },
+  { name: "Dalton Terry", team: "PHI", pos: "SG", ppg: 1.9, tpg: 0.3, apg: 1.0, spg: 0.7, bpg: 0.0 },
+  { name: "Ron Harper Jr.", team: "BOS", pos: "SF", ppg: 1.8, tpg: 0.5, apg: 0.2, spg: 0.5, bpg: 0.0 },
+  { name: "Mouhamed Gueye", team: "ATL", pos: "PF", ppg: 1.7, tpg: 0.2, apg: 0.7, spg: 0.2, bpg: 0.0 },
+  { name: "A.J. Lawson", team: "TOR", pos: "SG", ppg: 1.7, tpg: 0.3, apg: 0.6, spg: 0.0, bpg: 0.3 },
+  { name: "Jordan Walsh", team: "BOS", pos: "PF", ppg: 1.7, tpg: 0.3, apg: 1.0, spg: 0.6, bpg: 0.3 },
+  { name: "Jaylen Clark", team: "MIN", pos: "SG", ppg: 1.6, tpg: 0.4, apg: 0.6, spg: 0.2, bpg: 0.2 },
+  { name: "Bronny James", team: "LAL", pos: "SG", ppg: 1.5, tpg: 0.3, apg: 0.9, spg: 0.1, bpg: 0.0 },
+  { name: "Adou Thiero", team: "LAL", pos: "SF", ppg: 1.5, tpg: 0.0, apg: 0.2, spg: 0.0, bpg: 0.0 },
+  { name: "Thomas Bryant", team: "CLE", pos: "C", ppg: 1.4, tpg: 0.0, apg: 0.2, spg: 0.4, bpg: 0.2 },
+  { name: "Mohamed Diawara", team: "NYK", pos: "SF", ppg: 1.4, tpg: 0.2, apg: 0.8, spg: 0.2, bpg: 0.0 },
+  { name: "Ron Holland", team: "DET", pos: "SF", ppg: 1.4, tpg: 0.1, apg: 0.1, spg: 0.6, bpg: 0.3 },
+  { name: "Aaron Wiggins", team: "OKC", pos: "SG", ppg: 1.4, tpg: 0.0, apg: 0.7, spg: 0.1, bpg: 0.0 },
+  { name: "Keon Ellis", team: "CLE", pos: "SG", ppg: 1.3, tpg: 0.4, apg: 0.1, spg: 0.7, bpg: 0.1 },
+  { name: "Kevin Huerter", team: "DET", pos: "SG", ppg: 1.2, tpg: 0.4, apg: 1.4, spg: 0.4, bpg: 0.0 },
+  { name: "Kris Murray", team: "POR", pos: "SF", ppg: 1.0, tpg: 0.0, apg: 0.0, spg: 0.0, bpg: 0.0 },
+  { name: "Bismack Biyombo", team: "SAS", pos: "C", ppg: 0.8, tpg: 0.0, apg: 0.0, spg: 0.0, bpg: 0.0 },
+  { name: "Jabari Walker", team: "PHI", pos: "PF", ppg: 0.7, tpg: 0.0, apg: 0.0, spg: 0.0, bpg: 0.0 },
+  { name: "Nikola Topić", team: "OKC", pos: "PG", ppg: 0.4, tpg: 0.0, apg: 0.2, spg: 0.2, bpg: 0.0 },
+  { name: "Kenrich Williams", team: "OKC", pos: "PF", ppg: 0.3, tpg: 0.0, apg: 0.2, spg: 0.0, bpg: 0.0 },
+];
+
+// Average NBA starter per-game stats (used as scaling reference).
+// These reference values stay constant across pool variants — they're the
+// destination distribution the scaling math maps your league into.
 const NBA_AVG = { ppg: 16.0, tpg: 1.3, apg: 4.0, spg: 1.1, bpg: 0.6 };
 
 export interface PerGameStats {
@@ -160,7 +351,10 @@ function avgOf(
 
 export function computeNBAComp(
   playerPerGame: PerGameStats,
-  leagueAvg: PerGameStats
+  leagueAvg: PerGameStats,
+  // Optional override — defaults to the all-time pool. The player page
+  // passes NBA_COMP_POOL_PLAYOFFS_2026 when the playoff theme is active.
+  pool: NBAPlayer[] = NBA_COMP_POOL,
 ): NBACompResult {
   // Scale pickup stats to NBA equivalents using ratio method
   const scaled: PerGameStats = {
@@ -179,7 +373,6 @@ export function computeNBAComp(
   scaled.bpg = Math.round(scaled.bpg * 10) / 10;
 
   // Find closest NBA comp using z-score normalized Euclidean distance
-  const pool = NBA_COMP_POOL;
   const statKeys = ["ppg", "tpg", "apg", "spg", "bpg"] as const;
 
   // Compute mean and std of the comp pool for normalization

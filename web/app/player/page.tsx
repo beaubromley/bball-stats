@@ -5,7 +5,15 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell, LabelList } from "recharts";
 
-import { computeLeagueAvg, computeNBAComp } from "@/lib/nba-comps";
+import { computeLeagueAvg, computeNBAComp, NBA_COMP_POOL_PLAYOFFS_2026 } from "@/lib/nba-comps";
+
+// ── Temporary playoff theme — to revert to all-time legends, change this
+//    to `undefined` (which makes computeNBAComp use the default pool).
+const ACTIVE_NBA_POOL = NBA_COMP_POOL_PLAYOFFS_2026;
+const NBA_COMP_HEADING =
+  ACTIVE_NBA_POOL === NBA_COMP_POOL_PLAYOFFS_2026
+    ? "NBA Player Comp — 2026 Playoffs"
+    : "NBA Player Comp";
 import { GAMES_PER_SEASON } from "@/lib/seasons";
 import { useAuth } from "@/app/components/AuthProvider";
 
@@ -420,7 +428,7 @@ function PlayerDetailInner() {
     bpg: stats.bpg,
   };
   const leagueAvg = computeLeagueAvg(leaderboard);
-  const { comp, scaledStats } = computeNBAComp(playerPerGame, leagueAvg);
+  const { comp, scaledStats } = computeNBAComp(playerPerGame, leagueAvg, ACTIVE_NBA_POOL);
 
   return (
     <div>
@@ -466,9 +474,14 @@ function PlayerDetailInner() {
 
       {/* NBA Player Comp */}
       <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 mb-6 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900/50 dark:to-transparent">
-        <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">NBA Player Comp</h2>
-        <div className="mb-3">
+        <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">{NBA_COMP_HEADING}</h2>
+        <div className="mb-3 flex items-baseline gap-3 flex-wrap">
           <span className="text-2xl font-bold font-display">{comp.name}</span>
+          {(comp.team || comp.pos) && (
+            <span className="text-sm font-display uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              {[comp.team, comp.pos].filter(Boolean).join(" · ")}
+            </span>
+          )}
         </div>
         <div className="flex gap-6 text-sm flex-wrap">
           <div><span className="font-bold tabular-nums">{comp.ppg}</span> <span className="text-gray-500">PPG</span></div>
