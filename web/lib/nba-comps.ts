@@ -334,6 +334,15 @@ export const MANUAL_COMP_OVERRIDES: Record<string, NBAPlayer> = {
   },
 };
 
+/**
+ * Per-player heading override. Lets us label individual players' comp
+ * cards with a different context (e.g. Celebrity Game instead of the
+ * default Playoffs theme). Keys match MANUAL_COMP_OVERRIDES.
+ */
+export const COMP_HEADING_OVERRIDES: Record<string, string> = {
+  "Beau B.": "NBA Player Comp — 2026 All-Star Celebrity Game",
+};
+
 export interface PerGameStats {
   ppg: number;
   tpg: number;

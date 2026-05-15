@@ -1,7 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 const COOKIE_NAME = "bball_session";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+
+/**
+ * Re-issue the session cookie with a fresh Max-Age so the 7-day clock
+ * resets on every authenticated request. As long as the user touches
+ * the app at least once a week, the session never lapses.
+ *
+ * `cookies()` is callable from route handlers; in other server contexts
+ * (e.g. server components rendering during static generation) it can
+ * throw, so we swallow errors quietly — failing to refresh is not fatal.
+ */
+async function refreshSessionCookie(token: string): Promise<void> {
+  try {
+    const cookieStore = await cookies();
+    cookieStore.set({
+      name: COOKIE_NAME,
+      value: token,
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: COOKIE_MAX_AGE,
+      path: "/",
+    });
+  } catch {
+    // Cookie writes only work inside route handlers / server actions;
+    // any other context (RSC during prerender, etc.) is a no-op.
+  }
+}
 
 export type Role = "admin" | "viewer";
 
@@ -67,7 +95,16 @@ export async function getRole(req: NextRequest): Promise<Role | null> {
 
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return null;
-  try { return await verifyToken(token); } catch { return null; }
+  try {
+    const role = await verifyToken(token);
+    if (role) {
+      // Sliding session: extend the cookie for another COOKIE_MAX_AGE
+      // every time a valid cookie is accepted. Idempotent — no-op if
+      // we're not in a context that can write cookies.
+      await refreshSessionCookie(token);
+    }
+    return role;
+  } catch { return null; }
 }
 
 export async function isAuthenticated(req: NextRequest): Promise<boolean> {

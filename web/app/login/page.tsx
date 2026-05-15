@@ -1,15 +1,30 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/app/components/AuthProvider";
 
-export default function LoginPage() {
+function LoginInner() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  /**
+   * Where to bounce back to after a successful login. Set by the
+   * authedFetch wrapper when an API call 401s mid-session, so the user
+   * lands back on the page they were trying to use. Sanity-checked to
+   * a same-origin pathname to prevent open-redirect abuse.
+   */
+  function resolveReturnUrl(): string | null {
+    const raw = searchParams.get("return");
+    if (!raw) return null;
+    // Only accept same-origin paths — no protocol-relative or absolute URLs.
+    if (!raw.startsWith("/") || raw.startsWith("//")) return null;
+    return raw;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -18,7 +33,12 @@ export default function LoginPage() {
     const ok = await login(password);
     setSubmitting(false);
     if (ok) {
-      // Admin goes to record, viewer goes to leaderboard
+      const returnUrl = resolveReturnUrl();
+      if (returnUrl) {
+        router.push(returnUrl);
+        return;
+      }
+      // No return URL: admin lands on record, viewer on home.
       const isAdminPw = password === "ymcaball";
       router.push(isAdminPw ? "/record" : "/");
     } else {
@@ -51,5 +71,14 @@ export default function LoginPage() {
         &ldquo;He who determines what is measured determines what is true.&rdquo;
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  // useSearchParams requires a Suspense boundary in app router.
+  return (
+    <Suspense fallback={<div className="text-gray-500 text-center py-16">Loading...</div>}>
+      <LoginInner />
+    </Suspense>
   );
 }

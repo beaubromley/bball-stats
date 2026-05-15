@@ -17,6 +17,7 @@ import {
 import BoxScore from "@/app/components/BoxScore";
 import { useAuth } from "@/app/components/AuthProvider";
 import { isNativeAudioAvailable, AudioStream } from "@/lib/native-audio";
+import { authedFetch } from "@/lib/authed-fetch";
 import type { PluginListenerHandle } from "@capacitor/core";
 
 const API_BASE = "/api";
@@ -584,7 +585,10 @@ export default function RecordPage() {
     stopDeepgram();
     try {
       addDebugLog("Fetching Deepgram token...");
-      const tokenRes = await fetch(`${API_BASE}/deepgram/token`);
+      // authedFetch will redirect to /login if the session is expired (401),
+      // so the user gets bounced to a real login screen instead of seeing
+      // an opaque "token fetch failed" toast.
+      const tokenRes = await authedFetch(`${API_BASE}/deepgram/token`);
       if (!tokenRes.ok) {
         addDebugLog(`Token fetch failed: ${tokenRes.status}`);
         setError("Failed to get Deepgram token — check internet or server config");
