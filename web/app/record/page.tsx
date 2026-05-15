@@ -2608,7 +2608,7 @@ export default function RecordPage() {
               disabled={saved === "saving"}
               className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:text-green-400 text-white font-semibold rounded-lg transition-colors"
             >
-              {saved === "saving" ? "Saving..." : "Save Game"}
+              {saved === "saving" ? "Loading..." : "View Games"}
             </button>
           )}
           {saved === "saved" && (
