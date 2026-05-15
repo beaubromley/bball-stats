@@ -305,6 +305,35 @@ export const NBA_COMP_POOL_PLAYOFFS_2026: NBAPlayer[] = [
 // destination distribution the scaling math maps your league into.
 const NBA_AVG = { ppg: 16.0, tpg: 1.3, apg: 4.0, spg: 1.1, bpg: 0.6 };
 
+// =======================================================================
+// Manual comp overrides
+// =======================================================================
+//
+// Hand-picked comps that bypass the nearest-neighbor algorithm. Keyed by
+// YBA player display name (case-sensitive — match the players table). To
+// remove an override, delete the entry; the algorithm takes over again.
+//
+// Used today for at least one bit-of-comedy override; safe to keep around.
+export const MANUAL_COMP_OVERRIDES: Record<string, NBAPlayer> = {
+  // Beau is the YBA's leading scorer. The algorithmic comp wanted to give
+  // him Shai Gilgeous-Alexander, which is the cringe local-superstar joke
+  // (we're in OKC). Pinning him to Cody Jones of Dude Perfect — who put
+  // up a 3/7/1 line in 40 minutes at the 2026 NBA All-Star Celebrity
+  // Game, guarded by 7'6" Tacko Fall, trying for the first double-double
+  // in Celebrity Game history and falling well short. YouTuber-built-a-
+  // platform-around-pickup-basketball energy lines up perfectly.
+  "Beau B.": {
+    name: "Cody Jones",
+    team: "DP",
+    pos: "F",
+    ppg: 3,
+    tpg: 0,
+    apg: 1,
+    spg: 0,
+    bpg: 0,
+  },
+};
+
 export interface PerGameStats {
   ppg: number;
   tpg: number;
@@ -355,6 +384,10 @@ export function computeNBAComp(
   // Optional override — defaults to the all-time pool. The player page
   // passes NBA_COMP_POOL_PLAYOFFS_2026 when the playoff theme is active.
   pool: NBAPlayer[] = NBA_COMP_POOL,
+  // Optional YBA player display name. When provided, we first check the
+  // MANUAL_COMP_OVERRIDES map and short-circuit the distance math when
+  // a hand-picked comp is set.
+  playerName?: string,
 ): NBACompResult {
   // Scale pickup stats to NBA equivalents using ratio method
   const scaled: PerGameStats = {
@@ -371,6 +404,13 @@ export function computeNBAComp(
   scaled.apg = Math.round(scaled.apg * 10) / 10;
   scaled.spg = Math.round(scaled.spg * 10) / 10;
   scaled.bpg = Math.round(scaled.bpg * 10) / 10;
+
+  // Manual override — short-circuit the distance algorithm when this player
+  // has a hand-picked comp. We still return the scaled stats so the card's
+  // "NBA Scaled Stats" section keeps showing real numbers for the player.
+  if (playerName && MANUAL_COMP_OVERRIDES[playerName]) {
+    return { comp: MANUAL_COMP_OVERRIDES[playerName], scaledStats: scaled };
+  }
 
   // Find closest NBA comp using z-score normalized Euclidean distance
   const statKeys = ["ppg", "tpg", "apg", "spg", "bpg"] as const;

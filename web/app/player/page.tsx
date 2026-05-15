@@ -428,7 +428,12 @@ function PlayerDetailInner() {
     bpg: stats.bpg,
   };
   const leagueAvg = computeLeagueAvg(leaderboard);
-  const { comp, scaledStats } = computeNBAComp(playerPerGame, leagueAvg, ACTIVE_NBA_POOL);
+  const { comp, scaledStats } = computeNBAComp(
+    playerPerGame,
+    leagueAvg,
+    ACTIVE_NBA_POOL,
+    stats.name,
+  );
 
   return (
     <div>
