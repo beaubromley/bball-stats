@@ -324,7 +324,7 @@ export const MANUAL_COMP_OVERRIDES: Record<string, NBAPlayer> = {
   // platform-around-pickup-basketball energy lines up perfectly.
   "Beau B.": {
     name: "Cody Jones",
-    team: "DP",
+    team: "Dude Perfect",
     pos: "F",
     ppg: 3,
     tpg: 0,
