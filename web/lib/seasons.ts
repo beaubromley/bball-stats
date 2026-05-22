@@ -16,11 +16,11 @@ export function formatSeasonGame(gameNumber: number): string {
   return `S${season} · G${gameNumberInSeason(gameNumber)}`;
 }
 
-/** Compact variant: "S2G14" (no spaces). For tight tabular UIs. */
+/** Compact variant: "S2 G14" (with space). For tight tabular UIs. */
 export function formatSeasonGameCompact(gameNumber: number): string {
   if (!gameNumber || gameNumber < 1) return "";
   const season = getSeasonForGameNumber(gameNumber);
-  return `S${season}G${gameNumberInSeason(gameNumber)}`;
+  return `S${season} G${gameNumberInSeason(gameNumber)}`;
 }
 
 export interface Season {

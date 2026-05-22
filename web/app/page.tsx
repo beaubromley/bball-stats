@@ -495,12 +495,12 @@ function GameRef({
   let label: string;
   if (endG !== undefined && endGameNumber !== gameNumber) {
     if (endSeason !== undefined && endSeason !== season) {
-      label = `S${season}G${startG}–S${endSeason}G${endG}`;
+      label = `S${season} G${startG} – S${endSeason} G${endG}`;
     } else {
       label = `S${season} G${startG}–${endG}`;
     }
   } else {
-    label = `S${season}G${startG}`;
+    label = `S${season} G${startG}`;
   }
   return (
     <Link
