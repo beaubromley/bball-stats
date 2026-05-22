@@ -310,6 +310,28 @@ export default function RecordPage() {
   // Player assignments during setup: name -> "A" | "B" | null
   const [assignments, setAssignments] = useState<Record<string, PlayerAssignment>>({});
 
+  /**
+   * Map of player display name -> all-time fantasy points per game.
+   * Populated once on mount from /api/players. Used by the pre-game
+   * matchup predictor to estimate win probability before tip-off.
+   * Names match the keys we expect from setupTeamA/setupTeamB.
+   */
+  const [playerFpgMap, setPlayerFpgMap] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/players`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: { name: string; fpg: number }[]) => {
+        if (cancelled || !Array.isArray(data)) return;
+        const m = new Map<string, number>();
+        for (const p of data) m.set(p.name, Number(p.fpg) || 0);
+        setPlayerFpgMap(m);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   // Enumerate audio input devices
   const refreshDevices = useCallback(async () => {
     try {
@@ -2134,6 +2156,42 @@ export default function RecordPage() {
               </div>
             </div>
           </div>
+
+          {/* Pre-game matchup predictor — only meaningful once both teams
+              are picked and we've loaded FPG data. Computes per-player
+              avg FPG for each team and converts the gap into a win
+              probability via a logistic curve (k=0.5; +2 FPG advantage
+              ≈ 73%, +4 ≈ 88%). Tunable in the math below. */}
+          {setupTeamA.length > 0 && setupTeamB.length > 0 && playerFpgMap.size > 0 && (() => {
+            const teamAvg = (roster: string[]) =>
+              roster.length === 0
+                ? 0
+                : roster.reduce((s, n) => s + (playerFpgMap.get(n) ?? 0), 0) / roster.length;
+            const aFpg = teamAvg(setupTeamA);
+            const bFpg = teamAvg(setupTeamB);
+            const k = 0.5;
+            const aPct = Math.round(100 / (1 + Math.exp(-k * (aFpg - bFpg))));
+            const bPct = 100 - aPct;
+            return (
+              <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+                <div className="text-[10px] uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-2 text-center font-display">
+                  Predicted Matchup
+                </div>
+                <div className="flex items-center text-xs font-display tabular-nums mb-2">
+                  <span className="text-blue-400 font-bold w-12">{aPct}%</span>
+                  <div className="flex-1 h-2 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-800 flex">
+                    <div className="bg-blue-500" style={{ width: `${aPct}%` }} />
+                    <div className="bg-orange-500" style={{ width: `${bPct}%` }} />
+                  </div>
+                  <span className="text-orange-400 font-bold w-12 text-right">{bPct}%</span>
+                </div>
+                <div className="flex justify-between text-[11px] text-gray-500 dark:text-gray-400 tabular-nums">
+                  <span>Team A avg <span className="text-gray-700 dark:text-gray-300 font-bold">{aFpg.toFixed(1)}</span> FPG</span>
+                  <span>Team B avg <span className="text-gray-700 dark:text-gray-300 font-bold">{bFpg.toFixed(1)}</span> FPG</span>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Start game button */}
           <button

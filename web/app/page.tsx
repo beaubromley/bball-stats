@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { formatShortDateCT } from "@/lib/time";
+import { formatSeasonGame, gameNumberInSeason } from "@/lib/seasons";
 
 const API_BASE = "/api";
 
@@ -211,7 +212,7 @@ function LatestGameHero({ game }: { game: GameRow }) {
             Latest Game
           </div>
           <div className="text-[11px] text-gray-400 dark:text-gray-600 mt-0.5">
-            Game {game.game_number} · {formatShortDateCT(game.start_time)}
+            {formatSeasonGame(game.game_number)} · {formatShortDateCT(game.start_time)}
           </div>
         </div>
         <Link
@@ -485,15 +486,21 @@ function GameRef({
   endGameNumber?: number;
   endSeason?: number;
 }) {
+  // The caller passes continuous game_number values (1..N across all seasons).
+  // We display per-season numbers (G1..G82, resetting each season) so the
+  // labels stay readable as the league grows.
+  const startG = gameNumberInSeason(gameNumber);
+  const endG = endGameNumber !== undefined ? gameNumberInSeason(endGameNumber) : undefined;
+
   let label: string;
-  if (endGameNumber !== undefined && endGameNumber !== gameNumber) {
+  if (endG !== undefined && endGameNumber !== gameNumber) {
     if (endSeason !== undefined && endSeason !== season) {
-      label = `S${season}G${gameNumber}–S${endSeason}G${endGameNumber}`;
+      label = `S${season}G${startG}–S${endSeason}G${endG}`;
     } else {
-      label = `S${season} G${gameNumber}–${endGameNumber}`;
+      label = `S${season} G${startG}–${endG}`;
     }
   } else {
-    label = `S${season}G${gameNumber}`;
+    label = `S${season}G${startG}`;
   }
   return (
     <Link

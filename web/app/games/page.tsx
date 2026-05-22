@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { groupBySeason } from "@/lib/seasons";
+import { groupBySeason, formatSeasonGameCompact } from "@/lib/seasons";
 import { useAuth } from "@/app/components/AuthProvider";
 import { formatShortDateCT } from "@/lib/time";
 
@@ -155,7 +155,7 @@ export default function GamesPage() {
 
                       <div className="text-right">
                         <div className="text-xs font-bold font-display text-gray-500 dark:text-gray-400">
-                          Game {game.game_number}
+                          {formatSeasonGameCompact(game.game_number)}
                         </div>
                         <div
                           className={`text-xs font-medium ${

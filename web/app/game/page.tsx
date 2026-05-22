@@ -18,6 +18,7 @@ import {
 import BoxScore from "@/app/components/BoxScore";
 import Link from "next/link";
 import { formatFullCT, formatTimeCT } from "@/lib/time";
+import { formatSeasonGame } from "@/lib/seasons";
 import { useAuth } from "@/app/components/AuthProvider";
 
 const API_BASE = "/api";
@@ -107,7 +108,7 @@ function GameDetailInner() {
       </div>
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-3xl font-bold font-display uppercase tracking-wide">
-          {game.game_number ? `Game ${game.game_number}` : "Game Detail"}
+          {game.game_number ? formatSeasonGame(game.game_number) : "Game Detail"}
         </h1>
         {(isAdmin || isViewer) && id && (
           <div className="flex gap-4">

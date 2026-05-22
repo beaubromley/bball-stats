@@ -14,15 +14,8 @@ const NBA_COMP_HEADING =
   ACTIVE_NBA_POOL === NBA_COMP_POOL_PLAYOFFS_2026
     ? "NBA Player Comp — 2026 Playoffs"
     : "NBA Player Comp";
-import { GAMES_PER_SEASON } from "@/lib/seasons";
+import { formatSeasonGame } from "@/lib/seasons";
 import { useAuth } from "@/app/components/AuthProvider";
-
-function formatSeasonGame(gameNumber: number): string {
-  if (!gameNumber || gameNumber < 1) return "";
-  const season = Math.ceil(gameNumber / GAMES_PER_SEASON);
-  const gameInSeason = ((gameNumber - 1) % GAMES_PER_SEASON) + 1;
-  return `S${season} · G${gameInSeason}`;
-}
 
 const API_BASE = "/api";
 

@@ -1,5 +1,28 @@
 export const GAMES_PER_SEASON = 82;
 
+/**
+ * Given a 1-indexed continuous game number, return the per-season number.
+ * Example with GAMES_PER_SEASON=82: gameNum=82 -> 82; gameNum=83 -> 1.
+ */
+export function gameNumberInSeason(gameNum: number): number {
+  if (!Number.isFinite(gameNum) || gameNum < 1) return 0;
+  return ((gameNum - 1) % GAMES_PER_SEASON) + 1;
+}
+
+/** "S{season} · G{gameInSeason}" e.g. "S2 · G14". Empty string for invalid input. */
+export function formatSeasonGame(gameNumber: number): string {
+  if (!gameNumber || gameNumber < 1) return "";
+  const season = getSeasonForGameNumber(gameNumber);
+  return `S${season} · G${gameNumberInSeason(gameNumber)}`;
+}
+
+/** Compact variant: "S2G14" (no spaces). For tight tabular UIs. */
+export function formatSeasonGameCompact(gameNumber: number): string {
+  if (!gameNumber || gameNumber < 1) return "";
+  const season = getSeasonForGameNumber(gameNumber);
+  return `S${season}G${gameNumberInSeason(gameNumber)}`;
+}
+
 export interface Season {
   number: number;
   label: string;
