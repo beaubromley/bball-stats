@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { parseTranscript, type ParsedCommand, type ScoringMode } from "@/lib/parser";
 import { loadSherpaEngine, downsampleBuffer, buildHotwords, type SherpaEngine } from "@/lib/sherpa";
+import { formatSeasonGame } from "@/lib/seasons";
 import {
   LineChart,
   Line,
@@ -317,6 +319,13 @@ export default function RecordPage() {
    * Names match the keys we expect from setupTeamA/setupTeamB.
    */
   const [playerFpgMap, setPlayerFpgMap] = useState<Map<string, number>>(new Map());
+
+  /**
+   * Server-assigned game number for the game we just finished. Used for
+   * the "S2 · G3" label on the post-game screen so the view matches what
+   * older completed games show on /game?id=...
+   */
+  const [finishedGameNumber, setFinishedGameNumber] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -982,6 +991,16 @@ export default function RecordPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ winning_team: game.winningTeam }),
         }).catch(() => {});
+        // Pull the assigned game_number so the post-game header reads
+        // the same as the /game?id=... view (e.g. "S2 · G3").
+        fetch(`${API_BASE}/games/${game.gameId}`)
+          .then((r) => r.ok ? r.json() : null)
+          .then((g) => {
+            if (g && typeof g.game_number === "number") {
+              setFinishedGameNumber(g.game_number);
+            }
+          })
+          .catch(() => {});
       // Fetch API event IDs so post-game edits work
       if (game.gameId) {
         fetch(`${API_BASE}/games/${game.gameId}/events`)
@@ -1722,6 +1741,7 @@ export default function RecordPage() {
     setNewPlayerFirst("");
     setNewPlayerLast("");
     setSaved("idle");
+    setFinishedGameNumber(null);
     nextId.current = 1;
   }
 
@@ -2613,6 +2633,40 @@ export default function RecordPage() {
       {/* --- Finished --- */}
       {game.status === "finished" && (
         <div className="space-y-3 py-6 text-center">
+          {/* Match the look of the /game?id=... completed-game view:
+              show the game's S/G label, with Edit + Voice Log + full-page
+              links so the admin can polish the box score from right here
+              instead of bouncing through /games. The BoxScore below this
+              already includes the MVP banner. */}
+          {game.gameId && (
+            <div className="flex items-baseline justify-center gap-3 text-sm font-display text-gray-500 dark:text-gray-400">
+              {finishedGameNumber !== null && (
+                <span className="uppercase tracking-wider">
+                  {formatSeasonGame(finishedGameNumber)}
+                </span>
+              )}
+              <Link
+                href={`/game?id=${game.gameId}`}
+                className="hover:text-blue-400 transition-colors"
+              >
+                View Full Page
+              </Link>
+              {isAdmin && (
+                <Link
+                  href={`/game/edit?id=${game.gameId}`}
+                  className="hover:text-blue-400 transition-colors"
+                >
+                  Edit
+                </Link>
+              )}
+              <Link
+                href={`/game/transcripts?id=${game.gameId}`}
+                className="hover:text-blue-400 transition-colors"
+              >
+                Voice Log
+              </Link>
+            </div>
+          )}
           <div className="text-2xl font-bold font-display text-yellow-400">
             Team {game.winningTeam} wins!
           </div>
