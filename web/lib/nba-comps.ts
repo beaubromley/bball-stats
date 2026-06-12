@@ -314,34 +314,14 @@ const NBA_AVG = { ppg: 16.0, tpg: 1.3, apg: 4.0, spg: 1.1, bpg: 0.6 };
 // remove an override, delete the entry; the algorithm takes over again.
 //
 // Used today for at least one bit-of-comedy override; safe to keep around.
-export const MANUAL_COMP_OVERRIDES: Record<string, NBAPlayer> = {
-  // Beau is the YBA's leading scorer. The algorithmic comp wanted to give
-  // him Shai Gilgeous-Alexander, which is the cringe local-superstar joke
-  // (we're in OKC). Pinning him to Cody Jones of Dude Perfect — who put
-  // up a 3/7/1 line in 40 minutes at the 2026 NBA All-Star Celebrity
-  // Game, guarded by 7'6" Tacko Fall, trying for the first double-double
-  // in Celebrity Game history and falling well short. YouTuber-built-a-
-  // platform-around-pickup-basketball energy lines up perfectly.
-  "Beau B.": {
-    name: "Cody Jones",
-    team: "Dude Perfect",
-    pos: "F",
-    ppg: 3,
-    tpg: 0,
-    apg: 1,
-    spg: 0,
-    bpg: 0,
-  },
-};
+export const MANUAL_COMP_OVERRIDES: Record<string, NBAPlayer> = {};
 
 /**
  * Per-player heading override. Lets us label individual players' comp
  * cards with a different context (e.g. Celebrity Game instead of the
  * default Playoffs theme). Keys match MANUAL_COMP_OVERRIDES.
  */
-export const COMP_HEADING_OVERRIDES: Record<string, string> = {
-  "Beau B.": "NBA Player Comp — 2026 All-Star Celebrity Game",
-};
+export const COMP_HEADING_OVERRIDES: Record<string, string> = {};
 
 export interface PerGameStats {
   ppg: number;
