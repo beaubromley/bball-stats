@@ -1,11 +1,19 @@
-"""Backup Turso DB to a local SQL file via HTTP API."""
-import urllib.request, json, sys
+"""Backup Turso DB to a local SQL file via HTTP API.
+
+Writes alongside this script, so it works from any environment (Mac,
+WSL, Linux) without a hardcoded absolute path.
+
+Usage:
+  python3 backups/backup-turso.py
+"""
+import urllib.request, json, sys, os
 from datetime import datetime
 
 TURSO_URL = 'https://bball-stats-beaubromley.aws-us-east-2.turso.io'
 TURSO_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzA2ODg1NDcsImlkIjoiMzAzMTljZWYtNTlmYy00YzJkLThjODAtNDJmY2YzZWI1YmI3IiwicmlkIjoiZGU1NWJmZmItMDY0NC00NDM2LWEwZmQtODI5YTU4NzNlODY1In0.aD6SggGksUEtVyjys7UCi5Si7X8PlqXL9SJZ1AgpbmKz6RRLSYl6aZG-C4WhllJdi36nc58hKJIt1I82OhYsBg'
 
-BACKUP_DIR = 'C:/Users/beaub/dev/bball-stats/backups'
+# Same directory as this script — portable across machines.
+BACKUP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def turso_query(sql):
     payload = {'requests': [{'type': 'execute', 'stmt': {'sql': sql}}]}

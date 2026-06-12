@@ -5,15 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell, LabelList } from "recharts";
 
-import { computeLeagueAvg, computeNBAComp, NBA_COMP_POOL_PLAYOFFS_2026, COMP_HEADING_OVERRIDES } from "@/lib/nba-comps";
+import { computeLeagueAvg, computeNBAComp, COMP_HEADING_OVERRIDES } from "@/lib/nba-comps";
 
-// ── Temporary playoff theme — to revert to all-time legends, change this
-//    to `undefined` (which makes computeNBAComp use the default pool).
-const ACTIVE_NBA_POOL = NBA_COMP_POOL_PLAYOFFS_2026;
-const NBA_COMP_HEADING =
-  ACTIVE_NBA_POOL === NBA_COMP_POOL_PLAYOFFS_2026
-    ? "NBA Player Comp — 2026 Playoffs"
-    : "NBA Player Comp";
+const NBA_COMP_HEADING = "NBA Player Comp";
 import { formatSeasonGame } from "@/lib/seasons";
 import { useAuth } from "@/app/components/AuthProvider";
 
@@ -424,7 +418,7 @@ function PlayerDetailInner() {
   const { comp, scaledStats } = computeNBAComp(
     playerPerGame,
     leagueAvg,
-    ACTIVE_NBA_POOL,
+    undefined,
     stats.name,
   );
 
