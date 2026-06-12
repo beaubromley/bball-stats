@@ -452,7 +452,11 @@ export default function Home() {
                 <tbody>
                   {todayStats.players.map((p) => (
                     <tr key={p.id} className="border-b border-gray-100 dark:border-gray-900">
-                      <td className="py-2 pr-3">{p.name}</td>
+                      <td className="py-2 pr-3">
+                        <Link href={`/player?id=${p.id}`} className="text-blue-400 hover:underline">
+                          {p.name}
+                        </Link>
+                      </td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.games_played}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.wins}-{p.games_played - p.wins}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.total_points}</td>
