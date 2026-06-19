@@ -297,18 +297,27 @@ function PlayerDetailInner() {
       fetch(`${API_BASE}/players/${id}/games`).then((r) => r.json()),
       fetch(`${API_BASE}/players`).then((r) => r.json()),
       fetch(`${API_BASE}/players/${id}/teammates`).then((r) => r.json()).catch(() => []),
-      fetch(`${API_BASE}/strength-of-schedule`).then((r) => r.ok ? r.json() : []).catch(() => []),
     ])
-      .then(([s, g, lb, tm, sos]) => {
+      .then(([s, g, lb, tm]) => {
         setStats(s);
         setGames(g);
         setLeaderboard(lb);
         setTeammates(tm);
-        setSosTable(Array.isArray(sos) ? sos : []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [id]);
+
+  // SoS is fetched separately so it can refetch when the season scope
+  // changes without re-firing the heavier player-stats / games / leaderboard
+  // calls.
+  useEffect(() => {
+    const seasonParam = scope === "all" ? "" : `?season=${scope}`;
+    fetch(`${API_BASE}/strength-of-schedule${seasonParam}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((sos) => setSosTable(Array.isArray(sos) ? sos : []))
+      .catch(() => {});
+  }, [scope]);
 
   async function toggleGame(gameId: string) {
     if (expandedGame === gameId) {
@@ -566,41 +575,6 @@ function PlayerDetailInner() {
         </div>
       </div>
 
-      {/* Strength of Schedule */}
-      {(() => {
-        const mine = sosTable.find((s) => s.player_id === id);
-        if (!mine || mine.games_rated === 0) return null;
-        // Dense rank among players with ≥10 rated games — small samples
-        // are noisy and crowd the top/bottom of the list.
-        const eligible = sosTable.filter((s) => s.games_rated >= 10);
-        const sortedDesc = [...eligible].sort((a, b) => b.sos_index - a.sos_index);
-        const rank = sortedDesc.findIndex((s) => s.player_id === id) + 1;
-        const showRank = rank > 0 && mine.games_rated >= 10;
-        return (
-          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 mb-6">
-            <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
-              Strength of Schedule
-            </h2>
-            <div className="flex items-baseline gap-3 flex-wrap">
-              <span className="text-3xl font-bold font-display tabular-nums">{mine.sos_index}</span>
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                {mine.sos_index > 50
-                  ? "tougher than average"
-                  : mine.sos_index < 50
-                  ? "easier than average"
-                  : "neutral"}
-                {showRank && (
-                  <> · rank <span className="text-gray-700 dark:text-gray-300 font-bold">#{rank}</span> of {sortedDesc.length}</>
-                )}
-              </span>
-            </div>
-            <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
-              Avg opponent pre-game win% across {mine.games_rated} rated games. 50 = neutral, higher = tougher.
-            </div>
-          </div>
-        );
-      })()}
-
       {/* NBA Player Comp */}
       <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 mb-6 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900/50 dark:to-transparent">
         <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
@@ -628,6 +602,41 @@ function PlayerDetailInner() {
           Admin-only: ratings are opinionated/comparative and not for public
           display until the formula has been polished and approved. */}
       {isAdmin && <MaddenRatingsCard stats={scopedStats} leaderboard={leaderboard} />}
+
+      {/* Strength of Schedule — filters with the page-wide season toggle */}
+      {(() => {
+        const mine = sosTable.find((s) => s.player_id === id);
+        if (!mine || mine.games_rated === 0) return null;
+        // Dense rank among players with ≥10 rated games — small samples
+        // are noisy and crowd the top/bottom of the list.
+        const eligible = sosTable.filter((s) => s.games_rated >= 10);
+        const sortedDesc = [...eligible].sort((a, b) => b.sos_index - a.sos_index);
+        const rank = sortedDesc.findIndex((s) => s.player_id === id) + 1;
+        const showRank = rank > 0 && mine.games_rated >= 10;
+        return (
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 mb-6">
+            <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+              Strength of Schedule {scope !== "all" && <span className="text-gray-400">· Season {scope}</span>}
+            </h2>
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <span className="text-3xl font-bold font-display tabular-nums">{mine.sos_index}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {mine.sos_index > 50
+                  ? "tougher than average"
+                  : mine.sos_index < 50
+                  ? "easier than average"
+                  : "neutral"}
+                {showRank && (
+                  <> · rank <span className="text-gray-700 dark:text-gray-300 font-bold">#{rank}</span> of {sortedDesc.length}</>
+                )}
+              </span>
+            </div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
+              Avg opponent pre-game win% across {mine.games_rated} rated games. 50 = neutral, higher = tougher.
+            </div>
+          </div>
+        );
+      })()}
 
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
