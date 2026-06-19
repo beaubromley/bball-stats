@@ -64,6 +64,7 @@ type SortKey =
   | "plus_minus"
   | "plus_minus_per_game"
   | "streak"
+  | "sos_index"
   | null;
 
 interface TodayData {
@@ -202,6 +203,9 @@ export default function Home() {
   const [switching, setSwitching] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  /** SoS index by player_id. All-time only — doesn't change with the
+   *  season toggle, so it's fetched once on mount. */
+  const [sosByPlayer, setSosByPlayer] = useState<Record<string, number>>({});
 
   function handleSort(key: Exclude<SortKey, null>) {
     if (sortKey === key) {
@@ -226,6 +230,9 @@ export default function Home() {
       if (sortKey === "streak") {
         av = parseStreak(a.streak);
         bv = parseStreak(b.streak);
+      } else if (sortKey === "sos_index") {
+        av = sosByPlayer[a.id] ?? -Infinity;
+        bv = sosByPlayer[b.id] ?? -Infinity;
       } else {
         av = a[sortKey] as number | string;
         bv = b[sortKey] as number | string;
@@ -236,7 +243,7 @@ export default function Home() {
       return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
     return arr;
-  }, [players, sortKey, sortDir]);
+  }, [players, sortKey, sortDir, sosByPlayer]);
 
   function fetchLeaderboard(mode: "season" | "all-time", season?: number) {
     setSwitching(true);
@@ -287,6 +294,16 @@ export default function Home() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    fetch(`${API_BASE}/strength-of-schedule`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((arr: { player_id: string; sos_index: number }[]) => {
+        if (!Array.isArray(arr)) return;
+        const m: Record<string, number> = {};
+        for (const r of arr) m[r.player_id] = r.sos_index;
+        setSosByPlayer(m);
+      })
+      .catch(() => {});
   }, []);
 
   if (loading) {
@@ -544,6 +561,7 @@ export default function Home() {
               <SortTh label="BLK" field="blocks" active={sortKey} dir={sortDir} onClick={handleSort} />
               <SortTh label="FP" field="fantasy_points" active={sortKey} dir={sortDir} onClick={handleSort} />
               <SortTh label="FPG" field="fpg" active={sortKey} dir={sortDir} onClick={handleSort} last />
+              <SortTh label="SoS" field="sos_index" active={sortKey} dir={sortDir} onClick={handleSort} />
               {showAdvanced && <SortTh label="+/-" field="plus_minus" active={sortKey} dir={sortDir} onClick={handleSort} advanced />}
               {showAdvanced && <SortTh label="+/-PG" field="plus_minus_per_game" active={sortKey} dir={sortDir} onClick={handleSort} advanced />}
               {showAdvanced && <SortTh label="STK" field="streak" active={sortKey} dir={sortDir} onClick={handleSort} advanced />}
@@ -574,6 +592,17 @@ export default function Home() {
                 <td className="py-3 pr-4 text-right tabular-nums">{player.blocks}</td>
                 <td className="py-3 pr-4 text-right tabular-nums font-bold text-blue-400">{player.fantasy_points}</td>
                 <td className="py-3 text-right tabular-nums font-bold text-blue-400">{player.fpg}</td>
+                <td className={`py-3 pl-4 text-right tabular-nums ${
+                  sosByPlayer[player.id] == null
+                    ? "text-gray-500"
+                    : sosByPlayer[player.id] > 52
+                    ? "text-orange-400"
+                    : sosByPlayer[player.id] < 48
+                    ? "text-gray-400"
+                    : "text-gray-300"
+                }`}>
+                  {sosByPlayer[player.id] ?? "—"}
+                </td>
                 {showAdvanced && (
                   <td className={`py-3 pl-4 text-right tabular-nums font-bold ${player.plus_minus > 0 ? "text-green-400" : player.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
                     {player.plus_minus > 0 ? "+" : ""}{player.plus_minus}

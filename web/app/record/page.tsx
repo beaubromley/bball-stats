@@ -321,6 +321,18 @@ export default function RecordPage() {
   const [playerFpgMap, setPlayerFpgMap] = useState<Map<string, number>>(new Map());
 
   /**
+   * Logistic model fit on historical (delta-FPG, A-won) pairs. Replaces
+   * the hardcoded k=0.5 sigmoid the pre-game predictor used to apply.
+   * Falls back to {intercept:0, slope:0.5} (≈the old behavior) while
+   * loading or if the fetch fails.
+   */
+  const [matchupModel, setMatchupModel] = useState<{
+    intercept: number;
+    slope: number;
+    training_count: number;
+  }>({ intercept: 0, slope: 0.5, training_count: 0 });
+
+  /**
    * Server-assigned game number for the game we just finished. Used for
    * the "S2 · G3" label on the post-game screen so the view matches what
    * older completed games show on /game?id=...
@@ -336,6 +348,17 @@ export default function RecordPage() {
         const m = new Map<string, number>();
         for (const p of data) m.set(p.name, Number(p.fpg) || 0);
         setPlayerFpgMap(m);
+      })
+      .catch(() => {});
+    fetch(`${API_BASE}/matchup-model`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((m) => {
+        if (cancelled || !m) return;
+        setMatchupModel({
+          intercept: Number(m.intercept) || 0,
+          slope: Number(m.slope) || 0,
+          training_count: Number(m.training_count) || 0,
+        });
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -2177,11 +2200,10 @@ export default function RecordPage() {
             </div>
           </div>
 
-          {/* Pre-game matchup predictor — only meaningful once both teams
-              are picked and we've loaded FPG data. Computes per-player
-              avg FPG for each team and converts the gap into a win
-              probability via a logistic curve (k=0.5; +2 FPG advantage
-              ≈ 73%, +4 ≈ 88%). Tunable in the math below. */}
+          {/* Pre-game matchup predictor — per-player FPG averaged across
+              each team, delta fed into a logistic curve fit on every
+              historical matchup's (delta-FPG → A-won) pair. Falls back
+              to a k=0.5 sigmoid while the model is loading. */}
           {setupTeamA.length > 0 && setupTeamB.length > 0 && playerFpgMap.size > 0 && (() => {
             const teamAvg = (roster: string[]) =>
               roster.length === 0
@@ -2189,8 +2211,9 @@ export default function RecordPage() {
                 : roster.reduce((s, n) => s + (playerFpgMap.get(n) ?? 0), 0) / roster.length;
             const aFpg = teamAvg(setupTeamA);
             const bFpg = teamAvg(setupTeamB);
-            const k = 0.5;
-            const aPct = Math.round(100 / (1 + Math.exp(-k * (aFpg - bFpg))));
+            const delta = aFpg - bFpg;
+            const z = matchupModel.intercept + matchupModel.slope * delta;
+            const aPct = Math.round(100 / (1 + Math.exp(-z)));
             const bPct = 100 - aPct;
             return (
               <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
@@ -2209,6 +2232,11 @@ export default function RecordPage() {
                   <span>Team A avg <span className="text-gray-700 dark:text-gray-300 font-bold">{aFpg.toFixed(1)}</span> FPG</span>
                   <span>Team B avg <span className="text-gray-700 dark:text-gray-300 font-bold">{bFpg.toFixed(1)}</span> FPG</span>
                 </div>
+                {matchupModel.training_count > 0 && (
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-2 text-center">
+                    Trained on {matchupModel.training_count} historical matchups
+                  </div>
+                )}
               </div>
             );
           })()}

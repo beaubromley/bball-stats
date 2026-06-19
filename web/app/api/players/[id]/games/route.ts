@@ -13,6 +13,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           ge.game_id,
           ge.player_id,
           SUM(CASE WHEN ge.event_type IN ('score','correction') THEN ge.point_value ELSE 0 END) as pts,
+          COALESCE(SUM(CASE WHEN ge.event_type = 'score' AND ge.point_value = 2 THEN 1 ELSE 0 END), 0)
+            - COALESCE(SUM(CASE WHEN ge.event_type = 'correction' AND ge.point_value = -2 THEN 1 ELSE 0 END), 0) as twos,
           SUM(CASE WHEN ge.event_type = 'assist' THEN 1 ELSE 0 END) as asts,
           SUM(CASE WHEN ge.event_type = 'steal' THEN 1 ELSE 0 END) as stls,
           SUM(CASE WHEN ge.event_type = 'block' THEN 1 ELSE 0 END) as blks
@@ -20,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         GROUP BY ge.game_id, ge.player_id
       ),
       pgs_fp AS (
-        SELECT game_id, player_id, pts, asts, stls, blks,
+        SELECT game_id, player_id, pts, twos, asts, stls, blks,
                COALESCE(pts,0) + COALESCE(asts,0) + COALESCE(stls,0) + COALESCE(blks,0) as fp
         FROM pgs
       ),
@@ -50,6 +52,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         g.id, g.start_time, g.status, g.winning_team, r.team,
         CASE WHEN g.winning_team = r.team THEN 'W' ELSE 'L' END as result,
         COALESCE(pgs_fp.pts, 0) as points_scored,
+        COALESCE(pgs_fp.twos, 0) as twos_made,
         COALESCE(pgs_fp.asts, 0) as assists,
         COALESCE(pgs_fp.stls, 0) as steals,
         COALESCE(pgs_fp.blks, 0) as blocks,

@@ -8,7 +8,7 @@ import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell, LabelL
 import { computeLeagueAvg, computeNBAComp, COMP_HEADING_OVERRIDES } from "@/lib/nba-comps";
 
 const NBA_COMP_HEADING = "NBA Player Comp";
-import { formatSeasonGame } from "@/lib/seasons";
+import { formatSeasonGame, getSeasonForGameNumber } from "@/lib/seasons";
 import { useAuth } from "@/app/components/AuthProvider";
 
 const API_BASE = "/api";
@@ -60,6 +60,7 @@ interface RecentGame {
   result: string;
   team: "A" | "B";
   points_scored: number;
+  twos_made: number;
   assists: number;
   steals: number;
   blocks: number;
@@ -277,6 +278,10 @@ function PlayerDetailInner() {
   const [expandedGame, setExpandedGame] = useState<string | null>(null);
   const [boxScores, setBoxScores] = useState<Record<string, BoxScore>>({});
   const [showAllGames, setShowAllGames] = useState(false);
+  const [compScope, setCompScope] = useState<"all" | number>("all");
+  const [sosTable, setSosTable] = useState<
+    { player_id: string; sos_index: number; games_rated: number }[]
+  >([]);
 
   useEffect(() => {
     if (!id) {
@@ -290,12 +295,14 @@ function PlayerDetailInner() {
       fetch(`${API_BASE}/players/${id}/games`).then((r) => r.json()),
       fetch(`${API_BASE}/players`).then((r) => r.json()),
       fetch(`${API_BASE}/players/${id}/teammates`).then((r) => r.json()).catch(() => []),
+      fetch(`${API_BASE}/strength-of-schedule`).then((r) => r.ok ? r.json() : []).catch(() => []),
     ])
-      .then(([s, g, lb, tm]) => {
+      .then(([s, g, lb, tm, sos]) => {
         setStats(s);
         setGames(g);
         setLeaderboard(lb);
         setTeammates(tm);
+        setSosTable(Array.isArray(sos) ? sos : []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -407,13 +414,45 @@ function PlayerDetailInner() {
   });
 
   // ── Per-game averages & NBA comp (all normalized to game-to-11) ──
-  const playerPerGame = {
-    ppg: stats.ppg,
-    tpg: stats.twos_pg,
-    apg: stats.apg,
-    spg: stats.spg,
-    bpg: stats.bpg,
-  };
+  // Seasons the player actually appeared in (for the toggle).
+  const seasonsPlayed = Array.from(
+    new Set(games.map((g) => getSeasonForGameNumber(Number(g.game_number))))
+  ).sort((a, b) => a - b);
+
+  // Filter games to the chosen scope ("all" = every game).
+  const scopedGames =
+    compScope === "all"
+      ? games
+      : games.filter(
+          (g) => getSeasonForGameNumber(Number(g.game_number)) === compScope,
+        );
+
+  // Compute per-game averages from scopedGames. For "all" this matches
+  // the all-time leaderboard numbers; for a season, it's that season only.
+  const playerPerGame = (() => {
+    if (compScope === "all") {
+      return {
+        ppg: stats.ppg,
+        tpg: stats.twos_pg,
+        apg: stats.apg,
+        spg: stats.spg,
+        bpg: stats.bpg,
+      };
+    }
+    const n = scopedGames.length || 1;
+    const r = (x: number) => Math.round(x * 10) / 10;
+    return {
+      ppg: r(scopedGames.reduce((s, g) => s + Number(g.points_scored), 0) / n),
+      tpg: r(scopedGames.reduce((s, g) => s + Number(g.twos_made ?? 0), 0) / n),
+      apg: r(scopedGames.reduce((s, g) => s + Number(g.assists), 0) / n),
+      spg: r(scopedGames.reduce((s, g) => s + Number(g.steals), 0) / n),
+      bpg: r(scopedGames.reduce((s, g) => s + Number(g.blocks), 0) / n),
+    };
+  })();
+
+  // League average stays all-time — it's a stable scaling baseline. Switching
+  // the player's window to a season doesn't change what an "average player"
+  // looks like for the comp algorithm.
   const leagueAvg = computeLeagueAvg(leaderboard);
   const { comp, scaledStats } = computeNBAComp(
     playerPerGame,
@@ -464,11 +503,77 @@ function PlayerDetailInner() {
         </div>
       </div>
 
+      {/* Strength of Schedule */}
+      {(() => {
+        const mine = sosTable.find((s) => s.player_id === id);
+        if (!mine || mine.games_rated === 0) return null;
+        // Dense rank among players with ≥10 rated games — small samples
+        // are noisy and crowd the top/bottom of the list.
+        const eligible = sosTable.filter((s) => s.games_rated >= 10);
+        const sortedDesc = [...eligible].sort((a, b) => b.sos_index - a.sos_index);
+        const rank = sortedDesc.findIndex((s) => s.player_id === id) + 1;
+        const showRank = rank > 0 && mine.games_rated >= 10;
+        return (
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 mb-6">
+            <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+              Strength of Schedule
+            </h2>
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <span className="text-3xl font-bold font-display tabular-nums">{mine.sos_index}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {mine.sos_index > 50
+                  ? "tougher than average"
+                  : mine.sos_index < 50
+                  ? "easier than average"
+                  : "neutral"}
+                {showRank && (
+                  <> · rank <span className="text-gray-700 dark:text-gray-300 font-bold">#{rank}</span> of {sortedDesc.length}</>
+                )}
+              </span>
+            </div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
+              Avg opponent pre-game win% across {mine.games_rated} rated games. 50 = neutral, higher = tougher.
+            </div>
+          </div>
+        );
+      })()}
+
       {/* NBA Player Comp */}
       <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 mb-6 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900/50 dark:to-transparent">
-        <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
-          {COMP_HEADING_OVERRIDES[stats.name] ?? NBA_COMP_HEADING}
-        </h2>
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            {COMP_HEADING_OVERRIDES[stats.name] ?? NBA_COMP_HEADING}
+          </h2>
+          {seasonsPlayed.length > 0 && (
+            <div className="flex gap-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setCompScope("all")}
+                className={`px-2 py-1 rounded ${
+                  compScope === "all"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                }`}
+              >
+                All-Time
+              </button>
+              {seasonsPlayed.map((s) => (
+                <button
+                  type="button"
+                  key={s}
+                  onClick={() => setCompScope(s)}
+                  className={`px-2 py-1 rounded ${
+                    compScope === s
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                  }`}
+                >
+                  S{s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="mb-3 flex items-baseline gap-3 flex-wrap">
           <span className="text-2xl font-bold font-display">{comp.name}</span>
           {(comp.team || comp.pos) && (
