@@ -130,7 +130,12 @@ function SortTh({
 }) {
   const isActive = active === field;
   const arrow = isActive ? (dir === "asc" ? "▲" : "▼") : "";
-  const padding = advanced ? "pl-4" : last ? "" : "pr-4";
+  // Symmetric padding so text-center actually appears centered relative to
+  // the visible column gap. The `last`/`advanced` flags are unused now but
+  // kept so existing call sites continue to type-check.
+  void last;
+  void advanced;
+  const padding = "px-2";
   const alignCls =
     align === "right" ? "text-right" : align === "left" ? "" : "text-center";
   const activeCls = isActive ? "text-gray-900 dark:text-gray-100" : "";
@@ -590,7 +595,7 @@ export default function Home() {
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-sm">
-              <th className="py-3 pr-4 text-center">#</th>
+              <th className="py-3 px-2 text-center">#</th>
               <SortTh label="Player" field="name" active={sortKey} dir={sortDir} onClick={handleSort} align="left" />
               <SortTh label="GP" field="games_played" active={sortKey} dir={sortDir} onClick={handleSort} />
               <SortTh label="W-L" field="wins" active={sortKey} dir={sortDir} onClick={handleSort} />
@@ -626,8 +631,8 @@ export default function Home() {
                 key={player.id}
                 className="border-b border-gray-100 dark:border-gray-900 hover:bg-gray-100 dark:hover:bg-gray-900/50 transition-colors"
               >
-                <td className="py-3 pr-4 text-center text-gray-500">{i + 1}</td>
-                <td className="py-3 pr-4">
+                <td className="py-3 px-2 text-center text-gray-500">{i + 1}</td>
+                <td className="py-3 px-2">
                   <Link
                     href={`/player?id=${player.id}`}
                     className="text-blue-400 hover:text-blue-300"
@@ -635,34 +640,34 @@ export default function Home() {
                     {player.name}
                   </Link>
                 </td>
-                <td className="py-3 pr-4 text-center tabular-nums">{player.games_played}</td>
-                <td className="py-3 pr-4 text-center tabular-nums">{player.wins}-{player.games_played - player.wins}</td>
-                <td className="py-3 pr-4 text-center tabular-nums">{player.win_pct}%</td>
-                <td className="py-3 pr-4 text-center tabular-nums">{player.total_points}</td>
-                <td className="py-3 pr-4 text-center tabular-nums">{player.ppg}</td>
-                <td className="py-3 pr-4 text-center tabular-nums">{player.assists}</td>
-                <td className="py-3 pr-4 text-center tabular-nums">{player.steals}</td>
-                <td className="py-3 pr-4 text-center tabular-nums">{player.blocks}</td>
-                <td className="py-3 pr-4 text-center tabular-nums font-bold text-blue-400">{player.fantasy_points}</td>
-                <td className="py-3 text-center tabular-nums font-bold text-blue-400">{player.fpg}</td>
+                <td className="py-3 px-2 text-center tabular-nums">{player.games_played}</td>
+                <td className="py-3 px-2 text-center tabular-nums">{player.wins}-{player.games_played - player.wins}</td>
+                <td className="py-3 px-2 text-center tabular-nums">{player.win_pct}%</td>
+                <td className="py-3 px-2 text-center tabular-nums">{player.total_points}</td>
+                <td className="py-3 px-2 text-center tabular-nums">{player.ppg}</td>
+                <td className="py-3 px-2 text-center tabular-nums">{player.assists}</td>
+                <td className="py-3 px-2 text-center tabular-nums">{player.steals}</td>
+                <td className="py-3 px-2 text-center tabular-nums">{player.blocks}</td>
+                <td className="py-3 px-2 text-center tabular-nums font-bold text-blue-400">{player.fantasy_points}</td>
+                <td className="py-3 px-2 text-center tabular-nums font-bold text-blue-400">{player.fpg}</td>
                 <td
-                  className="py-3 pr-4 text-center tabular-nums font-bold"
+                  className="py-3 px-2 text-center tabular-nums font-bold"
                   style={{ color: sosColor(sosByPlayer[player.id]) }}
                 >
                   {sosByPlayer[player.id] ?? "—"}
                 </td>
                 {showAdvanced && (
-                  <td className={`py-3 pl-4 text-center tabular-nums font-bold ${player.plus_minus > 0 ? "text-green-400" : player.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
+                  <td className={`py-3 px-2 text-center tabular-nums font-bold ${player.plus_minus > 0 ? "text-green-400" : player.plus_minus < 0 ? "text-red-400" : "text-gray-500"}`}>
                     {player.plus_minus > 0 ? "+" : ""}{player.plus_minus}
                   </td>
                 )}
                 {showAdvanced && (
-                  <td className={`py-3 pl-4 text-center tabular-nums ${player.plus_minus_per_game > 0 ? "text-green-400" : player.plus_minus_per_game < 0 ? "text-red-400" : "text-gray-500"}`}>
+                  <td className={`py-3 px-2 text-center tabular-nums ${player.plus_minus_per_game > 0 ? "text-green-400" : player.plus_minus_per_game < 0 ? "text-red-400" : "text-gray-500"}`}>
                     {player.plus_minus_per_game > 0 ? "+" : ""}{player.plus_minus_per_game}
                   </td>
                 )}
                 {showAdvanced && (
-                  <td className={`py-3 pl-4 text-center tabular-nums font-bold ${player.streak.startsWith("W") ? "text-green-400" : player.streak.startsWith("L") ? "text-red-400" : "text-gray-500"}`}>
+                  <td className={`py-3 px-2 text-center tabular-nums font-bold ${player.streak.startsWith("W") ? "text-green-400" : player.streak.startsWith("L") ? "text-red-400" : "text-gray-500"}`}>
                     {player.streak}
                   </td>
                 )}
