@@ -646,7 +646,7 @@ export default function Home() {
                 <td className="py-3 pr-4 text-center tabular-nums font-bold text-blue-400">{player.fantasy_points}</td>
                 <td className="py-3 text-center tabular-nums font-bold text-blue-400">{player.fpg}</td>
                 <td
-                  className="py-3 pl-4 text-center tabular-nums font-bold"
+                  className="py-3 pr-4 text-center tabular-nums font-bold"
                   style={{ color: sosColor(sosByPlayer[player.id]) }}
                 >
                   {sosByPlayer[player.id] ?? "—"}
