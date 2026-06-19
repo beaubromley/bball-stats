@@ -141,9 +141,6 @@ function SortTh({
       className={`py-3 ${padding} ${alignCls} ${activeCls} cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200`}
     >
       {label}
-      {tooltip && (
-        <span className="ml-1 text-[10px] text-gray-500 dark:text-gray-500 align-text-top">ⓘ</span>
-      )}
       {arrow && <span className="ml-1 text-xs">{arrow}</span>}
     </th>
   );
