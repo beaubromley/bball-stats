@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { getDb, initDb } from "./turso";
 import { TAG_STATS } from "./cache-tags";
+import { getSeasonGameIds } from "./stats";
 
 export interface MatchupModel {
   /** Logistic intercept (a in 1/(1+exp(-(a+b*delta)))). */
@@ -177,10 +178,22 @@ interface SoSRow {
   won: number;
 }
 
-async function _getStrengthOfSchedule(): Promise<StrengthOfScheduleEntry[]> {
+async function _getStrengthOfSchedule(
+  season?: number,
+): Promise<StrengthOfScheduleEntry[]> {
   await initDb();
   const model = await getMatchupModel();
   const db = getDb();
+
+  // When a season filter is set, build the set of game IDs that count
+  // toward the SoS aggregate. The chronological walk still covers every
+  // game (so running FPG is correct), but only games in the filter
+  // contribute to a player's score.
+  let seasonGameIds: Set<string> | null = null;
+  if (season != null) {
+    const { gameIds } = await getSeasonGameIds(season);
+    seasonGameIds = new Set(gameIds);
+  }
 
   const result = await db.execute({
     sql: `
@@ -212,6 +225,7 @@ async function _getStrengthOfSchedule(): Promise<StrengthOfScheduleEntry[]> {
 
   for (const gid of gameOrder) {
     const playerRows = byGame.get(gid)!;
+    const isInScope = !seasonGameIds || seasonGameIds.has(gid);
 
     // Pre-game FPG snapshot for each player on the roster (null = debutant).
     const snap = playerRows.map((r) => {
@@ -223,7 +237,10 @@ async function _getStrengthOfSchedule(): Promise<StrengthOfScheduleEntry[]> {
     // For each player, compute their team's pre-game avg FPG excluding
     // themselves, the opposing team's avg, the delta, and the expected
     // win prob from the trained model. Contribution = 1 - expected.
-    for (let i = 0; i < snap.length; i++) {
+    // Skip aggregation when the game is outside the season filter — but
+    // still update running totals below so later games see the right
+    // prior FPG.
+    if (isInScope) for (let i = 0; i < snap.length; i++) {
       const me = snap[i];
       const myTeam = me.row.team;
       const oppTeam = myTeam === "A" ? "B" : "A";
@@ -275,3 +292,4 @@ export const getStrengthOfSchedule = unstable_cache(
   ["getStrengthOfSchedule"],
   { tags: [TAG_STATS], revalidate: 86400 },
 );
+// Different `season` args get separate cache entries automatically.

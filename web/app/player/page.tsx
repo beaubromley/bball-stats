@@ -278,7 +278,9 @@ function PlayerDetailInner() {
   const [expandedGame, setExpandedGame] = useState<string | null>(null);
   const [boxScores, setBoxScores] = useState<Record<string, BoxScore>>({});
   const [showAllGames, setShowAllGames] = useState(false);
-  const [compScope, setCompScope] = useState<"all" | number>("all");
+  /** Page-wide scope toggle. "all" shows lifetime stats; a number filters
+   *  every per-game-derived view on this page to games in that season. */
+  const [scope, setScope] = useState<"all" | number>("all");
   const [sosTable, setSosTable] = useState<
     { player_id: string; sos_index: number; games_rated: number }[]
   >([]);
@@ -337,8 +339,23 @@ function PlayerDetailInner() {
   // Normalize stats to game-to-11
   const norm = (raw: number, ws: number) => raw * 11 / Math.max(ws, 1);
 
+  // Seasons the player actually appeared in — drives the toggle pill row.
+  const seasonsPlayed = Array.from(
+    new Set(games.map((g) => getSeasonForGameNumber(Number(g.game_number))))
+  ).sort((a, b) => a - b);
+
+  // Filter games to the chosen scope. Every per-game-derived view below
+  // (distributions, streaks, top game, MVP count, scoped stats) reads
+  // from this array so the toggle filters the whole page.
+  const scopedGames =
+    scope === "all"
+      ? games
+      : games.filter(
+          (g) => getSeasonForGameNumber(Number(g.game_number)) === scope,
+        );
+
   // Per-game stat arrays for distribution charts (normalized to game-to-11)
-  const perGame = games.map((g) => {
+  const perGame = scopedGames.map((g) => {
     const ws = Number(g.winning_score) || 11;
     const pts = Math.round(norm(Number(g.points_scored), ws));
     const ast = Math.round(norm(Number(g.assists), ws));
@@ -349,8 +366,8 @@ function PlayerDetailInner() {
 
   // Longest win/loss streaks (walk this player's games chronologically)
   const streaks = (() => {
-    if (games.length === 0) return { longestWin: 0, longestLoss: 0 };
-    const sorted = [...games].sort((a, b) =>
+    if (scopedGames.length === 0) return { longestWin: 0, longestLoss: 0 };
+    const sorted = [...scopedGames].sort((a, b) =>
       a.start_time.localeCompare(b.start_time)
     );
     let longestWin = 0;
@@ -397,11 +414,11 @@ function PlayerDetailInner() {
   }
 
   // Top game: highest fantasy_points among games; tiebreak by most recent
-  const topGame = games.length > 0
-    ? [...games].sort((a, b) => (b.fantasy_points - a.fantasy_points) || (b.start_time.localeCompare(a.start_time)))[0]
+  const topGame = scopedGames.length > 0
+    ? [...scopedGames].sort((a, b) => (b.fantasy_points - a.fantasy_points) || (b.start_time.localeCompare(a.start_time)))[0]
     : null;
 
-  const mvpGames = games.filter((g) => g.is_mvp === 1);
+  const mvpGames = scopedGames.filter((g) => g.is_mvp === 1);
   const mvpCount = mvpGames.length;
 
   // Sorted teammates (at least 2 games together to matter)
@@ -413,42 +430,57 @@ function PlayerDetailInner() {
     return (b[teammateSort] as number) - (a[teammateSort] as number);
   });
 
-  // ── Per-game averages & NBA comp (all normalized to game-to-11) ──
-  // Seasons the player actually appeared in (for the toggle).
-  const seasonsPlayed = Array.from(
-    new Set(games.map((g) => getSeasonForGameNumber(Number(g.game_number))))
-  ).sort((a, b) => a - b);
-
-  // Filter games to the chosen scope ("all" = every game).
-  const scopedGames =
-    compScope === "all"
-      ? games
-      : games.filter(
-          (g) => getSeasonForGameNumber(Number(g.game_number)) === compScope,
-        );
-
-  // Compute per-game averages from scopedGames. For "all" this matches
-  // the all-time leaderboard numbers; for a season, it's that season only.
-  const playerPerGame = (() => {
-    if (compScope === "all") {
-      return {
-        ppg: stats.ppg,
-        tpg: stats.twos_pg,
-        apg: stats.apg,
-        spg: stats.spg,
-        bpg: stats.bpg,
-      };
-    }
-    const n = scopedGames.length || 1;
-    const r = (x: number) => Math.round(x * 10) / 10;
+  // Stats projected onto the current scope. For "all" this is identical
+  // to the lifetime stats from the API; otherwise everything is rebuilt
+  // from the season's games so totals/averages match the filter.
+  const scopedStats: PlayerStats = (() => {
+    if (scope === "all") return stats;
+    const n = scopedGames.length;
+    const round1 = (x: number) => Math.round(x * 10) / 10;
+    const wins = scopedGames.filter((g) => g.result === "W").length;
+    const losses = n - wins;
+    const total_points = scopedGames.reduce((s, g) => s + Number(g.points_scored), 0);
+    const twos_made = scopedGames.reduce((s, g) => s + Number(g.twos_made ?? 0), 0);
+    // Twos contribute 2 pts each; everything else is a 1-pointer. This
+    // matches the 1s2s scoring mode rollup table.
+    const ones_made = total_points - 2 * twos_made;
+    const assists = scopedGames.reduce((s, g) => s + Number(g.assists), 0);
+    const steals = scopedGames.reduce((s, g) => s + Number(g.steals), 0);
+    const blocks = scopedGames.reduce((s, g) => s + Number(g.blocks), 0);
+    const fantasy_points = scopedGames.reduce((s, g) => s + Number(g.fantasy_points), 0);
     return {
-      ppg: r(scopedGames.reduce((s, g) => s + Number(g.points_scored), 0) / n),
-      tpg: r(scopedGames.reduce((s, g) => s + Number(g.twos_made ?? 0), 0) / n),
-      apg: r(scopedGames.reduce((s, g) => s + Number(g.assists), 0) / n),
-      spg: r(scopedGames.reduce((s, g) => s + Number(g.steals), 0) / n),
-      bpg: r(scopedGames.reduce((s, g) => s + Number(g.blocks), 0) / n),
+      id: stats.id,
+      name: stats.name,
+      games_played: n,
+      wins,
+      losses,
+      win_pct: n > 0 ? Math.round((wins / n) * 100) : 0,
+      total_points,
+      ppg: n > 0 ? round1(total_points / n) : 0,
+      ones_made,
+      twos_made,
+      assists,
+      steals,
+      blocks,
+      fantasy_points,
+      apg: n > 0 ? round1(assists / n) : 0,
+      spg: n > 0 ? round1(steals / n) : 0,
+      bpg: n > 0 ? round1(blocks / n) : 0,
+      fpg: n > 0 ? round1(fantasy_points / n) : 0,
+      ones_pg: n > 0 ? round1(ones_made / n) : 0,
+      twos_pg: n > 0 ? round1(twos_made / n) : 0,
     };
   })();
+
+  // Per-game averages flow from scopedStats — same numbers in lifetime
+  // mode, the season's averages otherwise.
+  const playerPerGame = {
+    ppg: scopedStats.ppg,
+    tpg: scopedStats.twos_pg,
+    apg: scopedStats.apg,
+    spg: scopedStats.spg,
+    bpg: scopedStats.bpg,
+  };
 
   // League average stays all-time — it's a stable scaling baseline. Switching
   // the player's window to a season doesn't change what an "average player"
@@ -463,7 +495,38 @@ function PlayerDetailInner() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold font-display tracking-wide mb-6">{stats.name}</h1>
+      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-6">
+        <h1 className="text-3xl font-bold font-display tracking-wide">{stats.name}</h1>
+        {seasonsPlayed.length > 0 && (
+          <div className="flex gap-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setScope("all")}
+              className={`px-3 py-1.5 rounded ${
+                scope === "all"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+              }`}
+            >
+              All-Time
+            </button>
+            {seasonsPlayed.map((s) => (
+              <button
+                type="button"
+                key={s}
+                onClick={() => setScope(s)}
+                className={`px-3 py-1.5 rounded ${
+                  scope === s
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                }`}
+              >
+                S{s}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Per-Game Averages & NBA Scaled Stats side by side */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
@@ -540,40 +603,9 @@ function PlayerDetailInner() {
 
       {/* NBA Player Comp */}
       <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 mb-6 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900/50 dark:to-transparent">
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-          <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-            {COMP_HEADING_OVERRIDES[stats.name] ?? NBA_COMP_HEADING}
-          </h2>
-          {seasonsPlayed.length > 0 && (
-            <div className="flex gap-1 text-xs">
-              <button
-                type="button"
-                onClick={() => setCompScope("all")}
-                className={`px-2 py-1 rounded ${
-                  compScope === "all"
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-                }`}
-              >
-                All-Time
-              </button>
-              {seasonsPlayed.map((s) => (
-                <button
-                  type="button"
-                  key={s}
-                  onClick={() => setCompScope(s)}
-                  className={`px-2 py-1 rounded ${
-                    compScope === s
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-                  }`}
-                >
-                  S{s}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+          {COMP_HEADING_OVERRIDES[stats.name] ?? NBA_COMP_HEADING}
+        </h2>
         <div className="mb-3 flex items-baseline gap-3 flex-wrap">
           <span className="text-2xl font-bold font-display">{comp.name}</span>
           {(comp.team || comp.pos) && (
@@ -595,19 +627,19 @@ function PlayerDetailInner() {
           leaderboard (>=5 GP). Recomputed live from leaderboard each render.
           Admin-only: ratings are opinionated/comparative and not for public
           display until the formula has been polished and approved. */}
-      {isAdmin && <MaddenRatingsCard stats={stats} leaderboard={leaderboard} />}
+      {isAdmin && <MaddenRatingsCard stats={scopedStats} leaderboard={leaderboard} />}
 
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {[
-          { label: "Win %", value: `${stats.win_pct}%`, rank: rankFor("win_pct") },
-          { label: "PPG", value: String(stats.ppg), rank: rankFor("ppg") },
-          { label: "Record", value: `${stats.wins}-${stats.losses}`, rank: null },
-          { label: "Total Pts", value: String(stats.total_points), rank: rankFor("total_points") },
-          { label: "AST", value: String(stats.assists), rank: rankFor("assists") },
-          { label: "STL", value: String(stats.steals), rank: rankFor("steals") },
-          { label: "BLK", value: String(stats.blocks), rank: rankFor("blocks") },
-          { label: "Fantasy Pts", value: String(stats.fantasy_points), rank: rankFor("fantasy_points") },
+          { label: "Win %", value: `${scopedStats.win_pct}%`, rank: scope === "all" ? rankFor("win_pct") : null },
+          { label: "PPG", value: String(scopedStats.ppg), rank: scope === "all" ? rankFor("ppg") : null },
+          { label: "Record", value: `${scopedStats.wins}-${scopedStats.losses}`, rank: null },
+          { label: "Total Pts", value: String(scopedStats.total_points), rank: scope === "all" ? rankFor("total_points") : null },
+          { label: "AST", value: String(scopedStats.assists), rank: scope === "all" ? rankFor("assists") : null },
+          { label: "STL", value: String(scopedStats.steals), rank: scope === "all" ? rankFor("steals") : null },
+          { label: "BLK", value: String(scopedStats.blocks), rank: scope === "all" ? rankFor("blocks") : null },
+          { label: "Fantasy Pts", value: String(scopedStats.fantasy_points), rank: scope === "all" ? rankFor("fantasy_points") : null },
           { label: "Longest W Streak", value: String(streaks.longestWin), rank: null },
           { label: "Longest L Streak", value: String(streaks.longestLoss), rank: null },
         ].map(({ label, value, rank }) => (
@@ -631,13 +663,13 @@ function PlayerDetailInner() {
         <div className="flex gap-8">
           <div>
             <span className="text-2xl font-bold tabular-nums">
-              {stats.ones_made}
+              {scopedStats.ones_made}
             </span>
             <span className="text-gray-500 text-sm ml-2">1-pointers</span>
           </div>
           <div>
             <span className="text-2xl font-bold tabular-nums">
-              {stats.twos_made}
+              {scopedStats.twos_made}
             </span>
             <span className="text-gray-500 text-sm ml-2">2-pointers</span>
           </div>

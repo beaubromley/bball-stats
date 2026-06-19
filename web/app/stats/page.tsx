@@ -116,6 +116,7 @@ function SortTh({
   align = "right",
   last = false,
   advanced = false,
+  tooltip,
 }: {
   label: string;
   field: Exclude<SortKey, null>;
@@ -125,6 +126,7 @@ function SortTh({
   align?: "left" | "right";
   last?: boolean;
   advanced?: boolean;
+  tooltip?: string;
 }) {
   const isActive = active === field;
   const arrow = isActive ? (dir === "asc" ? "▲" : "▼") : "";
@@ -134,9 +136,13 @@ function SortTh({
   return (
     <th
       onClick={() => onClick(field)}
+      title={tooltip}
       className={`py-3 ${padding} ${alignCls} ${activeCls} cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200`}
     >
       {label}
+      {tooltip && (
+        <span className="ml-1 text-[10px] text-gray-500 dark:text-gray-500 align-text-top">ⓘ</span>
+      )}
       {arrow && <span className="ml-1 text-xs">{arrow}</span>}
     </th>
   );
@@ -216,6 +222,41 @@ export default function Home() {
     }
   }
 
+  /**
+   * Min/max SoS across players currently in the leaderboard view. Used
+   * to color the SoS column on a green→red ramp keyed to the visible
+   * range, not absolute fixed thresholds.
+   */
+  const sosRange = useMemo(() => {
+    const values = players
+      .map((p) => sosByPlayer[p.id])
+      .filter((v): v is number => typeof v === "number");
+    if (values.length === 0) return null;
+    return { min: Math.min(...values), max: Math.max(...values) };
+  }, [players, sosByPlayer]);
+
+  /** Color the SoS cell on a green (lowest) → yellow → red (highest)
+   *  ramp interpolated across the visible range. */
+  function sosColor(value: number | undefined): string {
+    if (value == null || !sosRange || sosRange.max === sosRange.min) {
+      return "rgb(156, 163, 175)"; // gray-400
+    }
+    const t = (value - sosRange.min) / (sosRange.max - sosRange.min);
+    // green-400 (74,222,128) → yellow-400 (250,204,21) → red-400 (248,113,113)
+    if (t < 0.5) {
+      const k = t * 2;
+      const r = Math.round(74 + (250 - 74) * k);
+      const g = Math.round(222 + (204 - 222) * k);
+      const b = Math.round(128 + (21 - 128) * k);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+    const k = (t - 0.5) * 2;
+    const r = Math.round(250 + (248 - 250) * k);
+    const g = Math.round(204 + (113 - 204) * k);
+    const b = Math.round(21 + (113 - 21) * k);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
   const sortedPlayers = useMemo(() => {
     if (!sortKey) return players;
     const parseStreak = (s: string) => {
@@ -252,8 +293,11 @@ export default function Home() {
     Promise.all([
       fetch(`${API_BASE}/players${seasonParam}`).then((r) => r.json()),
       fetch(`${API_BASE}/stats/streaks${streakParam}`).then((r) => r.json()).catch(() => null),
+      fetch(`${API_BASE}/strength-of-schedule${seasonParam}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => []),
     ])
-      .then(([leaderboardRes, streaks]) => {
+      .then(([leaderboardRes, streaks, sos]) => {
         if (mode === "season") {
           setPlayers(leaderboardRes.data);
           setGamesInSeason(leaderboardRes.season.gamesInSeason);
@@ -261,6 +305,9 @@ export default function Home() {
           setPlayers(leaderboardRes);
         }
         setStreakData(streaks);
+        const m: Record<string, number> = {};
+        for (const r of (Array.isArray(sos) ? sos : [])) m[r.player_id] = r.sos_index;
+        setSosByPlayer(m);
       })
       .catch(() => {})
       .finally(() => setSwitching(false));
@@ -283,27 +330,23 @@ export default function Home() {
           // These are independent of the season toggle.
           fetch(`${API_BASE}/players`).then((r) => r.json()).catch(() => []),
           fetch(`${API_BASE}/stats/streaks`).then((r) => r.json()).catch(() => null),
+          fetch(`${API_BASE}/strength-of-schedule?season=${seasonInfo.currentSeason}`)
+            .then((r) => (r.ok ? r.json() : []))
+            .catch(() => []),
         ]);
       })
-      .then(([leaderboardRes, streaks, allTimeLeaderboard, allTimeStreaks]) => {
+      .then(([leaderboardRes, streaks, allTimeLeaderboard, allTimeStreaks, sos]) => {
         setPlayers(leaderboardRes.data);
         setGamesInSeason(leaderboardRes.season.gamesInSeason);
         setStreakData(streaks);
         setAllTimePlayers(Array.isArray(allTimeLeaderboard) ? allTimeLeaderboard : []);
         setAllTimeStreakData(allTimeStreaks);
+        const m: Record<string, number> = {};
+        for (const r of (Array.isArray(sos) ? sos : [])) m[r.player_id] = r.sos_index;
+        setSosByPlayer(m);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-
-    fetch(`${API_BASE}/strength-of-schedule`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((arr: { player_id: string; sos_index: number }[]) => {
-        if (!Array.isArray(arr)) return;
-        const m: Record<string, number> = {};
-        for (const r of arr) m[r.player_id] = r.sos_index;
-        setSosByPlayer(m);
-      })
-      .catch(() => {});
   }, []);
 
   if (loading) {
@@ -561,7 +604,19 @@ export default function Home() {
               <SortTh label="BLK" field="blocks" active={sortKey} dir={sortDir} onClick={handleSort} />
               <SortTh label="FP" field="fantasy_points" active={sortKey} dir={sortDir} onClick={handleSort} />
               <SortTh label="FPG" field="fpg" active={sortKey} dir={sortDir} onClick={handleSort} last />
-              <SortTh label="SoS" field="sos_index" active={sortKey} dir={sortDir} onClick={handleSort} />
+              <SortTh
+                label="SoS"
+                field="sos_index"
+                active={sortKey}
+                dir={sortDir}
+                onClick={handleSort}
+                tooltip={
+                  "Strength of Schedule. Average opponent pre-game win probability across this player's rated games, expressed 0–100.\n\n" +
+                  "50 = neutral schedule (your teams were predicted to go 50/50)\n" +
+                  ">50 = you played on teams predicted to lose more often (tougher)\n" +
+                  "<50 = you played on teams predicted to win (easier)"
+                }
+              />
               {showAdvanced && <SortTh label="+/-" field="plus_minus" active={sortKey} dir={sortDir} onClick={handleSort} advanced />}
               {showAdvanced && <SortTh label="+/-PG" field="plus_minus_per_game" active={sortKey} dir={sortDir} onClick={handleSort} advanced />}
               {showAdvanced && <SortTh label="STK" field="streak" active={sortKey} dir={sortDir} onClick={handleSort} advanced />}
@@ -592,15 +647,10 @@ export default function Home() {
                 <td className="py-3 pr-4 text-right tabular-nums">{player.blocks}</td>
                 <td className="py-3 pr-4 text-right tabular-nums font-bold text-blue-400">{player.fantasy_points}</td>
                 <td className="py-3 text-right tabular-nums font-bold text-blue-400">{player.fpg}</td>
-                <td className={`py-3 pl-4 text-right tabular-nums ${
-                  sosByPlayer[player.id] == null
-                    ? "text-gray-500"
-                    : sosByPlayer[player.id] > 52
-                    ? "text-orange-400"
-                    : sosByPlayer[player.id] < 48
-                    ? "text-gray-400"
-                    : "text-gray-300"
-                }`}>
+                <td
+                  className="py-3 pl-4 text-right tabular-nums font-bold"
+                  style={{ color: sosColor(sosByPlayer[player.id]) }}
+                >
                   {sosByPlayer[player.id] ?? "—"}
                 </td>
                 {showAdvanced && (
