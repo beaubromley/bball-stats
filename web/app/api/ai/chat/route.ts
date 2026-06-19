@@ -33,42 +33,136 @@ interface ChatMessage {
 const DB_SCHEMA = `
 Tables in this SQLite database (Turso/LibSQL):
 
-players(id TEXT PK, name TEXT UNIQUE, full_name TEXT, created_at DATETIME)
-  -- name is display name like "Beau B.", full_name is "Beau Bromley"
+players(
+  id TEXT PK,
+  name TEXT NOT NULL,         -- display name, "First L." e.g. "Beau B."
+  full_name TEXT,             -- "Beau Bromley"
+  first_name TEXT,
+  last_name TEXT,
+  status TEXT,                -- 'active' | 'inactive'
+  aliases TEXT,               -- comma-separated voice aliases
+  notes TEXT,
+  last_played_date TEXT,      -- 'YYYY-MM-DD' in Central Time
+  groupme_user_id TEXT,
+  groupme_name TEXT,
+  voice_name TEXT,            -- short first-name used by voice parser
+  created_at DATETIME
+)
 
-games(id TEXT PK, location TEXT, start_time DATETIME, end_time DATETIME, status TEXT, winning_team TEXT, target_score INTEGER, scoring_mode TEXT, last_failed_transcript TEXT, live_transcript TEXT)
-  -- status: 'active' or 'finished'. winning_team: 'A' or 'B'. scoring_mode: '1s2s' or '2s3s'. start_time is UTC.
+games(
+  id TEXT PK,
+  location TEXT,
+  start_time DATETIME,        -- UTC
+  end_time DATETIME,          -- UTC, null while active
+  status TEXT,                -- 'active' | 'finished'
+  winning_team TEXT,          -- 'A' | 'B' | null if active
+  target_score INTEGER,       -- usually 11
+  scoring_mode TEXT,          -- '1s2s' (default, almost everything) or '2s3s'
+  last_failed_transcript TEXT,
+  live_transcript TEXT,
+  notes TEXT
+)
 
-rosters(game_id TEXT, player_id TEXT, team TEXT, PK(game_id, player_id))
-  -- team: 'A' or 'B'. Links players to games.
+rosters(game_id TEXT, player_id TEXT, team TEXT NOT NULL, PK(game_id, player_id))
+  -- team: 'A' or 'B'. Each finished game has 4-5 players per side.
 
-game_events(id INTEGER PK, game_id TEXT, player_id TEXT, event_type TEXT, point_value INTEGER, corrected_event_id INTEGER, raw_transcript TEXT, created_at DATETIME, assisted_event_id INTEGER)
-  -- event_type: 'score', 'correction', 'steal', 'block', 'assist'
-  -- For scores: point_value is 1, 2, or 3. For corrections: negative point_value (undo).
-  -- corrected_event_id references the score event that was undone.
-  -- For assists: assisted_event_id references the score event that was assisted.
+game_events(
+  id INTEGER PK AUTOINCREMENT,
+  game_id TEXT NOT NULL,
+  player_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,   -- 'score' | 'correction' | 'steal' | 'block' | 'assist'
+  point_value INTEGER NOT NULL,
+  corrected_event_id INTEGER, -- the score event this correction is undoing
+  assisted_event_id INTEGER,  -- the score event this assist set up
+  raw_transcript TEXT,
+  created_at DATETIME
+)
+  -- For 'score' events: point_value is 1, 2, or 3.
+  -- For 'correction' events: point_value is NEGATIVE (e.g. -1, -2) and the
+  --   original 'score' row is NOT deleted. So real totals require summing
+  --   BOTH 'score' AND 'correction' events together.
+  -- 'steal', 'block', 'assist' events all have point_value=0 and are never
+  --   corrected.
 
 game_transcripts(id INTEGER PK, game_id TEXT, raw_text TEXT, acted_on TEXT, created_at DATETIME)
-  -- Voice recognition segments. acted_on is what the parser interpreted (e.g. "Beau B. +2") or null if unrecognized.
+  -- Voice recognition segments. acted_on is what the parser interpreted
+  -- (e.g. "Beau B. +2") or NULL if unrecognized.
+
+player_game_stats(
+  game_id TEXT, player_id TEXT, PK(game_id, player_id),
+  team TEXT NOT NULL,          -- 'A' | 'B'
+  game_status TEXT NOT NULL,   -- 'active' | 'finished'
+  start_time DATETIME NOT NULL,
+  scoring_mode TEXT NOT NULL,
+  won INTEGER,                 -- 1 if this player's team won, 0 if lost
+  points INTEGER NOT NULL,         -- net points including corrections
+  ones_made INTEGER NOT NULL,      -- net 1-pointers
+  twos_made INTEGER NOT NULL,      -- net 2-pointers
+  assists INTEGER NOT NULL,
+  steals INTEGER NOT NULL,
+  blocks INTEGER NOT NULL,
+  fantasy_points INTEGER NOT NULL, -- points + assists + steals + blocks
+  team_score INTEGER NOT NULL,     -- final score of this player's team
+  opp_score INTEGER NOT NULL,
+  plus_minus INTEGER NOT NULL,     -- team_score - opp_score
+  effective_games REAL NOT NULL,   -- 1.0 for full games, partials are <1
+  was_game_mvp INTEGER NOT NULL,   -- 1 if this player was the game's MVP
+  max_winner_deficit INTEGER NOT NULL  -- biggest deficit the winning team ever climbed back from in this game
+)
+  -- IMPORTANT: This is a maintained rollup. For most stat questions
+  -- (totals, averages, win%, MVP counts, plus/minus), query this table
+  -- instead of reconstructing from game_events. It already accounts for
+  -- corrections. Only drop down to game_events when you need granular
+  -- play-by-play data (timestamps, deep shots, assists-by-shot, etc.).
+
+mvp_voting(season INTEGER PK, closed_at DATETIME)
+  -- Voting window per season. closed_at NULL = voting still open.
+
+mvp_votes(
+  id TEXT PK, season INTEGER NOT NULL,
+  voter_player_id TEXT NOT NULL,
+  pick_1_player_id TEXT NOT NULL,
+  pick_2_player_id TEXT NOT NULL,
+  pick_3_player_id TEXT NOT NULL,
+  ip_address TEXT, user_agent TEXT, explanation TEXT,
+  created_at DATETIME
+)
+  -- 5-3-1 ballot weighting by convention (1st place = 5 pts, 2nd = 3, 3rd = 1).
+
+season_awards(
+  season INTEGER, award_type TEXT, PK(season, award_type),
+  player_id TEXT NOT NULL,
+  created_at DATETIME, updated_at DATETIME
+)
+  -- award_type values include 'mvp', 'defensive_player', etc.
 
 Basketball context:
-- This is pickup basketball at the Rankin YMCA. Games are typically 4v4, first to 11 or 15.
-- scoring_mode '1s2s': inside shots = 1 point (point_value=1), outside/deep/three-pointers = 2 points (point_value=2)
-- scoring_mode '2s3s': inside shots = 2 points (point_value=2), outside/deep/three-pointers = 3 points (point_value=3)
-- "Deep", "from deep", "outside", "three", "downtown" all mean the higher point value shot (2 in 1s2s mode, 3 in 2s3s mode)
-- "Bucket", "layup", "dunk", "floater" mean the lower point value shot (1 in 1s2s mode, 2 in 2s3s mode)
-- Most games so far use 1s2s scoring. So point_value=1 is an inside shot, point_value=2 is an outside/deep shot.
-- To find "deep" or "outside" shots: filter for the higher point_value. In 1s2s games, that's point_value=2. Check games.scoring_mode if needed.
+- Pickup basketball at the Rankin YMCA. Usually 4v4 or 5v5, first team to 11.
+- scoring_mode '1s2s' (default, ~all games so far): inside = 1 pt, deep/outside = 2 pts.
+- scoring_mode '2s3s' (rare): inside = 2 pts, deep/outside = 3 pts.
+- "Deep / outside / three / downtown" = the higher point value shot.
+- "Bucket / layup / dunk / floater" = the lower point value shot.
+- Fantasy points formula: points + assists + steals + blocks (1 pt each, no multipliers).
+- Game MVP = highest fantasy_points on the WINNING team, with deterministic tiebreaks (fp DESC, points DESC, assists DESC, player_id ASC). Already pre-computed in player_game_stats.was_game_mvp.
 
-Key relationships:
-- To get a player's scores: JOIN game_events ON player_id, filter event_type IN ('score', 'correction')
-- To get team rosters: JOIN rosters ON game_id and player_id
-- To calculate team scores: SUM point_value from game_events JOINed with rosters filtered by team
-- CRITICAL — handling corrections/undos: When a score is undone, a 'correction' event is inserted with NEGATIVE point_value (e.g. -1, -2). The original 'score' event is NOT deleted. So to get accurate totals, ALWAYS use: SUM(point_value) WHERE event_type IN ('score', 'correction'). NEVER use WHERE event_type = 'score' alone — that would count undone scores. The same applies to counting makes: COUNT score events minus COUNT correction events for that point value.
-- For steals/blocks/assists: filter event_type = 'steal'/'block'/'assist' (these are never corrected)
-- To find assist-scorer pairs: JOIN assist events (via assisted_event_id) to the score event they assisted. The assist's player_id is the assister, the score's player_id is the scorer.
-- When querying by player name, use LIKE '%name%' or match on p.name. Players are stored as "First L." (e.g. "Brandon K.") so searching for "Brandon" should use p.name LIKE 'Brandon%'.
-- All timestamps are UTC. Central Time = UTC - 6 hours.
+Seasons:
+- One season = 82 finished games (NBA convention). Ordered chronologically by start_time.
+- For "this season" or "Season N" filters, take finished games ranked by start_time and pick rows ((N-1)*82+1) .. (N*82). When in doubt, default to the most recent season for "this season" questions.
+- "S2 G14" means Season 2, the 14th finished game in that season.
+
+Derived concepts (no special tables — computed from the rollup):
+- Strength of Schedule index: average opponent pre-game expected win%, on a 0-100 scale where 50 = neutral. Higher = tougher schedule. Built from a logistic fit on (delta-team-FPG → A-won) pairs. If asked, you can ballpark by comparing a player's teammates' FPG to their opponents' FPG, but the canonical numbers come from the /api/strength-of-schedule endpoint, not direct SQL.
+- Pre-game matchup predictor: same logistic. Inputs are each team's avg pre-game FPG.
+
+Key relationships and gotchas:
+- Player rollup stats: PREFER player_game_stats over game_events for totals, averages, win%, MVP, plus/minus. It's correct, accounts for corrections, and is way simpler.
+- When you DO use game_events: ALWAYS sum point_value over event_type IN ('score', 'correction') together. Never filter event_type = 'score' alone — undone scores would be double-counted.
+- Counting makes from raw events: COUNT(*) FILTER score events MINUS COUNT(*) FILTER correction events at the matching point_value.
+- Steals / blocks / assists: filter event_type to the single value. They're never corrected.
+- Assist-scorer pairs: JOIN assist events to the score event via assisted_event_id. The assist's player_id is the assister, the score's player_id is the scorer.
+- Player name search: names are "First L." (e.g. "Brandon K."). Use p.name LIKE 'Brandon%' for first-name lookups; full match works for "Beau B."
+- All timestamps are UTC. Central Time = UTC - 6 hours. To display a date in CT: date(start_time, '-6 hours').
+- "Today" = today in CT, not UTC. Use date('now', '-6 hours') for the CT current date.
 `;
 
 const SYSTEM_PROMPT = `You are a basketball stats analyst for a pickup basketball league at the Rankin YMCA. You answer questions about player performance, game results, and trends by querying a SQLite database.
