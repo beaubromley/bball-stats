@@ -283,6 +283,10 @@ function PlayerDetailInner() {
   /** Page-wide scope toggle. "all" shows lifetime stats; a number filters
    *  every per-game-derived view on this page to games in that season. */
   const [scope, setScope] = useState<"all" | number>("all");
+  /** "normalized" = each game stretched to game-to-11 (clincher-aware);
+   *  "raw" = actual per-game stat totals. Affects the distribution
+   *  histograms only — averages above the charts also restate. */
+  const [distMode, setDistMode] = useState<"normalized" | "raw">("normalized");
   const [sosTable, setSosTable] = useState<
     { player_id: string; sos_index: number; games_rated: number }[]
   >([]);
@@ -365,11 +369,19 @@ function PlayerDetailInner() {
           (g) => getSeasonForGameNumber(Number(g.game_number)) === scope,
         );
 
-  // Per-game stat arrays for distribution charts (normalized to game-to-11).
-  // Mirrors the rollup's clincher rule so e.g. a 12-7 game isn't diluted —
-  // the extra point past target was incidental and the game effectively
-  // ended at target.
+  // Per-game stat arrays for distribution charts. Toggle picks between:
+  //  • normalized: each game stretched to game-to-11 using the clincher
+  //    rule (so a 12-7 game isn't diluted — target+1 vs <target-1 keeps
+  //    raw values; real overtime-feel games like 14-11 still scale).
+  //  • raw: actual per-game stat totals, no rescaling.
   const perGame = scopedGames.map((g) => {
+    if (distMode === "raw") {
+      const pts = Number(g.points_scored);
+      const ast = Number(g.assists);
+      const stl = Number(g.steals);
+      const blk = Number(g.blocks);
+      return { pts, ast, stl, blk, fp: pts + ast + stl + blk };
+    }
     const w = Number(g.winning_score) || 11;
     const l = Number(g.losing_score) || 0;
     const t = Number(g.target_score) || 11;
@@ -717,7 +729,33 @@ function PlayerDetailInner() {
         ];
         return (
           <div className="mb-8">
-            <h2 className="text-xl font-bold font-display uppercase tracking-wide mb-4">Distributions</h2>
+            <div className="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+              <h2 className="text-xl font-bold font-display uppercase tracking-wide">Distributions</h2>
+              <div className="flex gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setDistMode("normalized")}
+                  className={`px-3 py-1 rounded ${
+                    distMode === "normalized"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                  }`}
+                >
+                  Game-to-11
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDistMode("raw")}
+                  className={`px-3 py-1 rounded ${
+                    distMode === "raw"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                  }`}
+                >
+                  Raw totals
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {distributions.map(({ label, key, color, avg }) => {
                 const histData = buildHistogram(perGame.map((g) => g[key]));
