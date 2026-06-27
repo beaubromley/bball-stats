@@ -38,6 +38,7 @@ interface PlayerRow {
   id: string;
   name: string;
   games_played: number;
+  effective_games: number;
   wins: number;
   win_pct: number;
   total_points: number;
@@ -330,14 +331,18 @@ function MiniLeaderCard({
   rows: PlayerRow[];
   valueKey: LeaderKey;
 }) {
+  // Recompute at 2dp from raw totals + effective_games — the leaderboard
+  // API rounds ppg/fpg/etc. to 1dp, so reading p.ppg directly would only
+  // give 1dp of precision regardless of how many digits we display.
   function valueOf(p: PlayerRow): number {
-    if (valueKey === "ppg") return p.ppg;
-    if (valueKey === "fpg") return p.fpg;
+    const eg = p.effective_games || 1;
+    if (valueKey === "ppg") return p.total_points / eg;
+    if (valueKey === "fpg") return p.fantasy_points / eg;
     if (valueKey === "win_pct") return p.win_pct;
-    return Math.round((p.spg + p.bpg) * 100) / 100;
+    return (p.steals + p.blocks) / eg;
   }
   function format(p: PlayerRow): string {
-    if (valueKey === "win_pct") return `${Math.round(p.win_pct)}%`;
+    if (valueKey === "win_pct") return `${p.win_pct.toFixed(2)}%`;
     return valueOf(p).toFixed(2);
   }
   return (
@@ -936,11 +941,15 @@ export default function HomePage() {
   const MIN_GP_RATIO = 30 / 82;
   const minGP = Math.max(1, Math.ceil(completedSeasonGames * MIN_GP_RATIO));
   const eligible = seasonPlayers.filter((p) => p.games_played >= minGP);
-  const topPpg = [...eligible].sort((a, b) => b.ppg - a.ppg).slice(0, 5);
-  const topFpg = [...eligible].sort((a, b) => b.fpg - a.fpg).slice(0, 5);
-  const topDef = [...eligible]
-    .sort((a, b) => b.spg + b.bpg - (a.spg + a.bpg))
-    .slice(0, 5);
+  // Sort on the raw quotient (full precision) so the displayed 2-dp order
+  // is stable — using the 1-dp-rounded leaderboard ppg/fpg can produce
+  // ties that the visible values resolve differently.
+  const ppg2 = (p: PlayerRow) => p.total_points / (p.effective_games || 1);
+  const fpg2 = (p: PlayerRow) => p.fantasy_points / (p.effective_games || 1);
+  const def2 = (p: PlayerRow) => (p.steals + p.blocks) / (p.effective_games || 1);
+  const topPpg = [...eligible].sort((a, b) => ppg2(b) - ppg2(a)).slice(0, 5);
+  const topFpg = [...eligible].sort((a, b) => fpg2(b) - fpg2(a)).slice(0, 5);
+  const topDef = [...eligible].sort((a, b) => def2(b) - def2(a)).slice(0, 5);
   const topWin = [...eligible].sort((a, b) => b.win_pct - a.win_pct).slice(0, 5);
 
   return (
