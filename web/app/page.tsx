@@ -928,11 +928,13 @@ export default function HomePage() {
   const liveGame = games.find((g) => g.status === "active") || null;
   const latestFinished = games.find((g) => g.status === "finished") || null;
 
-  // Top-5 leaders for current season — require at least 25% of completed
-  // season games played so we don't crown a 1-game wonder.
+  // Top-5 leaders for current season. Min-GP threshold matches the
+  // end-of-season awards rate: 30 of 82 games = 0.3658. Scaled to where
+  // the current season is so the bar is consistent through the year.
   const seasonStartGameIdx = (meta.currentSeason - 1) * meta.gamesPerSeason;
   const completedSeasonGames = Math.max(0, meta.totalGames - seasonStartGameIdx);
-  const minGP = Math.max(1, Math.ceil(completedSeasonGames * 0.25));
+  const MIN_GP_RATIO = 30 / 82;
+  const minGP = Math.max(1, Math.ceil(completedSeasonGames * MIN_GP_RATIO));
   const eligible = seasonPlayers.filter((p) => p.games_played >= minGP);
   const topPpg = [...eligible].sort((a, b) => b.ppg - a.ppg).slice(0, 5);
   const topFpg = [...eligible].sort((a, b) => b.fpg - a.fpg).slice(0, 5);
@@ -987,7 +989,7 @@ export default function HomePage() {
             Season {meta.currentSeason} Leaders
           </h2>
           <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
-            min {minGP} GP (25% of {completedSeasonGames})
+            min {minGP} GP ({Math.round(MIN_GP_RATIO * 100)}% of {completedSeasonGames})
           </span>
         </div>
         <Link

@@ -365,9 +365,15 @@ function PlayerDetailInner() {
           (g) => getSeasonForGameNumber(Number(g.game_number)) === scope,
         );
 
-  // Per-game stat arrays for distribution charts (normalized to game-to-11)
+  // Per-game stat arrays for distribution charts (normalized to game-to-11).
+  // Mirrors the rollup's clincher rule so e.g. a 12-7 game isn't diluted —
+  // the extra point past target was incidental and the game effectively
+  // ended at target.
   const perGame = scopedGames.map((g) => {
-    const ws = Number(g.winning_score) || 11;
+    const w = Number(g.winning_score) || 11;
+    const l = Number(g.losing_score) || 0;
+    const t = Number(g.target_score) || 11;
+    const ws = w === t + 1 && l < t - 1 ? t : w;
     const pts = Math.round(norm(Number(g.points_scored), ws));
     const ast = Math.round(norm(Number(g.assists), ws));
     const stl = Math.round(norm(Number(g.steals), ws));
