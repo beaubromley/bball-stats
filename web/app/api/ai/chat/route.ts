@@ -105,7 +105,7 @@ player_game_stats(
   team_score INTEGER NOT NULL,     -- final score of this player's team
   opp_score INTEGER NOT NULL,
   plus_minus INTEGER NOT NULL,     -- team_score - opp_score
-  effective_games REAL NOT NULL,   -- 1.0 for full games, partials are <1
+  effective_games REAL NOT NULL,   -- game-to-11 normalization factor. 1.0 for a target-11 game ending at 11; >1 if the game ran past target with a real comeback (e.g. 14-11 ⇒ 14/11 ≈ 1.27). Clincher games where the winner ended at target+1 against a loser stuck below target-1 are collapsed back to 1.0 (the extra point was incidental, not extra basketball). For per-game averages, use SUM(stat) / SUM(effective_games), never SUM(stat) / COUNT(*).
   was_game_mvp INTEGER NOT NULL,   -- 1 if this player was the game's MVP
   max_winner_deficit INTEGER NOT NULL  -- biggest deficit the winning team ever climbed back from in this game
 )

@@ -68,6 +68,8 @@ interface RecentGame {
   team_a_score: number;
   team_b_score: number;
   winning_score: number;
+  losing_score: number;
+  target_score: number;
   is_mvp: number;
   game_number: number;
 }
@@ -457,6 +459,20 @@ function PlayerDetailInner() {
     const steals = scopedGames.reduce((s, g) => s + Number(g.steals), 0);
     const blocks = scopedGames.reduce((s, g) => s + Number(g.blocks), 0);
     const fantasy_points = scopedGames.reduce((s, g) => s + Number(g.fantasy_points), 0);
+
+    // Mirror refreshGameStats: each game contributes (effective_winning / 11)
+    // effective games, where effective_winning collapses target+1 clincher
+    // games back to target. Per-game averages then divide by the SUM of
+    // those effective games — matching the all-time leaderboard math.
+    const effectiveGames = scopedGames.reduce((s, g) => {
+      const w = Number(g.winning_score) || 11;
+      const l = Number(g.losing_score) || 0;
+      const t = Number(g.target_score) || 11;
+      const eff = w === t + 1 && l < t - 1 ? t : w;
+      return s + (eff || 11) / 11;
+    }, 0);
+    const eg = effectiveGames || 1;
+
     return {
       id: stats.id,
       name: stats.name,
@@ -465,19 +481,19 @@ function PlayerDetailInner() {
       losses,
       win_pct: n > 0 ? Math.round((wins / n) * 100) : 0,
       total_points,
-      ppg: n > 0 ? round1(total_points / n) : 0,
+      ppg: round1(total_points / eg),
       ones_made,
       twos_made,
       assists,
       steals,
       blocks,
       fantasy_points,
-      apg: n > 0 ? round1(assists / n) : 0,
-      spg: n > 0 ? round1(steals / n) : 0,
-      bpg: n > 0 ? round1(blocks / n) : 0,
-      fpg: n > 0 ? round1(fantasy_points / n) : 0,
-      ones_pg: n > 0 ? round1(ones_made / n) : 0,
-      twos_pg: n > 0 ? round1(twos_made / n) : 0,
+      apg: round1(assists / eg),
+      spg: round1(steals / eg),
+      bpg: round1(blocks / eg),
+      fpg: round1(fantasy_points / eg),
+      ones_pg: round1(ones_made / eg),
+      twos_pg: round1(twos_made / eg),
     };
   })();
 

@@ -60,6 +60,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         COALESCE(ts_a.score, 0) as team_a_score,
         COALESCE(ts_b.score, 0) as team_b_score,
         MAX(COALESCE(ts_a.score, 0), COALESCE(ts_b.score, 0)) as winning_score,
+        MIN(COALESCE(ts_a.score, 0), COALESCE(ts_b.score, 0)) as losing_score,
+        COALESCE(g.target_score, 11) as target_score,
         CASE WHEN wr.rn = 1 THEN 1 ELSE 0 END as is_mvp,
         (SELECT COUNT(*) FROM games g2 WHERE g2.status = 'finished' AND g2.start_time <= g.start_time) as game_number
       FROM rosters r

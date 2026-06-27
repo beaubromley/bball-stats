@@ -454,6 +454,19 @@ export default function Home() {
     .map((p) => ({ name: p.name, fpg: p.fpg, winPct: p.win_pct }));
   const SCATTER_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#A855F7", "#EC4899", "#06B6D4", "#F97316", "#84CC16", "#6366F1"];
 
+  // Win% vs SoS scatter — follows the active season toggle. Each player
+  // contributes one point if they have a SoS index for the current scope.
+  // The y = 100 - x dashed line is the model's expected win% given the
+  // schedule: SoS already encodes "avg opponent pre-game win%", so the
+  // null hypothesis is that you win whatever the model says.
+  const sosScatterData = players
+    .filter((p) => sosByPlayer[p.id] != null)
+    .map((p) => ({
+      name: p.name,
+      sos: sosByPlayer[p.id],
+      winPct: p.win_pct,
+    }));
+
   return (
     <div>
       <h1 className="text-3xl font-bold font-display uppercase tracking-wide mb-8">Stats</h1>
@@ -1004,6 +1017,64 @@ export default function Home() {
           </div>
         );
       })()}
+
+      {/* Win% vs Strength of Schedule */}
+      {sosScatterData.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-1">
+            Win % vs Strength of Schedule
+          </h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Dashed line is the expected win % given each player's average
+            matchup (teammates vs opponents). Points above the line beat
+            their schedule; points below underperformed.
+          </p>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
+            <ResponsiveContainer width="100%" height={350}>
+              <ScatterChart margin={{ left: 10, right: 20, top: 20, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
+                <XAxis
+                  type="number"
+                  dataKey="sos"
+                  name="SoS"
+                  domain={[0, 100]}
+                  ticks={[0, 25, 50, 75, 100]}
+                  tick={{ fontSize: 12, fill: "#9CA3AF" }}
+                  axisLine={false}
+                  tickLine={false}
+                  label={{ value: "Strength of Schedule", position: "insideBottom", offset: -5, fontSize: 12, fill: "#6B7280" }}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="winPct"
+                  name="Win%"
+                  domain={[0, 100]}
+                  ticks={[0, 25, 50, 75, 100]}
+                  tick={{ fontSize: 12, fill: "#9CA3AF" }}
+                  axisLine={false}
+                  tickLine={false}
+                  label={{ value: "Win %", angle: -90, position: "insideLeft", offset: 10, fontSize: 12, fill: "#6B7280" }}
+                  tickFormatter={(v) => `${v}%`}
+                />
+                <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: "3 3" }} />
+                {/* Expected win% line: y = 100 - x */}
+                <ReferenceLine
+                  segment={[{ x: 0, y: 100 }, { x: 100, y: 0 }]}
+                  stroke="#6B7280"
+                  strokeDasharray="6 3"
+                  ifOverflow="extendDomain"
+                />
+                <Scatter data={sosScatterData}>
+                  {sosScatterData.map((_entry, index) => (
+                    <Cell key={index} fill={SCATTER_COLORS[index % SCATTER_COLORS.length]} />
+                  ))}
+                  <LabelList dataKey="name" position="top" fill="#9CA3AF" fontSize={10} />
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
