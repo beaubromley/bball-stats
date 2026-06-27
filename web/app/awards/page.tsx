@@ -855,7 +855,7 @@ function MvpVotingPanel({
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="font-bold font-display text-gray-900 dark:text-white">{b.voter_name}:</span>
                   <span className="text-gray-700 dark:text-gray-300">
-                    1️⃣ {b.pick_1.name} · 2️⃣ {b.pick_2.name} · 3️⃣ {b.pick_3.name}
+                    1. {b.pick_1.name} · 2. {b.pick_2.name} · 3. {b.pick_3.name}
                   </span>
                 </div>
                 {b.explanation && (
@@ -1056,13 +1056,33 @@ export default function AwardsPage() {
 
         setAwardsBySeason(new Map(entries));
 
-        // Default-expand the most recent COMPLETED season; if none exist,
-        // fall back to the most recent visible (admin viewing only in-progress).
+        // Which season opens by default:
+        //  • Early in the current season (first half, < 42 games) people
+        //    usually want to see the prior season's final results.
+        //  • Once the current season is past halfway (≥ 42 games), the
+        //    race is hot — default to the current season.
+        //  • If the current season is COMPLETED, default to it.
+        //  • Fall back to the most recent completed season otherwise.
+        const HALFWAY_GAMES = 42;
+        const currentSeasonAwards = entries.find(([s]) => s === m.currentSeason)?.[1];
+        const currentCompleted = currentSeasonAwards
+          ? currentSeasonAwards.games_in_season >= currentSeasonAwards.total_games_in_season
+          : false;
+        const currentGames = currentSeasonAwards?.games_in_season ?? 0;
         const completedNums = entries
           .filter(([, a]) => a.games_in_season >= a.total_games_in_season)
           .map(([s]) => s);
-        const defaultExpand =
-          completedNums.length > 0 ? Math.max(...completedNums) : m.currentSeason;
+
+        let defaultExpand: number;
+        if (currentCompleted) {
+          defaultExpand = m.currentSeason;
+        } else if (currentGames >= HALFWAY_GAMES) {
+          defaultExpand = m.currentSeason;
+        } else if (completedNums.length > 0) {
+          defaultExpand = Math.max(...completedNums);
+        } else {
+          defaultExpand = m.currentSeason;
+        }
         setExpanded(new Set([defaultExpand]));
       } finally {
         if (!cancelled) setLoading(false);
