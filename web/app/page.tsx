@@ -928,18 +928,18 @@ export default function HomePage() {
   const liveGame = games.find((g) => g.status === "active") || null;
   const latestFinished = games.find((g) => g.status === "finished") || null;
 
-  // Top-3 leaders for current season — require at least 25% of completed
+  // Top-5 leaders for current season — require at least 25% of completed
   // season games played so we don't crown a 1-game wonder.
   const seasonStartGameIdx = (meta.currentSeason - 1) * meta.gamesPerSeason;
   const completedSeasonGames = Math.max(0, meta.totalGames - seasonStartGameIdx);
   const minGP = Math.max(1, Math.ceil(completedSeasonGames * 0.25));
   const eligible = seasonPlayers.filter((p) => p.games_played >= minGP);
-  const topPpg = [...eligible].sort((a, b) => b.ppg - a.ppg).slice(0, 3);
-  const topFpg = [...eligible].sort((a, b) => b.fpg - a.fpg).slice(0, 3);
+  const topPpg = [...eligible].sort((a, b) => b.ppg - a.ppg).slice(0, 5);
+  const topFpg = [...eligible].sort((a, b) => b.fpg - a.fpg).slice(0, 5);
   const topDef = [...eligible]
     .sort((a, b) => b.spg + b.bpg - (a.spg + a.bpg))
-    .slice(0, 3);
-  const topWin = [...eligible].sort((a, b) => b.win_pct - a.win_pct).slice(0, 3);
+    .slice(0, 5);
+  const topWin = [...eligible].sort((a, b) => b.win_pct - a.win_pct).slice(0, 5);
 
   return (
     <div className="space-y-4">

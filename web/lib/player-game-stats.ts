@@ -19,6 +19,7 @@ interface GameRow {
   winning_team: string | null;
   start_time: string;
   scoring_mode: string;
+  target_score: number | null;
 }
 
 interface RosterRow {
@@ -130,7 +131,7 @@ export async function refreshGameStats(gameId: string): Promise<void> {
 
   // 1. Game metadata
   const gameRes = await db.execute({
-    sql: `SELECT id, status, winning_team, start_time, scoring_mode
+    sql: `SELECT id, status, winning_team, start_time, scoring_mode, target_score
           FROM games WHERE id = ?`,
     args: [gameId],
   });
@@ -221,11 +222,24 @@ export async function refreshGameStats(gameId: string): Promise<void> {
     else teamBScore += a.points;
   }
   const winningScore = Math.max(teamAScore, teamBScore);
-  // game-to-22 in 2s3s mode → 2.0 effective games. game-to-11 → 1.0.
-  // Active games default to 1.0; finished games normalize to winning_score / 11.
-  // Matches the legacy SQL exactly: COALESCE(winning_score, 11) / 11.0.
+  const losingScore = Math.min(teamAScore, teamBScore);
+  const target = game.target_score ?? 11;
+
+  // Effective game length for normalization. Most games are normalized to
+  // winning_score / 11, which "stretches" each stat back to game-to-11
+  // equivalents. But when the winning team clinches at target with a
+  // 2-pointer they finish at target+1; that extra point is incidental
+  // (the game was effectively over at target), so we DON'T dilute. Rule:
+  //   if winner_score == target+1 AND loser_score < target-1 → treat as target
+  //   otherwise → use the actual winning_score
+  // This keeps real "longer than target" games (e.g. 14-11 comebacks)
+  // normalized, while sparing the dozens of typical 12-7 / 12-8 games.
+  const effectiveWinningScore =
+    winningScore === target + 1 && losingScore < target - 1
+      ? target
+      : winningScore;
   const effectiveGames =
-    game.status === "finished" ? (winningScore || 11) / 11.0 : 1.0;
+    game.status === "finished" ? (effectiveWinningScore || 11) / 11.0 : 1.0;
 
   // 6. Pick the game MVP using the same tiebreaker as lib/stats.ts:
   //    fantasy_points DESC, points DESC, assists DESC, player_id ASC.
