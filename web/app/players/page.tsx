@@ -26,8 +26,8 @@ export default function PlayersPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", full_name: "", voice_name: "", groupme_user_id: "", status: "", notes: "" });
-  const [addForm, setAddForm] = useState({ first_name: "", last_name: "", full_name: "", voice_name: "", groupme_user_id: "" });
+  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", full_name: "", voice_name: "", groupme_user_id: "", groupme_name: "", status: "", notes: "" });
+  const [addForm, setAddForm] = useState({ first_name: "", last_name: "", full_name: "", voice_name: "", groupme_user_id: "", groupme_name: "" });
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Full GroupMe group roster (every member, including lurkers) who
@@ -122,7 +122,7 @@ export default function PlayersPage() {
         setError(data.error || "Failed to add player");
         return;
       }
-      setAddForm({ first_name: "", last_name: "", full_name: "", voice_name: "", groupme_user_id: "" });
+      setAddForm({ first_name: "", last_name: "", full_name: "", voice_name: "", groupme_user_id: "", groupme_name: "" });
       setShowAdd(false);
       fetchPlayers();
     } catch {
@@ -138,6 +138,7 @@ export default function PlayersPage() {
       full_name: player.full_name || "",
       voice_name: player.voice_name || "",
       groupme_user_id: player.groupme_user_id || "",
+      groupme_name: player.groupme_name || "",
       status: player.status,
       notes: player.notes || "",
     });
@@ -156,6 +157,7 @@ export default function PlayersPage() {
           full_name: editForm.full_name.trim() || null,
           voice_name: editForm.voice_name.trim() || null,
           groupme_user_id: editForm.groupme_user_id.trim() || null,
+          groupme_name: editForm.groupme_name.trim() || null,
           status: editForm.status,
           notes: editForm.notes.trim() || null,
         }),
@@ -248,9 +250,14 @@ export default function PlayersPage() {
                 value=""
                 disabled={groupMeStatus !== "ok" || unlinkedMembers.length === 0}
                 onChange={(e) => {
-                  if (e.target.value) {
-                    setAddForm({ ...addForm, groupme_user_id: e.target.value });
-                  }
+                  const id = e.target.value;
+                  if (!id) return;
+                  const picked = unlinkedMembers.find((m) => m.user_id === id);
+                  setAddForm({
+                    ...addForm,
+                    groupme_user_id: id,
+                    groupme_name: picked?.name ?? "",
+                  });
                 }}
                 className="px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500 disabled:opacity-60"
                 title={
@@ -352,9 +359,14 @@ export default function PlayersPage() {
                             value=""
                             disabled={groupMeStatus !== "ok" || unlinkedMembers.length === 0}
                             onChange={(e) => {
-                              if (e.target.value) {
-                                setEditForm({ ...editForm, groupme_user_id: e.target.value });
-                              }
+                              const id = e.target.value;
+                              if (!id) return;
+                              const picked = unlinkedMembers.find((m) => m.user_id === id);
+                              setEditForm({
+                                ...editForm,
+                                groupme_user_id: id,
+                                groupme_name: picked?.name ?? "",
+                              });
                             }}
                             className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 disabled:opacity-60"
                             title={

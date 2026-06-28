@@ -11,7 +11,7 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { first_name, last_name, full_name, status, notes, last_played_date, groupme_user_id, voice_name } = body;
+    const { first_name, last_name, full_name, status, notes, last_played_date, groupme_user_id, groupme_name, voice_name } = body;
 
     // Build dynamic UPDATE query
     const updates: string[] = [];
@@ -44,6 +44,10 @@ export async function PATCH(
     if (groupme_user_id !== undefined) {
       updates.push("groupme_user_id = ?");
       args.push(groupme_user_id);
+    }
+    if (groupme_name !== undefined) {
+      updates.push("groupme_name = ?");
+      args.push(groupme_name);
     }
     if (voice_name !== undefined) {
       updates.push("voice_name = ?");
