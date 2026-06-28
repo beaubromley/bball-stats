@@ -34,7 +34,19 @@ export async function GET(req: Request) {
       const members = await fetchAllGroupMembers(token);
       return NextResponse.json(members);
     } catch (err) {
-      return NextResponse.json({ error: String(err) }, { status: 500 });
+      // Group-metadata endpoint refused — most likely the token has
+      // bot-level permissions, which can read messages but not group
+      // info. Fall back to walking the full message history and
+      // returning every distinct sender we've ever seen. Catches
+      // anyone who's posted at least once; pure lurkers won't appear.
+      console.warn("GroupMe /groups/<id> failed, falling back to messages:", err);
+      try {
+        const messages = await fetchRecentMessages(token, 365 * 10);
+        const members = getActiveMembers(messages);
+        return NextResponse.json(members);
+      } catch (err2) {
+        return NextResponse.json({ error: String(err2) }, { status: 500 });
+      }
     }
   }
 
