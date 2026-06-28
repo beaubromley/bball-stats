@@ -30,8 +30,9 @@ export default function PlayersPage() {
   const [addForm, setAddForm] = useState({ first_name: "", last_name: "", full_name: "", voice_name: "", groupme_user_id: "" });
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // GroupMe members (last 90 days of chat activity) who aren't yet
-  // linked to any player. Drives the "Pick from GroupMe" dropdown.
+  // Full GroupMe group roster (every member, including lurkers) who
+  // isn't yet linked to any player. Drives the "Pick from GroupMe"
+  // dropdown.
   const [unlinkedMembers, setUnlinkedMembers] = useState<{ user_id: string; name: string }[]>([]);
   // Status of the GroupMe fetch so the picker can show a useful message
   // when there's nothing to list ("none unlinked" vs "couldn't load").
@@ -60,7 +61,11 @@ export default function PlayersPage() {
       // members route so the default 14-day filter still applies elsewhere.
       setGroupMeStatus("loading");
       try {
-        const gmRes = await fetch(`${API_BASE}/groupme/members?days=90`);
+        // Use ?scope=all to get the full group roster (including lurkers
+        // who haven't posted in 90 days). The /api/players endpoint
+        // still uses the default 14-day chat window for its "expected
+        // to play" logic — different intent.
+        const gmRes = await fetch(`${API_BASE}/groupme/members?scope=all`);
         if (!gmRes.ok) {
           setGroupMeStatus("error");
           setUnlinkedMembers([]);
@@ -255,7 +260,7 @@ export default function PlayersPage() {
                       ? "Couldn't load GroupMe members — check the access token"
                       : unlinkedMembers.length === 0
                         ? "All recent GroupMe members are already linked to a player"
-                        : `${unlinkedMembers.length} unlinked GroupMe member${unlinkedMembers.length === 1 ? "" : "s"} (last 90 days)`
+                        : `${unlinkedMembers.length} GroupMe member${unlinkedMembers.length === 1 ? "" : "s"} not linked to any player`
                 }
               >
                 <option value="">
@@ -302,11 +307,8 @@ export default function PlayersPage() {
                 <th className="py-2 pr-3">Display Name</th>
                 <th className="py-2 pr-3">First</th>
                 <th className="py-2 pr-3">Last</th>
-                <th className="py-2 pr-3">Full Name</th>
                 <th className="py-2 pr-3">Voice Name</th>
                 <th className="py-2 pr-3">GroupMe</th>
-                <th className="py-2 pr-3">Status</th>
-                <th className="py-2 pr-3">Notes</th>
                 <th className="py-2 text-right">Actions</th>
               </tr>
             </thead>
@@ -338,14 +340,6 @@ export default function PlayersPage() {
                       <td className="py-2 pr-3">
                         <input
                           type="text"
-                          value={editForm.full_name}
-                          onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
-                          className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
-                        />
-                      </td>
-                      <td className="py-2 pr-3">
-                        <input
-                          type="text"
                           value={editForm.voice_name}
                           onChange={(e) => setEditForm({ ...editForm, voice_name: e.target.value })}
                           className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
@@ -370,7 +364,7 @@ export default function PlayersPage() {
                                   ? "Couldn't load GroupMe members — check the access token"
                                   : unlinkedMembers.length === 0
                                     ? "All recent GroupMe members are already linked"
-                                    : `${unlinkedMembers.length} unlinked (last 90 days)`
+                                    : `${unlinkedMembers.length} unlinked GroupMe member${unlinkedMembers.length === 1 ? "" : "s"}`
                             }
                           >
                             <option value="">
@@ -397,24 +391,6 @@ export default function PlayersPage() {
                           />
                         </div>
                       </td>
-                      <td className="py-2 pr-3">
-                        <select
-                          value={editForm.status}
-                          onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                          className="px-2 py-1 bg-transparent border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
-                        >
-                          <option value="active">active</option>
-                          <option value="inactive">inactive</option>
-                        </select>
-                      </td>
-                      <td className="py-2 pr-3">
-                        <input
-                          type="text"
-                          value={editForm.notes}
-                          onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                          className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
-                        />
-                      </td>
                       <td className="py-2 text-right whitespace-nowrap">
                         <button
                           onClick={() => handleSave(player.id)}
@@ -435,7 +411,6 @@ export default function PlayersPage() {
                       <td className="py-2 pr-3 font-medium">{player.name}</td>
                       <td className="py-2 pr-3 text-gray-400">{player.first_name || "—"}</td>
                       <td className="py-2 pr-3 text-gray-400">{player.last_name || "—"}</td>
-                      <td className="py-2 pr-3 text-gray-400">{player.full_name || "—"}</td>
                       <td className="py-2 pr-3 text-gray-400">{player.voice_name || "—"}</td>
                       <td className="py-2 pr-3 text-xs">
                         {player.groupme_user_id ? (
@@ -445,12 +420,6 @@ export default function PlayersPage() {
                           </>
                         ) : "—"}
                       </td>
-                      <td className="py-2 pr-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${player.status === "active" ? "bg-green-900/30 text-green-400" : "bg-gray-800 text-gray-500"}`}>
-                          {player.status}
-                        </span>
-                      </td>
-                      <td className="py-2 pr-3 text-gray-500 text-xs max-w-[200px] truncate">{player.notes || "—"}</td>
                       <td className="py-2 text-right whitespace-nowrap">
                         <button
                           onClick={() => startEdit(player)}

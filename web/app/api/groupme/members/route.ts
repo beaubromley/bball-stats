@@ -23,6 +23,21 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
+  // `?scope=all` returns every group member (including lurkers) via the
+  // group endpoint. Default keeps the legacy behavior — only members
+  // who sent a message in the last N days, derived from the messages
+  // feed. The expected-players logic on /api/players uses the default
+  // because we want "expected to PLAY," not just "in the group."
+  const scope = url.searchParams.get("scope");
+  if (scope === "all") {
+    try {
+      const members = await fetchAllGroupMembers(token);
+      return NextResponse.json(members);
+    } catch (err) {
+      return NextResponse.json({ error: String(err) }, { status: 500 });
+    }
+  }
+
   const daysParam = url.searchParams.get("days");
   let days = DEFAULT_DAYS;
   if (daysParam) {
@@ -37,6 +52,27 @@ export async function GET(req: Request) {
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
+}
+
+interface GroupMember {
+  user_id: string;
+  nickname?: string;
+  name?: string;
+}
+
+async function fetchAllGroupMembers(
+  token: string,
+): Promise<{ user_id: string; name: string }[]> {
+  const res = await fetch(
+    `${BASE_URL}/groups/${GROUP_ID}?token=${encodeURIComponent(token)}`,
+  );
+  if (!res.ok) throw new Error(`GroupMe group fetch failed: ${res.status}`);
+  const data = await res.json();
+  const members: GroupMember[] = data?.response?.members ?? [];
+  return members.map((m) => ({
+    user_id: m.user_id,
+    name: m.nickname ?? m.name ?? "Unknown",
+  }));
 }
 
 async function fetchRecentMessages(token: string, days: number): Promise<GroupMeMessage[]> {
