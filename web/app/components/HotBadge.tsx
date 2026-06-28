@@ -25,7 +25,7 @@ export default function HotBadge({
     `${info.career_fpg.toFixed(2)} career (${Math.round((info.ratio - 1) * 100)}% above pace).`;
   const cls =
     size === "xs"
-      ? "text-[10px] leading-none align-middle"
+      ? "text-[12px] leading-none align-middle"
       : "text-xs leading-none align-middle";
   return (
     <span

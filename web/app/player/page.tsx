@@ -227,7 +227,7 @@ function MaddenRatingsCard({
         <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
           Player Ratings
         </h2>
-        <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+        <span className="text-[12px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">
           75–99 scale · {leaderboard.filter((p) => p.games_played >= MADDEN_ELIGIBILITY_GP).length} peers
         </span>
       </div>
@@ -237,7 +237,7 @@ function MaddenRatingsCard({
           <div className={`text-5xl font-bold font-display tabular-nums ${overallTone.fg}`}>
             {r.overall.value}
           </div>
-          <div className="text-[10px] uppercase tracking-widest text-gray-500 dark:text-gray-400 mt-1">
+          <div className="text-[12px] uppercase tracking-widest text-gray-500 dark:text-gray-400 mt-1">
             Overall
           </div>
         </div>
@@ -253,10 +253,10 @@ function MaddenRatingsCard({
                 <div className={`text-2xl font-bold font-display tabular-nums leading-none ${tone.fg}`}>
                   {cat.value}
                 </div>
-                <div className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 mt-1.5">
+                <div className="text-[12px] uppercase tracking-wider text-gray-500 dark:text-gray-400 mt-1.5">
                   {cat.label}
                 </div>
-                <div className="text-[10px] text-gray-400 dark:text-gray-600 mt-0.5 tabular-nums">
+                <div className="text-[12px] text-gray-400 dark:text-gray-600 mt-0.5 tabular-nums">
                   {cat.blurb}
                 </div>
               </div>
@@ -695,12 +695,12 @@ function PlayerDetailInner() {
             ].map(({ label, value }) => (
               <div key={label}>
                 <div className="text-lg font-bold font-display tabular-nums">{value}</div>
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</div>
+                <div className="text-[12px] text-gray-500 uppercase tracking-wider">{label}</div>
               </div>
             ))}
           </div>
           <div
-            className="text-[11px] text-gray-500 dark:text-gray-400 mt-3 cursor-help"
+            className="text-[13px] text-gray-500 dark:text-gray-400 mt-3 cursor-help"
             title={
               "A play counts as clutch if, at the moment it happens, the " +
               "leading team's score is within 2 of target AND the margin " +
@@ -741,7 +741,7 @@ function PlayerDetailInner() {
                 )}
               </span>
             </div>
-            <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
+            <div className="text-[13px] text-gray-500 dark:text-gray-400 mt-2">
               Avg opponent pre-game win% across {mine.games_rated} rated games. 50 = neutral, higher = tougher.
             </div>
           </div>
@@ -769,7 +769,7 @@ function PlayerDetailInner() {
             <div className="text-xs text-gray-500 mb-1">{label}</div>
             <div className="text-2xl font-bold font-display tabular-nums">{value}</div>
             {rank && (
-              <div className="text-[10px] text-gray-500 mt-1 font-display uppercase tracking-wider tabular-nums">
+              <div className="text-[12px] text-gray-500 mt-1 font-display uppercase tracking-wider tabular-nums">
                 #{rank.rank} of {rank.total}
               </div>
             )}
@@ -896,7 +896,7 @@ function PlayerDetailInner() {
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xs text-yellow-600 dark:text-yellow-500 uppercase tracking-wider">Top Game</h2>
               {topGame.is_mvp === 1 && (
-                <span className="text-[10px] font-bold bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 px-2 py-0.5 rounded">MVP</span>
+                <span className="text-[12px] font-bold bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 px-2 py-0.5 rounded">MVP</span>
               )}
             </div>
             <Link href={`/game?id=${topGame.id}`} className="block">
@@ -937,13 +937,13 @@ function PlayerDetailInner() {
                   <Link
                     key={g.id}
                     href={`/game?id=${g.id}`}
-                    className="text-[11px] px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-500/20 tabular-nums"
+                    className="text-[13px] px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-500/20 tabular-nums"
                   >
                     {formatSeasonGame(g.game_number)}
                   </Link>
                 ))}
                 {mvpGames.length > 12 && (
-                  <span className="text-[11px] px-2 py-0.5 text-gray-500">+{mvpGames.length - 12} more</span>
+                  <span className="text-[13px] px-2 py-0.5 text-gray-500">+{mvpGames.length - 12} more</span>
                 )}
               </div>
             )}
@@ -956,7 +956,7 @@ function PlayerDetailInner() {
         <div className="mb-8">
           <div className="flex items-baseline justify-between mb-4">
             <h2 className="text-xl font-bold font-display uppercase tracking-wide">Top Teammates</h2>
-            <div className="flex gap-1 flex-wrap text-[11px]">
+            <div className="flex gap-1 flex-wrap text-[13px]">
               {([
                 { key: "games_together", label: "GP" },
                 { key: "win_pct", label: "Win%" },
@@ -1048,7 +1048,7 @@ function PlayerDetailInner() {
                       <span className="text-blue-400"><b>{Number(game.fantasy_points)}</b> fp</span>
                     </span>
                     {game.is_mvp === 1 && (
-                      <span className="text-[10px] font-bold bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 px-1.5 py-0.5 rounded">MVP</span>
+                      <span className="text-[12px] font-bold bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 px-1.5 py-0.5 rounded">MVP</span>
                     )}
                     <span className="text-gray-400 text-xs">{isExpanded ? "▴" : "▾"}</span>
                   </button>

@@ -127,7 +127,7 @@ function RunnerUpRow({ winner }: { winner: AwardWinner }) {
   const stat = splitStat(winner.value_label);
   return (
     <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
-      <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display mb-1.5">
+      <div className="text-[12px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-display mb-1.5">
         Runner-up
       </div>
       <div className="flex items-baseline justify-between gap-3">
@@ -136,14 +136,14 @@ function RunnerUpRow({ winner }: { winner: AwardWinner }) {
           className="text-sm font-bold font-display text-gray-700 dark:text-gray-200 hover:text-blue-400 transition-colors truncate"
         >
           {winner.name}
-          <span className="ml-2 text-[11px] font-normal text-gray-500 tabular-nums">
+          <span className="ml-2 text-[13px] font-normal text-gray-500 tabular-nums">
             · {winner.games_played} GP
           </span>
         </Link>
         <span className="tabular-nums text-sm font-bold text-gray-700 dark:text-gray-200 shrink-0">
           <span className="font-display">{stat.value}</span>
           {stat.unit && (
-            <span className="text-[10px] text-gray-500 ml-1 uppercase tracking-wider">{stat.unit}</span>
+            <span className="text-[12px] text-gray-500 ml-1 uppercase tracking-wider">{stat.unit}</span>
           )}
         </span>
       </div>
@@ -171,7 +171,7 @@ function AwardCard({
       <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
         {title}
       </h2>
-      {subtitle && <p className="text-[11px] text-gray-500 dark:text-gray-400 -mt-2 mb-4">{subtitle}</p>}
+      {subtitle && <p className="text-[13px] text-gray-500 dark:text-gray-400 -mt-2 mb-4">{subtitle}</p>}
       {!subtitle && <div className="mb-1" />}
 
       {winner && stat ? (
@@ -191,7 +191,7 @@ function AwardCard({
             className="text-xl font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
           >
             {winner.name}
-            <span className="ml-2 text-[11px] font-normal text-gray-500 tabular-nums">
+            <span className="ml-2 text-[13px] font-normal text-gray-500 tabular-nums">
               · {winner.games_played} GP
             </span>
           </Link>
@@ -222,7 +222,7 @@ function MvpCard({
       <h2 className="text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-3 border-b border-gray-200 dark:border-gray-800">
         MVP
       </h2>
-      <p className="text-[11px] text-gray-500 dark:text-gray-400 -mt-2 mb-4">Voted separately</p>
+      <p className="text-[13px] text-gray-500 dark:text-gray-400 -mt-2 mb-4">Voted separately</p>
 
       {winner && stat ? (
         <div className="flex-1">
@@ -232,7 +232,7 @@ function MvpCard({
           >
             {winner.name}
           </Link>
-          <div className="text-[11px] text-gray-500 uppercase tracking-wider font-display">{stat.value}</div>
+          <div className="text-[13px] text-gray-500 uppercase tracking-wider font-display">{stat.value}</div>
         </div>
       ) : (
         <p className="text-sm text-gray-500 flex-1">
@@ -250,7 +250,7 @@ function TeamCard({ title, players, minGames }: { title: string; players: AwardW
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
       <h2 className="flex items-baseline justify-between gap-2 text-base font-bold font-display uppercase tracking-wider text-gray-900 dark:text-white pb-2 mb-4 border-b border-gray-200 dark:border-gray-800">
         <span>{title}</span>
-        <span className="text-[10px] font-normal tracking-wider text-gray-500 dark:text-gray-400 tabular-nums">
+        <span className="text-[12px] font-normal tracking-wider text-gray-500 dark:text-gray-400 tabular-nums">
           min {minGames} GP
         </span>
       </h2>
@@ -331,7 +331,7 @@ function AdminMvpPicker({
 
   return (
     <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
-      <label className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-2">
+      <label className="text-[13px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-2">
         Admin: Set MVP
       </label>
       <div className="flex gap-2">
@@ -350,7 +350,7 @@ function AdminMvpPicker({
           ))}
         </select>
       </div>
-      {saving && <div className="text-[11px] text-gray-500 mt-1">Saving…</div>}
+      {saving && <div className="text-[13px] text-gray-500 mt-1">Saving…</div>}
     </div>
   );
 }
@@ -406,7 +406,7 @@ function CandidateStatsTable({ candidates }: { candidates: VoteCandidate[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs tabular-nums">
-        <thead className="text-[10px] uppercase tracking-wider text-gray-500">
+        <thead className="text-[12px] uppercase tracking-wider text-gray-500">
           <tr className="border-b border-gray-200 dark:border-gray-800">
             <th className="text-left py-1.5 pr-2 font-display">Candidate</th>
             <th className="text-right py-1.5 px-1.5">GP</th>
@@ -642,7 +642,7 @@ function MvpVotingPanel({
 
         {state.candidates.length > 0 && (
           <div className="mb-4">
-            <div className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+            <div className="text-[13px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
               Candidate stats
             </div>
             <CandidateStatsTable candidates={state.candidates} />
@@ -656,7 +656,7 @@ function MvpVotingPanel({
         ) : (
           <div className="space-y-3">
             <div>
-              <label className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
+              <label className="text-[13px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
                 Your name
               </label>
               <select
@@ -684,7 +684,7 @@ function MvpVotingPanel({
               );
               return (
                 <div key={row.label}>
-                  <label className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
+                  <label className="text-[13px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
                     {row.label}
                   </label>
                   <select
@@ -708,7 +708,7 @@ function MvpVotingPanel({
             {/* Optional voter rationale — published with the ballot once
                 voting closes. Capped to MAX_EXPLANATION_LENGTH server-side. */}
             <div>
-              <label className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
+              <label className="text-[13px] text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
                 Why? (optional)
               </label>
               <textarea
@@ -719,7 +719,7 @@ function MvpVotingPanel({
                 placeholder="Make your case in a sentence or two. Visible after voting closes."
                 className="w-full text-sm px-2 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 resize-none"
               />
-              <div className="text-[10px] text-gray-400 dark:text-gray-500 text-right mt-0.5 tabular-nums">
+              <div className="text-[12px] text-gray-400 dark:text-gray-500 text-right mt-0.5 tabular-nums">
                 {explanation.length}/{MAX_EXPLANATION_LENGTH}
               </div>
             </div>
@@ -735,7 +735,7 @@ function MvpVotingPanel({
         )}
 
         <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
-          <div className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+          <div className="text-[13px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
             {state.voted_count} of {state.total_eligible} voters have voted
           </div>
           {votedNames.length > 0 && (
@@ -782,7 +782,7 @@ function MvpVotingPanel({
 
       {winner ? (
         <div className="mb-4">
-          <div className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+          <div className="text-[13px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
             Winner
           </div>
           <Link
@@ -803,7 +803,7 @@ function MvpVotingPanel({
 
       {state.candidates.length > 0 && (
         <div className="mb-4">
-          <div className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+          <div className="text-[13px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
             Candidate stats
           </div>
           <CandidateStatsTable candidates={state.candidates} />
@@ -812,11 +812,11 @@ function MvpVotingPanel({
 
       {state.results.length > 0 && (
         <div className="mb-4">
-          <div className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+          <div className="text-[13px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
             Tally
           </div>
           <table className="w-full text-sm">
-            <thead className="text-[10px] uppercase tracking-wider text-gray-500">
+            <thead className="text-[12px] uppercase tracking-wider text-gray-500">
               <tr>
                 <th className="text-left py-1">Player</th>
                 <th className="text-right py-1">Pts</th>
@@ -846,7 +846,7 @@ function MvpVotingPanel({
 
       {state.ballots.length > 0 && (
         <details className="mt-4">
-          <summary className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer">
+          <summary className="text-[13px] text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer">
             All ballots ({state.ballots.length})
           </summary>
           <div className="mt-2 text-xs space-y-2">

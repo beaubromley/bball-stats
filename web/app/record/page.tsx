@@ -2217,7 +2217,7 @@ export default function RecordPage() {
             const bPct = 100 - aPct;
             return (
               <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
-                <div className="text-[10px] uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-2 text-center font-display">
+                <div className="text-[12px] uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-2 text-center font-display">
                   Predicted Matchup
                 </div>
                 <div className="flex items-center text-xs font-display tabular-nums mb-2">
@@ -2228,12 +2228,12 @@ export default function RecordPage() {
                   </div>
                   <span className="text-orange-400 font-bold w-12 text-right">{bPct}%</span>
                 </div>
-                <div className="flex justify-between text-[11px] text-gray-500 dark:text-gray-400 tabular-nums">
+                <div className="flex justify-between text-[13px] text-gray-500 dark:text-gray-400 tabular-nums">
                   <span>Team A avg <span className="text-gray-700 dark:text-gray-300 font-bold">{aFpg.toFixed(1)}</span> FPG</span>
                   <span>Team B avg <span className="text-gray-700 dark:text-gray-300 font-bold">{bFpg.toFixed(1)}</span> FPG</span>
                 </div>
                 {matchupModel.training_count > 0 && (
-                  <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-2 text-center">
+                  <div className="text-[12px] text-gray-500 dark:text-gray-400 mt-2 text-center">
                     Trained on {matchupModel.training_count} historical matchups
                   </div>
                 )}

@@ -180,7 +180,7 @@ export default function StreakChart({ games }: { games: StreakGame[] }) {
             <Line type="monotone" dataKey="fpg" stroke={LINE} strokeWidth={2} dot={renderDot} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[11px] text-gray-500 dark:text-gray-400">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[13px] text-gray-500 dark:text-gray-400">
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-4 border-t-2 border-dashed border-gray-400" /> Career avg ({r1(careerFpg)})
           </span>

@@ -255,7 +255,7 @@ export default function GamesPage() {
                   {/* MVP + box score (finished games only) */}
                   {game.mvp && (
                     <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-900 flex items-baseline gap-3 flex-wrap">
-                      <span className="text-[10px] font-bold font-display uppercase tracking-wider text-yellow-600 dark:text-yellow-500">
+                      <span className="text-[12px] font-bold font-display uppercase tracking-wider text-yellow-600 dark:text-yellow-500">
                         MVP
                       </span>
                       <Link
@@ -283,7 +283,7 @@ export default function GamesPage() {
                       shown as MVP above. */}
                   {me && meGameStats[game.id] && !meGameStats[game.id].is_mvp && (
                     <div className="mt-2 flex items-baseline gap-3 flex-wrap">
-                      <span className="text-[10px] font-bold font-display uppercase tracking-wider text-blue-600 dark:text-blue-300">
+                      <span className="text-[12px] font-bold font-display uppercase tracking-wider text-blue-600 dark:text-blue-300">
                         You
                       </span>
                       <span className="text-sm font-bold font-display text-gray-900 dark:text-white">
