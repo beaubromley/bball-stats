@@ -63,10 +63,23 @@ interface GroupMember {
 async function fetchAllGroupMembers(
   token: string,
 ): Promise<{ user_id: string; name: string }[]> {
-  const res = await fetch(
+  // Try token-in-querystring first (matches the messages endpoint that
+  // we know works). If that 401s for any reason, fall back to the
+  // X-Access-Token header form which GroupMe also accepts.
+  let res = await fetch(
     `${BASE_URL}/groups/${GROUP_ID}?token=${encodeURIComponent(token)}`,
   );
-  if (!res.ok) throw new Error(`GroupMe group fetch failed: ${res.status}`);
+  if (res.status === 401 || res.status === 403) {
+    res = await fetch(`${BASE_URL}/groups/${GROUP_ID}`, {
+      headers: { "X-Access-Token": token },
+    });
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      `GroupMe /groups/${GROUP_ID} returned ${res.status}: ${body.slice(0, 200)}`,
+    );
+  }
   const data = await res.json();
   const members: GroupMember[] = data?.response?.members ?? [];
   return members.map((m) => ({
