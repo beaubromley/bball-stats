@@ -88,7 +88,7 @@ export default function BoxScore({ gameId }: { gameId: string }) {
                       p.is_mvp
                         ? "bg-yellow-50 dark:bg-yellow-900/20"
                         : me && p.player_id === me.id
-                          ? "bg-blue-50 dark:bg-blue-900/20"
+                          ? "bg-blue-200/80 dark:bg-blue-600/40 ring-2 ring-inset ring-blue-500 dark:ring-blue-400 font-semibold"
                           : ""
                     }`}
                   >

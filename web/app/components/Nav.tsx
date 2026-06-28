@@ -70,7 +70,7 @@ export default function Nav() {
       <div className="max-w-5xl mx-auto flex items-center justify-between">
         {/* Logo — always visible. Swaps to the patriotic variant during
             Independence Week, falling back to the default if it's missing. */}
-        <Link href="/" onClick={() => setMenuOpen(false)}>
+        <Link href="/" onClick={() => setMenuOpen(false)} className="mr-6 md:mr-10">
           <img
             src={july4 ? "/logo-july4.png" : "/logo.png"}
             onError={july4 ? (e) => { e.currentTarget.src = "/logo.png"; } : undefined}

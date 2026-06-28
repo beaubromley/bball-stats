@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { groupBySeason, formatSeasonGameCompact } from "@/lib/seasons";
 import { useAuth } from "@/app/components/AuthProvider";
+import { useMe } from "@/app/components/MeContext";
 import { formatShortDateCT } from "@/lib/time";
 
 const API_BASE = "/api";
@@ -33,11 +34,23 @@ interface GameRow {
 
 export default function GamesPage() {
   const { isAdmin } = useAuth();
+  const { me } = useMe();
   const [games, setGames] = useState<GameRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [endingGame, setEndingGame] = useState<string | null>(null);
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
+  const [meOnly, setMeOnly] = useState(false);
+  // Picked player's stat line per game. Used to show their box-score
+  // row under the MVP. Populated only when a player is selected.
+  const [meGameStats, setMeGameStats] = useState<Record<string, {
+    points: number;
+    assists: number;
+    steals: number;
+    blocks: number;
+    fantasy_points: number;
+    is_mvp: number;
+  }>>({});
 
   function fetchGames() {
     fetch(`${API_BASE}/games`)
@@ -57,6 +70,43 @@ export default function GamesPage() {
   useEffect(() => {
     fetchGames();
   }, []);
+
+  // Fetch the picked player's per-game stat lines whenever the
+  // selection changes. Built into a game_id-keyed map so the games
+  // list can show their box score under the MVP for each row.
+  useEffect(() => {
+    if (!me) {
+      setMeGameStats({});
+      return;
+    }
+    let cancelled = false;
+    fetch(`${API_BASE}/players/${me.id}/games`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { id: string; points_scored: number; assists: number; steals: number; blocks: number; fantasy_points: number; is_mvp: number }[]) => {
+        if (cancelled || !Array.isArray(rows)) return;
+        const m: Record<string, {
+          points: number;
+          assists: number;
+          steals: number;
+          blocks: number;
+          fantasy_points: number;
+          is_mvp: number;
+        }> = {};
+        for (const r of rows) {
+          m[r.id] = {
+            points: Number(r.points_scored) || 0,
+            assists: Number(r.assists) || 0,
+            steals: Number(r.steals) || 0,
+            blocks: Number(r.blocks) || 0,
+            fantasy_points: Number(r.fantasy_points) || 0,
+            is_mvp: Number(r.is_mvp) || 0,
+          };
+        }
+        setMeGameStats(m);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [me?.id, me]);
 
   async function handleDelete(gameId: string) {
     await fetch(`${API_BASE}/games/${gameId}`, { method: "DELETE" });
@@ -78,11 +128,27 @@ export default function GamesPage() {
     return <div className="text-gray-500 text-center py-16">Loading...</div>;
   }
 
-  // Group games by season (chronological order for grouping)
-  const seasonGroups = groupBySeason([...games].reverse());
-  const currentSeasonGames = selectedSeason
-    ? seasonGroups.find((g) => g.season.number === selectedSeason)
-    : null;
+  // Filter to "my games" if the toggle is on and a player is picked.
+  // Roster lists are display names ("Beau B."), not ids — so we match
+  // by name.
+  const filteredGames = (me && meOnly)
+    ? games.filter(
+        (g) =>
+          g.team_a_players.includes(me.name) ||
+          g.team_b_players.includes(me.name),
+      )
+    : games;
+
+  // Group filtered games by season. Season pills still reflect the
+  // filtered slice so a season with no "me" games doesn't show.
+  const seasonGroups = groupBySeason([...filteredGames].reverse());
+  // If the saved selectedSeason isn't in the filtered slice (because
+  // toggling "my games only" removed it), gracefully fall back to the
+  // latest season that IS present instead of showing an empty list.
+  const currentSeasonGames =
+    seasonGroups.find((g) => g.season.number === selectedSeason) ??
+    seasonGroups[seasonGroups.length - 1] ??
+    null;
 
   return (
     <div>
@@ -113,6 +179,19 @@ export default function GamesPage() {
               <span className="text-xs text-gray-500 ml-2">
                 {currentSeasonGames.games.length} game{currentSeasonGames.games.length !== 1 ? "s" : ""}
               </span>
+            )}
+            {me && (
+              <button
+                onClick={() => setMeOnly((v) => !v)}
+                className={`ml-auto px-3 py-1 text-xs font-display uppercase tracking-wider rounded transition-colors ${
+                  meOnly
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-700"
+                }`}
+                title={meOnly ? `Showing only games ${me.name} played in` : `Filter to games ${me.name} played in`}
+              >
+                {meOnly ? `Only ${me.name}` : "My games only"}
+              </button>
             )}
           </div>
 
@@ -195,6 +274,31 @@ export default function GamesPage() {
                         <span className="font-bold text-gray-700 dark:text-gray-200">{game.mvp.blocks}</span> BLK
                         <span className="mx-1.5 text-gray-400 dark:text-gray-600">·</span>
                         <span className="font-bold text-gray-700 dark:text-gray-200">{game.mvp.fantasy_points}</span> FP
+                      </span>
+                    </div>
+                  )}
+
+                  {/* "Your" box score — only when a player is picked,
+                      they appeared in this game, and they weren't already
+                      shown as MVP above. */}
+                  {me && meGameStats[game.id] && !meGameStats[game.id].is_mvp && (
+                    <div className="mt-2 flex items-baseline gap-3 flex-wrap">
+                      <span className="text-[10px] font-bold font-display uppercase tracking-wider text-blue-600 dark:text-blue-300">
+                        You
+                      </span>
+                      <span className="text-sm font-bold font-display text-gray-900 dark:text-white">
+                        {me.name}
+                      </span>
+                      <span className="text-xs tabular-nums text-gray-500 dark:text-gray-400">
+                        <span className="font-bold text-gray-700 dark:text-gray-200">{meGameStats[game.id].points}</span> PTS
+                        <span className="mx-1.5 text-gray-400 dark:text-gray-600">·</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-200">{meGameStats[game.id].assists}</span> AST
+                        <span className="mx-1.5 text-gray-400 dark:text-gray-600">·</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-200">{meGameStats[game.id].steals}</span> STL
+                        <span className="mx-1.5 text-gray-400 dark:text-gray-600">·</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-200">{meGameStats[game.id].blocks}</span> BLK
+                        <span className="mx-1.5 text-gray-400 dark:text-gray-600">·</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-200">{meGameStats[game.id].fantasy_points}</span> FP
                       </span>
                     </div>
                   )}

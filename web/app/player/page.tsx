@@ -11,6 +11,7 @@ const NBA_COMP_HEADING = "NBA Player Comp";
 import { formatSeasonGame, getSeasonForGameNumber } from "@/lib/seasons";
 import { useAuth } from "@/app/components/AuthProvider";
 import HotBadge, { HotStreakInfo } from "@/app/components/HotBadge";
+import StreakChart from "@/app/components/StreakChart";
 
 const API_BASE = "/api";
 
@@ -793,6 +794,10 @@ function PlayerDetailInner() {
           </div>
         </div>
       </div>
+
+      {/* Recent Form — last 10 games of FP/G vs career baseline with hot/cold
+          ranges. All-time (not affected by the season scope toggle). */}
+      <StreakChart games={games} />
 
       {perGame.length > 1 && (() => {
         const distributions: { label: string; key: keyof typeof perGame[0]; color: string; avg: string }[] = [

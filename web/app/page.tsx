@@ -372,7 +372,9 @@ function MiniLeaderCard({
             <li
               key={p.id}
               className={`flex items-baseline gap-2 text-sm ${
-                meId && p.id === meId ? "bg-blue-50 dark:bg-blue-900/20 -mx-2 px-2 py-1 rounded" : ""
+                meId && p.id === meId
+                  ? "bg-blue-200/80 dark:bg-blue-600/40 ring-1 ring-inset ring-blue-500 dark:ring-blue-400 -mx-2 px-2 py-1 rounded"
+                  : ""
               }`}
             >
               <span className="tabular-nums w-4 font-display font-bold text-xs text-gray-500 dark:text-gray-400">
@@ -391,7 +393,7 @@ function MiniLeaderCard({
             </li>
           ))}
           {meExtraRow && (
-            <li className="flex items-baseline gap-2 text-sm bg-blue-50 dark:bg-blue-900/20 -mx-2 px-2 py-1 rounded border-t border-blue-200 dark:border-blue-900/50 mt-2 pt-2">
+            <li className="flex items-baseline gap-2 text-sm bg-blue-200/80 dark:bg-blue-600/40 ring-1 ring-inset ring-blue-500 dark:ring-blue-400 -mx-2 px-2 py-1 rounded mt-2">
               <span className="tabular-nums w-6 font-display font-bold text-xs text-blue-500 dark:text-blue-400">
                 #{meExtraRow.rank}
               </span>
@@ -995,28 +997,35 @@ export default function HomePage() {
   const ppg2 = (p: PlayerRow) => p.total_points / (p.effective_games || 1);
   const fpg2 = (p: PlayerRow) => p.fantasy_points / (p.effective_games || 1);
   const def2 = (p: PlayerRow) => (p.steals + p.blocks) / (p.effective_games || 1);
-  // For each ranking, build the eligible-sorted list once and grab top-5
-  // plus, if "me" is eligible but not in the top-5, their rank+row to
-  // append on the card.
+  // Top-5 comes from the eligible (min-GP) pool — we don't want a
+  // 1-game wonder leading the board. But "me's" rank in the appended
+  // row should be their real standing in the FULL season list, not just
+  // among qualifiers. So we compute two sorted lists per stat: one
+  // gated, one full.
   function topAndMe(
-    sorted: PlayerRow[],
+    eligibleSorted: PlayerRow[],
+    fullSorted: PlayerRow[],
   ): { top5: PlayerRow[]; meExtra: { player: PlayerRow; rank: number } | null } {
-    const top5 = sorted.slice(0, 5);
+    const top5 = eligibleSorted.slice(0, 5);
     if (!me) return { top5, meExtra: null };
     const inTop5 = top5.some((p) => p.id === me.id);
     if (inTop5) return { top5, meExtra: null };
-    const meIdx = sorted.findIndex((p) => p.id === me.id);
+    const meIdx = fullSorted.findIndex((p) => p.id === me.id);
     if (meIdx < 0) return { top5, meExtra: null };
-    return { top5, meExtra: { player: sorted[meIdx], rank: meIdx + 1 } };
+    return { top5, meExtra: { player: fullSorted[meIdx], rank: meIdx + 1 } };
   }
   const ppgSorted = [...eligible].sort((a, b) => ppg2(b) - ppg2(a));
   const fpgSorted = [...eligible].sort((a, b) => fpg2(b) - fpg2(a));
   const defSorted = [...eligible].sort((a, b) => def2(b) - def2(a));
   const winSorted = [...eligible].sort((a, b) => b.win_pct - a.win_pct);
-  const { top5: topPpg, meExtra: ppgMeExtra } = topAndMe(ppgSorted);
-  const { top5: topFpg, meExtra: fpgMeExtra } = topAndMe(fpgSorted);
-  const { top5: topDef, meExtra: defMeExtra } = topAndMe(defSorted);
-  const { top5: topWin, meExtra: winMeExtra } = topAndMe(winSorted);
+  const ppgFull = [...seasonPlayers].sort((a, b) => ppg2(b) - ppg2(a));
+  const fpgFull = [...seasonPlayers].sort((a, b) => fpg2(b) - fpg2(a));
+  const defFull = [...seasonPlayers].sort((a, b) => def2(b) - def2(a));
+  const winFull = [...seasonPlayers].sort((a, b) => b.win_pct - a.win_pct);
+  const { top5: topPpg, meExtra: ppgMeExtra } = topAndMe(ppgSorted, ppgFull);
+  const { top5: topFpg, meExtra: fpgMeExtra } = topAndMe(fpgSorted, fpgFull);
+  const { top5: topDef, meExtra: defMeExtra } = topAndMe(defSorted, defFull);
+  const { top5: topWin, meExtra: winMeExtra } = topAndMe(winSorted, winFull);
 
   return (
     <div className="space-y-4">

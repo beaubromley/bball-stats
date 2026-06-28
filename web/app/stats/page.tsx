@@ -4,7 +4,6 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/components/AuthProvider";
 import HotBadge from "@/app/components/HotBadge";
-import DataZoom from "@/app/components/DataZoom";
 import { useMe } from "@/app/components/MeContext";
 import {
   BarChart,
@@ -530,6 +529,29 @@ export default function Home() {
     return <circle cx={cx} cy={cy} r={6} fill={fill} fillOpacity={0.7} />;
   };
 
+  // Custom YAxis tick for the horizontal bar charts. Highlights the
+  // picked player's name in bold blue so they're easy to spot in a
+  // long sorted list.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const MeYTick = (props: any) => {
+    const { x, y, payload } = props;
+    const value = payload?.value as string;
+    const isMe = me && value === me.name;
+    return (
+      <text
+        x={x}
+        y={y}
+        dy={4}
+        textAnchor="end"
+        fontSize={isMe ? 13 : 12}
+        fontWeight={isMe ? "bold" : "normal"}
+        fill={isMe ? "#3B82F6" : "#9CA3AF"}
+      >
+        {value}
+      </text>
+    );
+  };
+
   return (
     <div>
       <h1 className="text-3xl font-bold font-display uppercase tracking-wide mb-8">Stats</h1>
@@ -734,7 +756,9 @@ export default function Home() {
                 key={player.id}
                 id={`lb-row-${player.id}`}
                 className={`border-b border-gray-100 dark:border-gray-900 hover:bg-gray-100 dark:hover:bg-gray-900/50 transition-colors ${
-                  me && player.id === me.id ? "bg-blue-50 dark:bg-blue-900/20" : ""
+                  me && player.id === me.id
+                    ? "bg-blue-200/80 dark:bg-blue-600/40 ring-2 ring-inset ring-blue-500 dark:ring-blue-400 font-semibold"
+                    : ""
                 }`}
               >
                 <td className="py-3 px-2 text-center text-gray-500">{i + 1}</td>
@@ -807,7 +831,7 @@ export default function Home() {
           <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+            <YAxis type="category" dataKey="name" tick={<MeYTick />} axisLine={false} tickLine={false} width={80} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
             <Legend wrapperStyle={{ fontSize: "11px" }} />
             <Bar dataKey="1s" stackId="fp" fill="#86EFAC" />
@@ -823,7 +847,7 @@ export default function Home() {
           <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+            <YAxis type="category" dataKey="name" tick={<MeYTick />} axisLine={false} tickLine={false} width={80} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
             <Legend wrapperStyle={{ fontSize: "11px" }} />
             <Bar dataKey="1s" stackId="fp" fill="#86EFAC" />
@@ -843,7 +867,7 @@ export default function Home() {
           <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+            <YAxis type="category" dataKey="name" tick={<MeYTick />} axisLine={false} tickLine={false} width={80} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
             <Legend wrapperStyle={{ fontSize: "11px" }} />
             <Bar dataKey="1s" stackId="pts" fill="#10B981" />
@@ -856,7 +880,7 @@ export default function Home() {
           <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+            <YAxis type="category" dataKey="name" tick={<MeYTick />} axisLine={false} tickLine={false} width={80} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
             <Legend wrapperStyle={{ fontSize: "11px" }} />
             <Bar dataKey="1s" stackId="pts" fill="#10B981" />
@@ -875,7 +899,7 @@ export default function Home() {
             <BarChart data={winData} layout="vertical" margin={{ left: 20, right: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
               <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <YAxis type="category" dataKey="name" tick={<MeYTick />} axisLine={false} tickLine={false} width={80} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
               <Bar dataKey="Win%" fill="#F59E0B" radius={[0, 4, 4, 0]}>
                 <LabelList dataKey="Win%" position="right" fill="#9CA3AF" fontSize={11} formatter={(v) => `${v}%`} />
@@ -894,7 +918,7 @@ export default function Home() {
               <BarChart data={mvpData} layout="vertical" margin={{ left: 20, right: 30 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+                <YAxis type="category" dataKey="name" tick={<MeYTick />} axisLine={false} tickLine={false} width={80} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
                 <Bar dataKey="MVPs" fill="#EAB308" radius={[0, 4, 4, 0]}>
                   <LabelList dataKey="MVPs" position="right" fill="#EAB308" fontSize={11} fontWeight="bold" />
@@ -912,7 +936,7 @@ export default function Home() {
             <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
               <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <YAxis type="category" dataKey="name" tick={<MeYTick />} axisLine={false} tickLine={false} width={80} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
               <Bar dataKey="AST" fill="#3B82F6" radius={[0, 4, 4, 0]}>
                 <LabelList dataKey="AST" position="right" fill="#9CA3AF" fontSize={11} />
@@ -923,7 +947,7 @@ export default function Home() {
             <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
               <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <YAxis type="category" dataKey="name" tick={<MeYTick />} axisLine={false} tickLine={false} width={80} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
               <Bar dataKey="AST" fill="#3B82F6" radius={[0, 4, 4, 0]}>
                 <LabelList dataKey="AST" position="right" fill="#9CA3AF" fontSize={11} />
@@ -940,7 +964,7 @@ export default function Home() {
             <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
               <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <YAxis type="category" dataKey="name" tick={<MeYTick />} axisLine={false} tickLine={false} width={80} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
               <Bar dataKey="STL" fill="#EAB308" radius={[0, 4, 4, 0]}>
                 <LabelList dataKey="STL" position="right" fill="#9CA3AF" fontSize={11} />
@@ -951,7 +975,7 @@ export default function Home() {
             <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
               <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <YAxis type="category" dataKey="name" tick={<MeYTick />} axisLine={false} tickLine={false} width={80} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
               <Bar dataKey="STL" fill="#EAB308" radius={[0, 4, 4, 0]}>
                 <LabelList dataKey="STL" position="right" fill="#9CA3AF" fontSize={11} />
@@ -968,7 +992,7 @@ export default function Home() {
             <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
               <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <YAxis type="category" dataKey="name" tick={<MeYTick />} axisLine={false} tickLine={false} width={80} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
               <Bar dataKey="BLK" fill="#A855F7" radius={[0, 4, 4, 0]}>
                 <LabelList dataKey="BLK" position="right" fill="#9CA3AF" fontSize={11} />
@@ -979,7 +1003,7 @@ export default function Home() {
             <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" horizontal={false} />
               <XAxis type="number" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={80} />
+              <YAxis type="category" dataKey="name" tick={<MeYTick />} axisLine={false} tickLine={false} width={80} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
               <Bar dataKey="BLK" fill="#A855F7" radius={[0, 4, 4, 0]}>
                 <LabelList dataKey="BLK" position="right" fill="#9CA3AF" fontSize={11} />
@@ -992,82 +1016,75 @@ export default function Home() {
       {/* FPG vs Win% Scatter */}
       {scatterData.length > 0 && (
         <div className="mb-8">
-          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-1">Fantasy PPG vs Win %</h3>
-          <p className="text-[11px] text-gray-500 dark:text-gray-500 mb-3">Pinch to zoom · drag to pan · double-tap to reset.</p>
+          <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-3">Fantasy PPG vs Win %</h3>
           <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
             {(() => {
-              // 5% padding on each end so points near the data edge aren't
-              // stuck on the axis when fully zoomed out.
+              // Tight-fit the axes to the actual data with ~5% padding so
+              // a cluster of points doesn't all sit on the axis line.
               const fps = scatterData.map((d) => d.fpg);
               const wps = scatterData.map((d) => d.winPct);
               const fpMin = Math.min(...fps), fpMax = Math.max(...fps);
               const wpMin = Math.min(...wps), wpMax = Math.max(...wps);
               const fpPad = Math.max(0.1, (fpMax - fpMin) * 0.05);
               const wpPad = Math.max(1, (wpMax - wpMin) * 0.05);
-              const xFull: [number, number] = [fpMin - fpPad, fpMax + fpPad];
-              const yFull: [number, number] = [Math.max(0, wpMin - wpPad), Math.min(100, wpMax + wpPad)];
+              const xDomain: [number, number] = [fpMin - fpPad, fpMax + fpPad];
+              const yDomain: [number, number] = [Math.max(0, wpMin - wpPad), Math.min(100, wpMax + wpPad)];
               return (
-                <DataZoom xFull={xFull} yFull={yFull}>
-                  {(xDomain, yDomain) => (
-                    <ResponsiveContainer width="100%" height={350}>
-                      <ScatterChart margin={{ left: 10, right: 20, top: 20, bottom: 10 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
-                        <XAxis
-                          type="number"
-                          dataKey="fpg"
-                          name="FPG"
-                          domain={xDomain}
-                          allowDataOverflow
-                          tick={{ fontSize: 12, fill: "#9CA3AF" }}
-                          axisLine={false}
-                          tickLine={false}
-                          label={{ value: "Fantasy Points Per Game", position: "insideBottom", offset: -5, fontSize: 12, fill: "#6B7280" }}
-                        />
-                        <YAxis
-                          type="number"
-                          dataKey="winPct"
-                          name="Win%"
-                          domain={yDomain}
-                          allowDataOverflow
-                          tick={{ fontSize: 12, fill: "#9CA3AF" }}
-                          axisLine={false}
-                          tickLine={false}
-                          label={{ value: "Win %", angle: -90, position: "insideLeft", offset: 10, fontSize: 12, fill: "#6B7280" }}
-                          tickFormatter={(v) => `${v}%`}
-                        />
-                        <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: "3 3" }} />
-                        <Scatter data={scatterData} shape={meAwareShape}>
-                          {scatterData.map((_entry, index) => (
-                            <Cell key={index} fill={SCATTER_COLORS[index % SCATTER_COLORS.length]} />
-                          ))}
-                          <LabelList
-                            dataKey="name"
-                            position="top"
-                            fontSize={10}
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            content={(props: any) => {
-                              const { x, y, value, index } = props;
-                              const datum = scatterData[index];
-                              const isMe = me && datum && datum.id === me.id;
-                              if (!isMe) {
-                                return (
-                                  <text x={x} y={y} dy={-6} fontSize={10} fill="#9CA3AF" textAnchor="middle">
-                                    {value}
-                                  </text>
-                                );
-                              }
-                              return (
-                                <text x={x} y={y} dy={-10} fontSize={11} fontWeight="bold" fill="#3B82F6" textAnchor="middle">
-                                  {value}
-                                </text>
-                              );
-                            }}
-                          />
-                        </Scatter>
-                      </ScatterChart>
-                    </ResponsiveContainer>
-                  )}
-                </DataZoom>
+                <ResponsiveContainer width="100%" height={350}>
+                  <ScatterChart margin={{ left: 10, right: 20, top: 20, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
+                    <XAxis
+                      type="number"
+                      dataKey="fpg"
+                      name="FPG"
+                      domain={xDomain}
+                      tick={{ fontSize: 12, fill: "#9CA3AF" }}
+                      axisLine={false}
+                      tickLine={false}
+                      label={{ value: "Fantasy Points Per Game", position: "insideBottom", offset: -5, fontSize: 12, fill: "#6B7280" }}
+                    />
+                    <YAxis
+                      type="number"
+                      dataKey="winPct"
+                      name="Win%"
+                      domain={yDomain}
+                      tick={{ fontSize: 12, fill: "#9CA3AF" }}
+                      axisLine={false}
+                      tickLine={false}
+                      label={{ value: "Win %", angle: -90, position: "insideLeft", offset: 10, fontSize: 12, fill: "#6B7280" }}
+                      tickFormatter={(v) => `${v}%`}
+                    />
+                    <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: "3 3" }} />
+                    <Scatter data={scatterData} shape={meAwareShape}>
+                      {scatterData.map((_entry, index) => (
+                        <Cell key={index} fill={SCATTER_COLORS[index % SCATTER_COLORS.length]} />
+                      ))}
+                      <LabelList
+                        dataKey="name"
+                        position="top"
+                        fontSize={10}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        content={(props: any) => {
+                          const { x, y, value, index } = props;
+                          const datum = scatterData[index];
+                          const isMe = me && datum && datum.id === me.id;
+                          if (!isMe) {
+                            return (
+                              <text x={x} y={y} dy={-6} fontSize={10} fill="#9CA3AF" textAnchor="middle">
+                                {value}
+                              </text>
+                            );
+                          }
+                          return (
+                            <text x={x} y={y} dy={-10} fontSize={11} fontWeight="bold" fill="#3B82F6" textAnchor="middle">
+                              {value}
+                            </text>
+                          );
+                        }}
+                      />
+                    </Scatter>
+                  </ScatterChart>
+                </ResponsiveContainer>
               );
             })()}
           </div>
@@ -1151,17 +1168,23 @@ export default function Home() {
                     itemSorter={(item) => -(item.value as number ?? 0)}
                   />
                   <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "12px" }} />
-                  {streakData.players.map((p, i) => (
-                    <Line
-                      key={p.id}
-                      type="monotone"
-                      dataKey={p.name}
-                      stroke={LINE_COLORS[i % LINE_COLORS.length]}
-                      strokeWidth={2}
-                      dot={{ r: 3 }}
-                      connectNulls={false}
-                    />
-                  ))}
+                  {streakData.players.map((p, i) => {
+                    const isMe = me && p.id === me.id;
+                    return (
+                      <Line
+                        key={p.id}
+                        type="monotone"
+                        dataKey={p.name}
+                        // "Me" gets a thicker, brighter line in the
+                        // accent blue, with a fat white-bordered dot at
+                        // every game so the run is easy to trace.
+                        stroke={isMe ? "#3B82F6" : LINE_COLORS[i % LINE_COLORS.length]}
+                        strokeWidth={isMe ? 4 : 2}
+                        dot={isMe ? { r: 6, stroke: "#fff", strokeWidth: 2, fill: "#3B82F6" } : { r: 3 }}
+                        connectNulls={false}
+                      />
+                    );
+                  })}
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -1175,15 +1198,23 @@ export default function Home() {
           <h3 className="text-base font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-1">
             Win % vs Strength of Schedule
           </h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
             Dashed line is the expected win % given each player's average
             matchup (teammates vs opponents). Points above the line beat
             their schedule; points below underperformed.
           </p>
-          <p className="text-[11px] text-gray-500 dark:text-gray-500 mb-3">Pinch to zoom · drag to pan · double-tap to reset.</p>
           <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-transparent">
-            <DataZoom xFull={[0, 100]} yFull={[0, 100]}>
-              {(xDomain, yDomain, scale) => (
+            {(() => {
+              // Tight-fit the axes to the actual data with ~5% padding.
+              const ss = sosScatterData.map((d) => d.sos);
+              const ws = sosScatterData.map((d) => d.winPct);
+              const sMin = Math.min(...ss), sMax = Math.max(...ss);
+              const wMin = Math.min(...ws), wMax = Math.max(...ws);
+              const sPad = Math.max(1, (sMax - sMin) * 0.1);
+              const wPad = Math.max(1, (wMax - wMin) * 0.05);
+              const xDomain: [number, number] = [Math.max(0, sMin - sPad), Math.min(100, sMax + sPad)];
+              const yDomain: [number, number] = [Math.max(0, wMin - wPad), Math.min(100, wMax + wPad)];
+              return (
                 <ResponsiveContainer width="100%" height={350}>
                   <ScatterChart margin={{ left: 10, right: 20, top: 20, bottom: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
@@ -1192,8 +1223,6 @@ export default function Home() {
                       dataKey="sos"
                       name="SoS"
                       domain={xDomain}
-                      allowDataOverflow
-                      ticks={scale === 1 ? [0, 25, 50, 75, 100] : undefined}
                       tick={{ fontSize: 12, fill: "#9CA3AF" }}
                       axisLine={false}
                       tickLine={false}
@@ -1204,8 +1233,6 @@ export default function Home() {
                       dataKey="winPct"
                       name="Win%"
                       domain={yDomain}
-                      allowDataOverflow
-                      ticks={scale === 1 ? [0, 25, 50, 75, 100] : undefined}
                       tick={{ fontSize: 12, fill: "#9CA3AF" }}
                       axisLine={false}
                       tickLine={false}
@@ -1213,13 +1240,18 @@ export default function Home() {
                       tickFormatter={(v) => `${v}%`}
                     />
                     <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: "3 3" }} />
-                    {/* Expected win% line: y = 100 - x. The clip-to-domain
-                        is handled by allowDataOverflow above. */}
+                    {/* Expected win% line y = 100 - x — give the segment
+                        endpoints that fall inside the visible domain so
+                        the line spans the whole plot area without
+                        forcing the domain wider. */}
                     <ReferenceLine
-                      segment={[{ x: 0, y: 100 }, { x: 100, y: 0 }]}
+                      segment={[
+                        { x: xDomain[0], y: 100 - xDomain[0] },
+                        { x: xDomain[1], y: 100 - xDomain[1] },
+                      ]}
                       stroke="#6B7280"
                       strokeDasharray="6 3"
-                      ifOverflow="extendDomain"
+                      ifOverflow="visible"
                     />
                     <Scatter data={sosScatterData} shape={meAwareShape}>
                       {sosScatterData.map((_entry, index) => (
@@ -1251,8 +1283,8 @@ export default function Home() {
                     </Scatter>
                   </ScatterChart>
                 </ResponsiveContainer>
-              )}
-            </DataZoom>
+              );
+            })()}
           </div>
         </div>
       )}
