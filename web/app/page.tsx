@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { formatShortDateCT } from "@/lib/time";
 import { formatSeasonGame, gameNumberInSeason } from "@/lib/seasons";
+import HotBadge from "@/app/components/HotBadge";
 
 const API_BASE = "/api";
 
@@ -325,11 +326,13 @@ function MiniLeaderCard({
   unit,
   rows,
   valueKey,
+  hotByPlayer,
 }: {
   title: string;
   unit: string;
   rows: PlayerRow[];
   valueKey: LeaderKey;
+  hotByPlayer: Record<string, { last5_fpg: number; career_fpg: number; ratio: number }>;
 }) {
   // Recompute at 2dp from raw totals + effective_games — the leaderboard
   // API rounds ppg/fpg/etc. to 1dp, so reading p.ppg directly would only
@@ -367,6 +370,7 @@ function MiniLeaderCard({
                 className="flex-1 truncate font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
               >
                 {p.name}
+                <HotBadge info={hotByPlayer[p.id]} size="xs" />
               </Link>
               <span className="tabular-nums font-bold font-display text-gray-900 dark:text-white">
                 {format(p)}
@@ -867,6 +871,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   // MVP voting banner: which season has voting currently open, if any
   const [mvpVotingOpenSeason, setMvpVotingOpenSeason] = useState<number | null>(null);
+  const [hotByPlayer, setHotByPlayer] = useState<Record<string, { last5_fpg: number; career_fpg: number; ratio: number }>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -921,6 +926,18 @@ export default function HomePage() {
       }
     }
     load();
+
+    // Hot streaks — fire-and-forget; safe to fail silently.
+    fetch(`${API_BASE}/hot-streaks`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((arr: { player_id: string; last5_fpg: number; career_fpg: number; ratio: number }[]) => {
+        if (cancelled || !Array.isArray(arr)) return;
+        const m: Record<string, { last5_fpg: number; career_fpg: number; ratio: number }> = {};
+        for (const r of arr) m[r.player_id] = { last5_fpg: r.last5_fpg, career_fpg: r.career_fpg, ratio: r.ratio };
+        setHotByPlayer(m);
+      })
+      .catch(() => {});
+
     return () => {
       cancelled = true;
     };
@@ -1009,10 +1026,10 @@ export default function HomePage() {
         </Link>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MiniLeaderCard title="Scoring (PPG)" unit="PPG" rows={topPpg} valueKey="ppg" />
-        <MiniLeaderCard title="Fantasy (FPG)" unit="FPG" rows={topFpg} valueKey="fpg" />
-        <MiniLeaderCard title="Defense (S+B)" unit="SPG+BPG" rows={topDef} valueKey="def" />
-        <MiniLeaderCard title="Winning" unit="WIN%" rows={topWin} valueKey="win_pct" />
+        <MiniLeaderCard title="Scoring (PPG)" unit="PPG" rows={topPpg} valueKey="ppg" hotByPlayer={hotByPlayer} />
+        <MiniLeaderCard title="Fantasy (FPG)" unit="FPG" rows={topFpg} valueKey="fpg" hotByPlayer={hotByPlayer} />
+        <MiniLeaderCard title="Defense (S+B)" unit="SPG+BPG" rows={topDef} valueKey="def" hotByPlayer={hotByPlayer} />
+        <MiniLeaderCard title="Winning" unit="WIN%" rows={topWin} valueKey="win_pct" hotByPlayer={hotByPlayer} />
       </div>
 
       {records && (

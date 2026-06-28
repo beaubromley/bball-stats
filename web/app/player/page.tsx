@@ -10,6 +10,7 @@ import { computeLeagueAvg, computeNBAComp, COMP_HEADING_OVERRIDES } from "@/lib/
 const NBA_COMP_HEADING = "NBA Player Comp";
 import { formatSeasonGame, getSeasonForGameNumber } from "@/lib/seasons";
 import { useAuth } from "@/app/components/AuthProvider";
+import HotBadge, { HotStreakInfo } from "@/app/components/HotBadge";
 
 const API_BASE = "/api";
 
@@ -290,6 +291,16 @@ function PlayerDetailInner() {
   const [sosTable, setSosTable] = useState<
     { player_id: string; sos_index: number; games_rated: number }[]
   >([]);
+  const [hotInfo, setHotInfo] = useState<HotStreakInfo | undefined>(undefined);
+  const [clutchMine, setClutchMine] = useState<{
+    clutch_games: number;
+    clutch_pts: number;
+    clutch_ast: number;
+    clutch_stl: number;
+    clutch_blk: number;
+    clutch_fp: number;
+    clutch_fp_pg: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!id) {
@@ -312,6 +323,16 @@ function PlayerDetailInner() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    // Pull this player's hot-streak entry, if any.
+    fetch(`${API_BASE}/hot-streaks`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((arr: { player_id: string; last5_fpg: number; career_fpg: number; ratio: number }[]) => {
+        if (!Array.isArray(arr)) return;
+        const mine = arr.find((r) => r.player_id === id);
+        setHotInfo(mine ? { last5_fpg: mine.last5_fpg, career_fpg: mine.career_fpg, ratio: mine.ratio } : undefined);
+      })
+      .catch(() => {});
   }, [id]);
 
   // SoS is fetched separately so it can refetch when the season scope
@@ -319,6 +340,17 @@ function PlayerDetailInner() {
   // calls.
   useEffect(() => {
     const seasonParam = scope === "all" ? "" : `?season=${scope}`;
+    // Clutch — filters with scope so the player's clutch line matches
+    // whichever season pill is active.
+    fetch(`${API_BASE}/clutch-stats${seasonParam}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((arr) => {
+        if (!Array.isArray(arr) || !id) return;
+        const mine = arr.find((r) => r.player_id === id);
+        setClutchMine(mine ?? null);
+      })
+      .catch(() => {});
+
     fetch(`${API_BASE}/strength-of-schedule${seasonParam}`)
       .then((r) => (r.ok ? r.json() : []))
       .then((sos) => setSosTable(Array.isArray(sos) ? sos : []))
@@ -539,7 +571,10 @@ function PlayerDetailInner() {
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-6">
-        <h1 className="text-3xl font-bold font-display tracking-wide">{stats.name}</h1>
+        <h1 className="text-3xl font-bold font-display tracking-wide">
+          {stats.name}
+          <HotBadge info={hotInfo} />
+        </h1>
         {seasonsPlayed.length > 0 && (
           <div className="flex gap-1 text-xs">
             <button
@@ -636,6 +671,46 @@ function PlayerDetailInner() {
           Admin-only: ratings are opinionated/comparative and not for public
           display until the formula has been polished and approved. */}
       {isAdmin && <MaddenRatingsCard stats={scopedStats} leaderboard={leaderboard} />}
+
+      {/* Clutch — performance when leading team ≥ target-2 AND margin ≤ 2 */}
+      {clutchMine && clutchMine.clutch_games > 0 && (
+        <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5 mb-6">
+          <h2 className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+            Clutch {scope !== "all" && <span className="text-gray-400">· Season {scope}</span>}
+          </h2>
+          <div className="flex items-baseline gap-3 flex-wrap mb-3">
+            <span className="text-3xl font-bold font-display tabular-nums">{clutchMine.clutch_fp_pg.toFixed(2)}</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              clutch FP/game across {clutchMine.clutch_games} clutch game{clutchMine.clutch_games !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
+            {[
+              { label: "PTS", value: clutchMine.clutch_pts },
+              { label: "AST", value: clutchMine.clutch_ast },
+              { label: "STL", value: clutchMine.clutch_stl },
+              { label: "BLK", value: clutchMine.clutch_blk },
+              { label: "FP", value: clutchMine.clutch_fp },
+            ].map(({ label, value }) => (
+              <div key={label}>
+                <div className="text-lg font-bold font-display tabular-nums">{value}</div>
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</div>
+              </div>
+            ))}
+          </div>
+          <div
+            className="text-[11px] text-gray-500 dark:text-gray-400 mt-3 cursor-help"
+            title={
+              "A play counts as clutch if, at the moment it happens, the " +
+              "leading team's score is within 2 of target AND the margin " +
+              "is 2 or less. Stats are totals from those plays; clutch " +
+              "games count any game where clutch time occurred."
+            }
+          >
+            Score within 2 of target and ≤ 2-point margin.
+          </div>
+        </div>
+      )}
 
       {/* Strength of Schedule — filters with the page-wide season toggle */}
       {(() => {

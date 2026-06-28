@@ -3,6 +3,7 @@
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/components/AuthProvider";
+import HotBadge from "@/app/components/HotBadge";
 import {
   BarChart,
   Bar,
@@ -65,6 +66,7 @@ type SortKey =
   | "plus_minus_per_game"
   | "streak"
   | "sos_index"
+  | "clutch_fp_pg"
   | null;
 
 interface TodayData {
@@ -215,6 +217,9 @@ export default function Home() {
   /** SoS index by player_id. All-time only — doesn't change with the
    *  season toggle, so it's fetched once on mount. */
   const [sosByPlayer, setSosByPlayer] = useState<Record<string, number>>({});
+  /** Hot-streak info by player_id. All-time only; refreshed on mount. */
+  const [hotByPlayer, setHotByPlayer] = useState<Record<string, { last5_fpg: number; career_fpg: number; ratio: number }>>({});
+  const [clutchByPlayer, setClutchByPlayer] = useState<Record<string, { clutch_fp_pg: number; clutch_games: number }>>({});
 
   function handleSort(key: Exclude<SortKey, null>) {
     if (sortKey === key) {
@@ -277,6 +282,13 @@ export default function Home() {
       } else if (sortKey === "sos_index") {
         av = sosByPlayer[a.id] ?? -Infinity;
         bv = sosByPlayer[b.id] ?? -Infinity;
+      } else if (sortKey === "clutch_fp_pg") {
+        // Require ≥5 clutch games to rank — small-sample players shouldn't
+        // crowd the top by chance.
+        const ac = clutchByPlayer[a.id];
+        const bc = clutchByPlayer[b.id];
+        av = ac && ac.clutch_games >= 5 ? ac.clutch_fp_pg : -Infinity;
+        bv = bc && bc.clutch_games >= 5 ? bc.clutch_fp_pg : -Infinity;
       } else {
         av = a[sortKey] as number | string;
         bv = b[sortKey] as number | string;
@@ -287,7 +299,7 @@ export default function Home() {
       return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
     return arr;
-  }, [players, sortKey, sortDir, sosByPlayer]);
+  }, [players, sortKey, sortDir, sosByPlayer, clutchByPlayer]);
 
   function fetchLeaderboard(mode: "season" | "all-time", season?: number) {
     setSwitching(true);
@@ -299,8 +311,11 @@ export default function Home() {
       fetch(`${API_BASE}/strength-of-schedule${seasonParam}`)
         .then((r) => (r.ok ? r.json() : []))
         .catch(() => []),
+      fetch(`${API_BASE}/clutch-stats${seasonParam}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => []),
     ])
-      .then(([leaderboardRes, streaks, sos]) => {
+      .then(([leaderboardRes, streaks, sos, clutch]) => {
         if (mode === "season") {
           setPlayers(leaderboardRes.data);
           setGamesInSeason(leaderboardRes.season.gamesInSeason);
@@ -311,6 +326,9 @@ export default function Home() {
         const m: Record<string, number> = {};
         for (const r of (Array.isArray(sos) ? sos : [])) m[r.player_id] = r.sos_index;
         setSosByPlayer(m);
+        const cm: Record<string, { clutch_fp_pg: number; clutch_games: number }> = {};
+        for (const r of (Array.isArray(clutch) ? clutch : [])) cm[r.player_id] = { clutch_fp_pg: r.clutch_fp_pg, clutch_games: r.clutch_games };
+        setClutchByPlayer(cm);
       })
       .catch(() => {})
       .finally(() => setSwitching(false));
@@ -336,9 +354,12 @@ export default function Home() {
           fetch(`${API_BASE}/strength-of-schedule?season=${seasonInfo.currentSeason}`)
             .then((r) => (r.ok ? r.json() : []))
             .catch(() => []),
+          fetch(`${API_BASE}/clutch-stats?season=${seasonInfo.currentSeason}`)
+            .then((r) => (r.ok ? r.json() : []))
+            .catch(() => []),
         ]);
       })
-      .then(([leaderboardRes, streaks, allTimeLeaderboard, allTimeStreaks, sos]) => {
+      .then(([leaderboardRes, streaks, allTimeLeaderboard, allTimeStreaks, sos, clutch]) => {
         setPlayers(leaderboardRes.data);
         setGamesInSeason(leaderboardRes.season.gamesInSeason);
         setStreakData(streaks);
@@ -347,9 +368,25 @@ export default function Home() {
         const m: Record<string, number> = {};
         for (const r of (Array.isArray(sos) ? sos : [])) m[r.player_id] = r.sos_index;
         setSosByPlayer(m);
+        const cm: Record<string, { clutch_fp_pg: number; clutch_games: number }> = {};
+        for (const r of (Array.isArray(clutch) ? clutch : [])) cm[r.player_id] = { clutch_fp_pg: r.clutch_fp_pg, clutch_games: r.clutch_games };
+        setClutchByPlayer(cm);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    // Hot streaks — fetched once on mount, doesn't change with the season
+    // toggle since it's about current form regardless of which slice is
+    // displayed.
+    fetch(`${API_BASE}/hot-streaks`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((arr: { player_id: string; last5_fpg: number; career_fpg: number; ratio: number }[]) => {
+        if (!Array.isArray(arr)) return;
+        const m: Record<string, { last5_fpg: number; career_fpg: number; ratio: number }> = {};
+        for (const r of arr) m[r.player_id] = { last5_fpg: r.last5_fpg, career_fpg: r.career_fpg, ratio: r.ratio };
+        setHotByPlayer(m);
+      })
+      .catch(() => {});
   }, []);
 
   if (loading) {
@@ -636,6 +673,19 @@ export default function Home() {
               {showAdvanced && <SortTh label="+/-" field="plus_minus" active={sortKey} dir={sortDir} onClick={handleSort} advanced />}
               {showAdvanced && <SortTh label="+/-PG" field="plus_minus_per_game" active={sortKey} dir={sortDir} onClick={handleSort} advanced />}
               {showAdvanced && <SortTh label="STK" field="streak" active={sortKey} dir={sortDir} onClick={handleSort} advanced />}
+              {showAdvanced && (
+                <SortTh
+                  label="CLT"
+                  field="clutch_fp_pg"
+                  active={sortKey}
+                  dir={sortDir}
+                  onClick={handleSort}
+                  advanced
+                  tooltip={
+                    "Clutch FP/game. Aggregate fantasy points scored during clutch time (leader within 2 of target, margin ≤ 2), divided by games where clutch time occurred. Min 5 clutch games for ranking."
+                  }
+                />
+              )}
             </tr>
           </thead>
           <tbody>
@@ -652,6 +702,7 @@ export default function Home() {
                   >
                     {player.name}
                   </Link>
+                  <HotBadge info={hotByPlayer[player.id]} />
                 </td>
                 <td className="py-3 px-2 text-center tabular-nums">{player.games_played}</td>
                 <td className="py-3 px-2 text-center tabular-nums">{player.wins}-{player.games_played - player.wins}</td>
@@ -684,6 +735,18 @@ export default function Home() {
                     {player.streak}
                   </td>
                 )}
+                {showAdvanced && (() => {
+                  const c = clutchByPlayer[player.id];
+                  if (!c) return <td className="py-3 px-2 text-center text-gray-600">—</td>;
+                  return (
+                    <td
+                      className="py-3 px-2 text-center tabular-nums font-bold text-gray-300"
+                      title={`${c.clutch_fp_pg.toFixed(2)} clutch FP/game across ${c.clutch_games} clutch game${c.clutch_games !== 1 ? "s" : ""}`}
+                    >
+                      {c.clutch_fp_pg.toFixed(2)}
+                    </td>
+                  );
+                })()}
               </tr>
             ))}
           </tbody>
