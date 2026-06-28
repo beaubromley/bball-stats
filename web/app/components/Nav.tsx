@@ -7,6 +7,7 @@ import { useTheme } from "next-themes";
 import { useAuth } from "@/app/components/AuthProvider";
 import MePicker from "@/app/components/MePicker";
 import { useIndependenceWeek } from "@/lib/useIndependenceWeek";
+import { useHolidayLogo } from "@/lib/useHolidayLogo";
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -45,6 +46,9 @@ export default function Nav() {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
   const july4 = useIndependenceWeek();
+  // Active holiday-themed logo (or null on regular days). Independence
+  // Week reuses the existing window; other holidays are ±4 days.
+  const holidayLogo = useHolidayLogo();
 
   const loggedIn = isAdmin || isViewer;
   const links = [
@@ -72,8 +76,8 @@ export default function Nav() {
             Independence Week, falling back to the default if it's missing. */}
         <Link href="/" onClick={() => setMenuOpen(false)} className="mr-6 md:mr-10">
           <img
-            src={july4 ? "/logo-july4.png" : "/logo.png"}
-            onError={july4 ? (e) => { e.currentTarget.src = "/logo.png"; } : undefined}
+            src={holidayLogo ?? "/logo.png"}
+            onError={holidayLogo ? (e) => { e.currentTarget.src = "/logo.png"; } : undefined}
             alt="YBA Stats"
             width={360}
             height={120}
