@@ -7,6 +7,14 @@
   --foreground: #171717;
 }
 
+/* Bump the root font-size so every rem-based Tailwind text class scales
+   up proportionally. Default is 16px; 18px is ~12% larger across the
+   whole site — small captions are still readable while headings stay
+   in proportion. */
+html {
+  font-size: 18px;
+}
+
 .dark {
   --background: #030712;
   --foreground: #f3f4f6;

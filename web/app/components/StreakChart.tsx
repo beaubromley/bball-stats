@@ -36,9 +36,10 @@ interface StreakGame {
 const HOT_RATIO = 1.2;
 const COLD_RATIO = 0.5;
 
-const HOT = "#10B981";
-const COLD = "#EF4444";
-const NORMAL = "#3B82F6";
+const HOT = "#EF4444";
+const COLD = "#3B82F6";
+const NORMAL = "#9CA3AF";
+const LAST5 = "#F59E0B";
 const LINE = "#6B7280";
 
 /** Effective game length (game-to-11 equivalent), matching refreshGameStats:
@@ -172,9 +173,9 @@ export default function StreakChart({ games }: { games: StreakGame[] }) {
             />
             <ReferenceLine
               y={last5Fpg}
-              stroke={NORMAL}
+              stroke={LAST5}
               strokeWidth={2}
-              label={{ value: `Last 5 ${r1(last5Fpg)}`, position: "insideBottomLeft", fill: NORMAL, fontSize: 11 }}
+              label={{ value: `Last 5 ${r1(last5Fpg)}`, position: "insideBottomLeft", fill: LAST5, fontSize: 11 }}
             />
             <Line type="monotone" dataKey="fpg" stroke={LINE} strokeWidth={2} dot={renderDot} isAnimationActive={false} />
           </LineChart>
@@ -184,7 +185,7 @@ export default function StreakChart({ games }: { games: StreakGame[] }) {
             <span className="inline-block w-4 border-t-2 border-dashed border-gray-400" /> Career avg ({r1(careerFpg)})
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block w-4 border-t-2" style={{ borderColor: NORMAL }} /> Last 5 avg ({r1(last5Fpg)})
+            <span className="inline-block w-4 border-t-2" style={{ borderColor: LAST5 }} /> Last 5 avg ({r1(last5Fpg)})
           </span>
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: HOT, opacity: 0.5 }} /> Hot ≥ {r1(hot)}
