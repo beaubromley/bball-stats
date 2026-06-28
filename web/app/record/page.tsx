@@ -256,12 +256,27 @@ export default function RecordPage() {
   const watchUndoCountRef = useRef(0);
   // Remember last game's teams for "Run it back" (persisted in localStorage)
   const [lastGameTeams, setLastGameTeams] = useState<{ teamA: string[]; teamB: string[]; winningTeam: "A" | "B" | null } | null>(null);
+  // Purely visual: which team sits on the left side of the scoreboard
+  // and setup grid. Persists across reloads. Doesn't affect team A/B
+  // identity, scores, or any data — just the row direction.
+  const [teamsReversed, setTeamsReversed] = useState(false);
   useEffect(() => {
     try {
       const saved = localStorage.getItem("lastGameTeams");
       if (saved) setLastGameTeams(JSON.parse(saved));
+      const flipped = localStorage.getItem("recordTeamsReversed");
+      if (flipped === "1") setTeamsReversed(true);
     } catch { /* ignore */ }
   }, []);
+  function toggleTeamsReversed() {
+    setTeamsReversed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("recordTeamsReversed", next ? "1" : "0");
+      } catch { /* ignore */ }
+      return next;
+    });
+  }
 
   // Auto-clear stale interim text after 5 seconds of no updates
   const interimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1102,6 +1117,31 @@ export default function RecordPage() {
     }
   }
 
+  // Capture the API id back into local state on steal/block so undo can
+  // DELETE the right server-side row (mirrors the score path above).
+  function captureApiIdForLatest(
+    type: "steal" | "block",
+    playerName: string,
+    apiId: number,
+  ) {
+    setGame((prev) => {
+      let captured = false;
+      const events = [...prev.events].reverse().map((e) => {
+        if (
+          !captured &&
+          e.type === type &&
+          e.playerName === playerName &&
+          !e.apiId
+        ) {
+          captured = true;
+          return { ...e, apiId };
+        }
+        return e;
+      }).reverse();
+      return { ...prev, events };
+    });
+  }
+
   function postStealToApi(gameId: string, playerName: string, raw: string) {
     fetch(`${API_BASE}/games/${gameId}/events`, {
       method: "POST",
@@ -1112,7 +1152,12 @@ export default function RecordPage() {
         point_value: 0,
         raw_transcript: raw,
       }),
-    }).catch(() => {});
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.id) captureApiIdForLatest("steal", playerName, data.id);
+      })
+      .catch(() => {});
   }
 
   function postBlockToApi(gameId: string, playerName: string, raw: string) {
@@ -1125,7 +1170,12 @@ export default function RecordPage() {
         point_value: 0,
         raw_transcript: raw,
       }),
-    }).catch(() => {});
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.id) captureApiIdForLatest("block", playerName, data.id);
+      })
+      .catch(() => {});
   }
 
   function postFailedTranscript(gameId: string, text: string | null) {
@@ -1309,17 +1359,30 @@ export default function RecordPage() {
         actedOn = `${cmd.playerName} BLK`;
         showAcceptedCmd(actedOn, "rgba(168,85,247,1)");
       } else if (cmd.type === "correction") {
-        const lastScore = [...currentGame.events].reverse().find((e) => e.type === "score" && !e.undone);
-        if (lastScore) {
-          const evtId = lastScore.apiId || lastScore.id;
+        // Match undoLast: target the most recent non-undone event of
+        // any type, not just scores.
+        let lastEvent: typeof currentGame.events[number] | null = null;
+        for (let i = currentGame.events.length - 1; i >= 0; i--) {
+          const e = currentGame.events[i];
+          if (e.type !== "correction" && !e.undone) {
+            lastEvent = e;
+            break;
+          }
+        }
+        if (lastEvent && lastEvent.apiId) {
+          // Same correction post for all event types. point_value is
+          // -points for scores (negates the original) and 0 for
+          // steals/blocks/assists. The rollup uses corrected_event_id
+          // to skip the undone event uniformly. This keeps redo
+          // symmetric across event types.
           fetch(`${API_BASE}/games/${currentGame.gameId}/events`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              player_name: lastScore.playerName,
+              player_name: lastEvent.playerName,
               event_type: "correction",
-              point_value: -lastScore.points,
-              corrected_event_id: evtId,
+              point_value: lastEvent.type === "score" ? -lastEvent.points : 0,
+              corrected_event_id: lastEvent.apiId,
               raw_transcript: text,
             }),
           }).catch(() => {});
@@ -1327,15 +1390,17 @@ export default function RecordPage() {
         actedOn = "UNDO";
         showAcceptedCmd(actedOn, "rgba(239,68,68,1)");
       } else if (cmd.type === "redo") {
-        // Find the most recently undone score event and re-apply it
-        const lastUndone = [...currentGame.events].reverse().find((e) => e.type === "score" && e.undone);
+        // Find the most recently undone event of ANY type, not just
+        // scores. Server-side, the redo endpoint deletes the
+        // correction row that references the apiId; once it's gone the
+        // rollup includes the event again.
+        const lastUndone = [...currentGame.events].reverse().find((e) => e.undone);
         if (lastUndone) {
-          const scoreApiId = lastUndone.apiId || lastUndone.id;
-          // Delete the correction that references this score
+          const apiId = lastUndone.apiId || lastUndone.id;
           fetch(`${API_BASE}/games/${currentGame.gameId}/events/redo`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ corrected_event_id: scoreApiId }),
+            body: JSON.stringify({ corrected_event_id: apiId }),
           }).catch(() => {});
         }
         actedOn = "REDO";
@@ -1440,17 +1505,32 @@ export default function RecordPage() {
   }
 
   function undoLast(state: GameState, raw: string): GameState {
-    const lastScore = [...state.events]
-      .reverse()
-      .find((e) => e.type === "score" && !e.undone);
-    if (!lastScore) return state;
-    const events = state.events.map((e) =>
-      e.id === lastScore.id ? { ...e, undone: true } : e
+    // Find the most recent non-undone event of ANY type so steals/
+    // blocks/assists can be undone individually instead of always
+    // skipping back to the last score.
+    let lastIdx = -1;
+    for (let i = state.events.length - 1; i >= 0; i--) {
+      const e = state.events[i];
+      if (e.type !== "correction" && !e.undone) {
+        lastIdx = i;
+        break;
+      }
+    }
+    if (lastIdx < 0) return state;
+    const lastEvent = state.events[lastIdx];
+
+    // Same correction-marker dance for every event type — the rollup
+    // skips any event referenced by a correction's corrected_event_id,
+    // so this works uniformly for scores, steals, blocks, assists. The
+    // local correction event keeps point_value at -points (0 for non-
+    // score) so calcScores still re-subtracts the right amount.
+    const events = state.events.map((e, i) =>
+      i === lastIdx ? { ...e, undone: true } : e,
     );
     const correction: ScoringEvent = {
       id: nextId.current++,
-      playerName: lastScore.playerName,
-      points: -lastScore.points,
+      playerName: lastEvent.playerName,
+      points: -lastEvent.points,
       type: "correction",
       transcript: raw,
       time: Date.now(),
@@ -1462,22 +1542,36 @@ export default function RecordPage() {
   }
 
   function redoLast(state: GameState): GameState {
-    const lastUndone = [...state.events]
-      .reverse()
-      .find((e) => e.type === "score" && e.undone);
-    if (!lastUndone) return state;
-    // Un-mark the score as undone
-    let events = state.events.map((e) =>
-      e.id === lastUndone.id ? { ...e, undone: false } : e
+    // Find the most recently undone event of any type so steals/blocks
+    // can be restored too. Pick the LATEST correction in the array and
+    // walk back to the event it cancelled.
+    const reversed = [...state.events].reverse();
+    const lastCorrIdxReversed = reversed.findIndex((e) => e.type === "correction");
+    if (lastCorrIdxReversed < 0) return state;
+    const lastCorrIdx = state.events.length - 1 - lastCorrIdxReversed;
+    const correction = state.events[lastCorrIdx];
+
+    // The matching undone event: same player, opposite points
+    // (or 0 for non-score corrections), earlier in the array.
+    const undoneIdx = (() => {
+      for (let i = lastCorrIdx - 1; i >= 0; i--) {
+        const e = state.events[i];
+        if (e.undone && e.playerName === correction.playerName) {
+          // Score correction: points match (negated). Non-score
+          // correction: both are 0.
+          if (correction.points === -e.points || (correction.points === 0 && e.points === 0)) {
+            return i;
+          }
+        }
+      }
+      return -1;
+    })();
+    if (undoneIdx < 0) return state;
+
+    let events = state.events.map((e, i) =>
+      i === undoneIdx ? { ...e, undone: false } : e,
     );
-    // Remove the correction event for this score
-    const corrIdx = [...events].reverse().findIndex(
-      (e) => e.type === "correction" && e.playerName === lastUndone.playerName && e.points === -lastUndone.points
-    );
-    if (corrIdx >= 0) {
-      const actualIdx = events.length - 1 - corrIdx;
-      events = events.filter((_, i) => i !== actualIdx);
-    }
+    events = events.filter((_, i) => i !== lastCorrIdx);
     const newState = { ...state, events };
     const scores = calcScores(events, newState);
     return { ...newState, ...scores };
@@ -1802,7 +1896,7 @@ export default function RecordPage() {
           onClick={() => setShowScoreboard(false)}
         >
           <div className="text-xs text-gray-600 font-display tracking-wider mb-6">TAP TO CLOSE</div>
-          <div className="flex items-center gap-6">
+          <div className={`flex items-center gap-6 ${teamsReversed ? "flex-row-reverse" : ""}`}>
             <div className="text-center">
               <div className="text-xl text-blue-400 font-display tracking-widest">TEAM A</div>
               <div className="text-[200px] font-display leading-none tabular-nums">{game.teamAScore}</div>
@@ -1829,7 +1923,7 @@ export default function RecordPage() {
       )}
 
       {/* Scoreboard */}
-      <div className="flex items-center justify-between py-6">
+      <div className={`flex items-center justify-between py-6 ${teamsReversed ? "flex-row-reverse" : ""}`}>
         <div className="text-center flex-1">
           <div className="text-xs text-gray-500 tracking-wider font-display">TEAM A</div>
           <div className="text-6xl font-bold font-display tabular-nums">
@@ -1876,6 +1970,14 @@ export default function RecordPage() {
               </div>
             </>
           )}
+          <button
+            type="button"
+            onClick={toggleTeamsReversed}
+            title="Swap which team shows on the left vs right (display only)"
+            className="mt-2 text-xs text-gray-500 hover:text-blue-400 px-1.5 py-0.5 border border-gray-300 dark:border-gray-700 rounded transition-colors"
+          >
+            Flip ⇄
+          </button>
         </div>
         <div className="text-center flex-1">
           <div className="text-xs text-gray-500 tracking-wider font-display">TEAM B</div>
@@ -1936,6 +2038,32 @@ export default function RecordPage() {
               Fullscreen
             </button>
           </div>
+          {/* Voice-name cue card — lists what to call each rostered
+              player so the user remembers any non-default voice names. */}
+          {inputMode === "voice" && (game.teamA.length + game.teamB.length > 0) && (() => {
+            const lookup = new Map<string, string>();
+            for (const kp of [...expectedPlayers, ...fullPlayerList]) {
+              if (!lookup.has(kp.name)) lookup.set(kp.name, kp.voiceName);
+            }
+            const rows = [...game.teamA, ...game.teamB]
+              .map((name) => ({ name, voice: lookup.get(name) }))
+              .filter((r): r is { name: string; voice: string } => !!r.voice);
+            if (rows.length === 0) return null;
+            return (
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+                <span className="font-display uppercase tracking-wider text-gray-400 dark:text-gray-500 mr-2">
+                  Say:
+                </span>
+                {rows.map((r, i) => (
+                  <span key={r.name}>
+                    {i > 0 && <span className="text-gray-400 dark:text-gray-600 mx-1">·</span>}
+                    <span className="font-bold text-gray-700 dark:text-gray-200 capitalize">{r.voice}</span>
+                    <span className="text-gray-400 dark:text-gray-600"> ({r.name})</span>
+                  </span>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -2011,12 +2139,10 @@ export default function RecordPage() {
               1s & 2s
             </button>
             <button
-              onClick={() => setGame((prev) => ({ ...prev, scoringMode: "2s3s" }))}
-              className={`px-3 py-1 text-sm rounded-lg font-medium transition-colors ${
-                game.scoringMode === "2s3s"
-                  ? "bg-blue-600 text-white"
-                  : "border border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500"
-              }`}
+              type="button"
+              disabled
+              title="2s & 3s mode is disabled for now"
+              className="px-3 py-1 text-sm rounded-lg font-medium border border-gray-300 dark:border-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-50"
             >
               2s & 3s
             </button>
@@ -2181,7 +2307,7 @@ export default function RecordPage() {
           </div>
 
           {/* Team preview */}
-          <div className="flex gap-4 text-sm">
+          <div className={`flex gap-4 text-sm ${teamsReversed ? "flex-row-reverse" : ""}`}>
             <div className="flex-1">
               <div className="text-blue-400 font-semibold mb-1">
                 Team A ({setupTeamA.length})
@@ -2457,57 +2583,109 @@ export default function RecordPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="text-xs text-blue-400 font-semibold mb-1">Team A</div>
-                  {game.teamA.map((name) => (
-                    <div key={name} className="flex items-center justify-between py-0.5">
-                      <span className="text-sm">{name}</span>
-                      <button
-                        onClick={() => {
-                          setGame((prev) => ({
-                            ...prev,
-                            teamA: prev.teamA.filter((p) => p !== name),
-                            teamB: [...prev.teamB, name],
-                          }));
-                          if (game.gameId) {
-                            fetch(`${API_BASE}/games/${game.gameId}/roster`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ player_name: name, new_team: "B" }),
-                            }).catch(() => {});
-                          }
-                        }}
-                        className="text-xs text-orange-400 hover:text-orange-300"
-                      >
-                        → B
-                      </button>
-                    </div>
-                  ))}
+                  {game.teamA.map((name) => {
+                    const hasStats = game.events.some(
+                      (e) => e.type !== "correction" && !e.undone && e.playerName === name,
+                    );
+                    return (
+                      <div key={name} className="flex items-center justify-between py-0.5">
+                        <span className="text-sm">{name}</span>
+                        <div className="flex items-center gap-2">
+                          {!hasStats && (
+                            <button
+                              onClick={() => {
+                                setGame((prev) => ({
+                                  ...prev,
+                                  teamA: prev.teamA.filter((p) => p !== name),
+                                }));
+                                if (game.gameId) {
+                                  fetch(`${API_BASE}/games/${game.gameId}/roster?player_name=${encodeURIComponent(name)}`, {
+                                    method: "DELETE",
+                                  }).catch(() => {});
+                                }
+                              }}
+                              className="text-xs text-red-400 hover:text-red-300"
+                              title="Remove from game (only allowed before any stats are recorded)"
+                            >
+                              ✕
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setGame((prev) => ({
+                                ...prev,
+                                teamA: prev.teamA.filter((p) => p !== name),
+                                teamB: [...prev.teamB, name],
+                              }));
+                              if (game.gameId) {
+                                fetch(`${API_BASE}/games/${game.gameId}/roster`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ player_name: name, new_team: "B" }),
+                                }).catch(() => {});
+                              }
+                            }}
+                            className="text-xs text-orange-400 hover:text-orange-300"
+                          >
+                            → B
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
                 <div>
                   <div className="text-xs text-orange-400 font-semibold mb-1">Team B</div>
-                  {game.teamB.map((name) => (
-                    <div key={name} className="flex items-center justify-between py-0.5">
-                      <span className="text-sm">{name}</span>
-                      <button
-                        onClick={() => {
-                          setGame((prev) => ({
-                            ...prev,
-                            teamB: prev.teamB.filter((p) => p !== name),
-                            teamA: [...prev.teamA, name],
-                          }));
-                          if (game.gameId) {
-                            fetch(`${API_BASE}/games/${game.gameId}/roster`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ player_name: name, new_team: "A" }),
-                            }).catch(() => {});
-                          }
-                        }}
-                        className="text-xs text-blue-400 hover:text-blue-300"
-                      >
-                        → A
-                      </button>
-                    </div>
-                  ))}
+                  {game.teamB.map((name) => {
+                    const hasStats = game.events.some(
+                      (e) => e.type !== "correction" && !e.undone && e.playerName === name,
+                    );
+                    return (
+                      <div key={name} className="flex items-center justify-between py-0.5">
+                        <span className="text-sm">{name}</span>
+                        <div className="flex items-center gap-2">
+                          {!hasStats && (
+                            <button
+                              onClick={() => {
+                                setGame((prev) => ({
+                                  ...prev,
+                                  teamB: prev.teamB.filter((p) => p !== name),
+                                }));
+                                if (game.gameId) {
+                                  fetch(`${API_BASE}/games/${game.gameId}/roster?player_name=${encodeURIComponent(name)}`, {
+                                    method: "DELETE",
+                                  }).catch(() => {});
+                                }
+                              }}
+                              className="text-xs text-red-400 hover:text-red-300"
+                              title="Remove from game (only allowed before any stats are recorded)"
+                            >
+                              ✕
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setGame((prev) => ({
+                                ...prev,
+                                teamB: prev.teamB.filter((p) => p !== name),
+                                teamA: [...prev.teamA, name],
+                              }));
+                              if (game.gameId) {
+                                fetch(`${API_BASE}/games/${game.gameId}/roster`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ player_name: name, new_team: "A" }),
+                                }).catch(() => {});
+                              }
+                            }}
+                            className="text-xs text-blue-400 hover:text-blue-300"
+                          >
+                            → A
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               <div className="mt-1">

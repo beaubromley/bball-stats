@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 const GROUP_ID = "95603942";
-const DAYS = 14;
+const DEFAULT_DAYS = 14;
+const MAX_DAYS = 365;
 const BASE_URL = "https://api.groupme.com/v3";
 
 interface GroupMeMessage {
@@ -12,7 +13,7 @@ interface GroupMeMessage {
   system?: boolean;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const token = process.env.GROUPME_ACCESS_TOKEN;
   if (!token) {
     return NextResponse.json(
@@ -21,8 +22,16 @@ export async function GET() {
     );
   }
 
+  const url = new URL(req.url);
+  const daysParam = url.searchParams.get("days");
+  let days = DEFAULT_DAYS;
+  if (daysParam) {
+    const n = parseInt(daysParam, 10);
+    if (!Number.isNaN(n) && n > 0) days = Math.min(n, MAX_DAYS);
+  }
+
   try {
-    const messages = await fetchRecentMessages(token);
+    const messages = await fetchRecentMessages(token, days);
     const members = getActiveMembers(messages);
     return NextResponse.json(members);
   } catch (err) {
@@ -30,8 +39,8 @@ export async function GET() {
   }
 }
 
-async function fetchRecentMessages(token: string): Promise<GroupMeMessage[]> {
-  const cutoff = Date.now() - DAYS * 24 * 60 * 60 * 1000;
+async function fetchRecentMessages(token: string, days: number): Promise<GroupMeMessage[]> {
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   const allMessages: GroupMeMessage[] = [];
   let beforeId: string | undefined;
 

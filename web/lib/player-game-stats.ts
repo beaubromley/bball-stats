@@ -187,7 +187,51 @@ export async function refreshGameStats(gameId: string): Promise<void> {
     playerToTeam.set(r.player_id, r.team);
   }
 
+  // Identify any events that have been undone via a correction row.
+  // Pass 1 trusts the correction's corrected_event_id; pass 2 falls
+  // back to the legacy (player, opposite point_value, earlier ts)
+  // heuristic for old score-correction rows that predate the explicit
+  // pointer. This keeps the rollup correct for steals/blocks/assists
+  // that get undone too, not just scores.
+  const scoreIdSet = new Set(
+    events.filter((e) => e.event_type === "score").map((e) => e.id),
+  );
+  const undoneIds = new Set<number>();
+  const pendingCorrections: EventRow[] = [];
+  for (const c of events) {
+    if (c.event_type !== "correction") continue;
+    if (
+      c.corrected_event_id !== null &&
+      !undoneIds.has(c.corrected_event_id)
+    ) {
+      undoneIds.add(c.corrected_event_id);
+    } else {
+      pendingCorrections.push(c);
+    }
+  }
+  for (const c of pendingCorrections) {
+    // Legacy fallback — only meaningful for score corrections that
+    // carried no corrected_event_id pointer.
+    const cands = events
+      .filter(
+        (s) =>
+          s.event_type === "score" &&
+          s.player_id === c.player_id &&
+          s.point_value === -c.point_value &&
+          s.created_at < c.created_at &&
+          scoreIdSet.has(s.id) &&
+          !undoneIds.has(s.id),
+      )
+      .sort(
+        (a, b) =>
+          b.created_at.localeCompare(a.created_at) || b.id - a.id,
+      );
+    if (cands.length > 0) undoneIds.add(cands[0].id);
+  }
+
   for (const e of events) {
+    if (e.event_type === "correction") continue; // markers, not counted
+    if (undoneIds.has(e.id)) continue; // undone by a later correction
     const agg = byPlayer.get(e.player_id);
     if (!agg) continue; // event for a player not on the roster — skip
     switch (e.event_type) {
@@ -195,12 +239,6 @@ export async function refreshGameStats(gameId: string): Promise<void> {
         agg.points += e.point_value;
         if (e.point_value === 1) agg.ones_made += 1;
         else if (e.point_value === 2) agg.twos_made += 1;
-        break;
-      case "correction":
-        // Corrections have negative point_value; they cancel an undone score.
-        agg.points += e.point_value;
-        if (e.point_value === -1) agg.ones_made -= 1;
-        else if (e.point_value === -2) agg.twos_made -= 1;
         break;
       case "assist":
         agg.assists += 1;

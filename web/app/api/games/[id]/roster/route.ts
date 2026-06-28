@@ -45,3 +45,44 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   bustStatsCache();
   return NextResponse.json({ ok: true });
 }
+
+/**
+ * Remove a player from the roster of an in-progress game. Refuses if
+ * the player already has any events recorded — those rows can't be
+ * cleanly dropped without rewriting stats history. Use undo first if
+ * you logged something against the wrong player.
+ */
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAuth(req);
+  if (denied) return denied;
+  await initDb();
+  const { id } = await params;
+  const { searchParams } = new URL(req.url);
+  const playerName = searchParams.get("player_name");
+  if (!playerName) {
+    return NextResponse.json({ error: "player_name required" }, { status: 400 });
+  }
+
+  const db = getDb();
+  const playerId = await ensurePlayer(playerName);
+
+  const events = await db.execute({
+    sql: "SELECT COUNT(*) AS cnt FROM game_events WHERE game_id = ? AND player_id = ?",
+    args: [id, playerId],
+  });
+  const cnt = Number(events.rows[0]?.cnt ?? 0);
+  if (cnt > 0) {
+    return NextResponse.json(
+      { error: `Player has ${cnt} event${cnt === 1 ? "" : "s"} recorded — undo them first.` },
+      { status: 409 },
+    );
+  }
+
+  await db.execute({
+    sql: "DELETE FROM rosters WHERE game_id = ? AND player_id = ?",
+    args: [id, playerId],
+  });
+  await refreshGameStats(id);
+  bustStatsCache();
+  return NextResponse.json({ ok: true });
+}

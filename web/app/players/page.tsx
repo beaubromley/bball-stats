@@ -30,6 +30,9 @@ export default function PlayersPage() {
   const [addForm, setAddForm] = useState({ first_name: "", last_name: "", full_name: "", voice_name: "", groupme_user_id: "" });
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // GroupMe members (last 90 days of chat activity) who aren't yet
+  // linked to any player. Drives the "Pick from GroupMe" dropdown.
+  const [unlinkedMembers, setUnlinkedMembers] = useState<{ user_id: string; name: string }[]>([]);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -47,7 +50,33 @@ export default function PlayersPage() {
     try {
       const res = await fetch(`${API_BASE}/players?status=all`);
       const data = await res.json();
-      setPlayers(data.players || []);
+      const list: Player[] = data.players || [];
+      setPlayers(list);
+      // Recompute unlinked GroupMe members against the fresh player list.
+      // 90-day window catches sometimes-posters; ?days= was added to the
+      // members route so the default 14-day filter still applies elsewhere.
+      try {
+        const gmRes = await fetch(`${API_BASE}/groupme/members?days=90`);
+        if (gmRes.ok) {
+          const members: { user_id: string; name: string }[] = await gmRes.json();
+          const linked = new Set(
+            list
+              .map((p) => p.groupme_user_id)
+              .filter((id): id is string => !!id),
+          );
+          const dedup = new Map<string, string>();
+          for (const m of members) {
+            if (!linked.has(m.user_id) && !dedup.has(m.user_id)) {
+              dedup.set(m.user_id, m.name);
+            }
+          }
+          const arr = Array.from(dedup, ([user_id, name]) => ({ user_id, name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          setUnlinkedMembers(arr);
+        }
+      } catch {
+        // No big deal — picker just stays empty.
+      }
     } catch {
       setError("Failed to load players");
     } finally {
@@ -200,13 +229,34 @@ export default function PlayersPage() {
               onChange={(e) => setAddForm({ ...addForm, voice_name: e.target.value })}
               className="px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
             />
-            <input
-              type="text"
-              placeholder="GroupMe user_id (optional)"
-              value={addForm.groupme_user_id}
-              onChange={(e) => setAddForm({ ...addForm, groupme_user_id: e.target.value })}
-              className="px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-mono focus:outline-none focus:border-blue-500"
-            />
+            <div className="flex flex-col gap-1">
+              {unlinkedMembers.length > 0 && (
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setAddForm({ ...addForm, groupme_user_id: e.target.value });
+                    }
+                  }}
+                  className="px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                  title={`${unlinkedMembers.length} GroupMe member${unlinkedMembers.length === 1 ? "" : "s"} not linked to any player (last 90 days)`}
+                >
+                  <option value="">— Pick from GroupMe (unlinked) —</option>
+                  {unlinkedMembers.map((m) => (
+                    <option key={m.user_id} value={m.user_id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <input
+                type="text"
+                placeholder="GroupMe user_id (optional)"
+                value={addForm.groupme_user_id}
+                onChange={(e) => setAddForm({ ...addForm, groupme_user_id: e.target.value })}
+                className="px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-mono focus:outline-none focus:border-blue-500"
+              />
+            </div>
           </div>
           <button
             type="submit"
@@ -279,13 +329,34 @@ export default function PlayersPage() {
                         />
                       </td>
                       <td className="py-2 pr-3">
-                        <input
-                          type="text"
-                          value={editForm.groupme_user_id}
-                          onChange={(e) => setEditForm({ ...editForm, groupme_user_id: e.target.value })}
-                          className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm font-mono focus:outline-none focus:border-blue-500"
-                          placeholder="user_id"
-                        />
+                        <div className="flex flex-col gap-1">
+                          {unlinkedMembers.length > 0 && (
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  setEditForm({ ...editForm, groupme_user_id: e.target.value });
+                                }
+                              }}
+                              className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                              title={`${unlinkedMembers.length} unlinked GroupMe member${unlinkedMembers.length === 1 ? "" : "s"} (last 90 days)`}
+                            >
+                              <option value="">— Pick from GroupMe —</option>
+                              {unlinkedMembers.map((m) => (
+                                <option key={m.user_id} value={m.user_id}>
+                                  {m.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          <input
+                            type="text"
+                            value={editForm.groupme_user_id}
+                            onChange={(e) => setEditForm({ ...editForm, groupme_user_id: e.target.value })}
+                            className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm font-mono focus:outline-none focus:border-blue-500"
+                            placeholder="user_id"
+                          />
+                        </div>
                       </td>
                       <td className="py-2 pr-3">
                         <select
