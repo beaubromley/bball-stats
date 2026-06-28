@@ -11,15 +11,16 @@ import {
   ReferenceLine,
   ReferenceArea,
 } from "recharts";
+import { formatSeasonGameCompact } from "@/lib/seasons";
 
 /**
  * Recent-form chart for the player page. Plots normalized fantasy points per
  * game (game-to-11) for the last 10 games against the player's career average
  * (dashed baseline) and last-5 average, with shaded hot / cold ranges.
  *
- * Hot/cold mirror lib/hot-streaks.ts: hot = ≥1.2× career FPG. Cold is the
- * symmetric ≤0.8×. "Career" here means all games, so this view intentionally
- * ignores the page's season toggle.
+ * Hot/cold mirror lib/hot-streaks.ts: hot = ≥1.2× career FPG; cold = ≤0.5×.
+ * "Career" here means all games, so this view intentionally ignores the
+ * page's season toggle.
  */
 interface StreakGame {
   fantasy_points: number;
@@ -33,7 +34,7 @@ interface StreakGame {
 }
 
 const HOT_RATIO = 1.2;
-const COLD_RATIO = 0.8;
+const COLD_RATIO = 0.5;
 
 const HOT = "#10B981";
 const COLD = "#EF4444";
@@ -84,7 +85,7 @@ export default function StreakChart({ games }: { games: StreakGame[] }) {
       const raw = gameFpg(g);
       const zone = raw >= hot ? "hot" : raw <= cold ? "cold" : "normal";
       return {
-        label: `#${g.game_number}`,
+        label: formatSeasonGameCompact(g.game_number),
         fpg: r1(raw),
         zone,
         result: g.result,

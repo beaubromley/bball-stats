@@ -575,7 +575,15 @@ function CommaList<T>({
   );
 }
 
-function SingleGameSection({ records }: { records: SingleGameRecord[] }) {
+function SingleGameSection({
+  records,
+  me,
+  meBests,
+}: {
+  records: SingleGameRecord[];
+  me: { id: string; name: string } | null;
+  meBests: Record<string, { value: number; game_id: string; game_number: number; season: number; start_time: string } | undefined> | undefined;
+}) {
   const groups = groupByStat(records);
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
@@ -608,6 +616,8 @@ function SingleGameSection({ records }: { records: SingleGameRecord[] }) {
               }
             }
             const playerGroups = Array.from(byPlayer.values());
+            const meHolds = me ? playerGroups.some((pg) => pg.player_id === me.id) : false;
+            const mine = me && meBests ? meBests[g.stat] : undefined;
             return (
               <RecordHeaderRow key={g.stat} label={STAT_SHORT[g.stat]} value={g.rows[0].value}>
                 <CommaList
@@ -641,6 +651,19 @@ function SingleGameSection({ records }: { records: SingleGameRecord[] }) {
                     </span>
                   )}
                 />
+                {!meHolds && me && mine && mine.value > 0 && (
+                  <div className="mt-1 text-xs text-blue-500 dark:text-blue-400 flex items-baseline gap-2 flex-wrap">
+                    <span className="font-display uppercase tracking-wider text-[10px]">
+                      Your best
+                    </span>
+                    <span className="font-bold tabular-nums">{mine.value}</span>
+                    <GameRef
+                      gameId={mine.game_id}
+                      season={mine.season}
+                      gameNumber={mine.game_number}
+                    />
+                  </div>
+                )}
               </RecordHeaderRow>
             );
           })}
@@ -732,7 +755,15 @@ function GameLevelSection({ records }: { records: GameRecord[] }) {
   );
 }
 
-function StreakSection({ records }: { records: StreakRecord[] }) {
+function StreakSection({
+  records,
+  me,
+  meStreaks,
+}: {
+  records: StreakRecord[];
+  me: { id: string; name: string } | null;
+  meStreaks: { win: number; loss: number } | undefined;
+}) {
   const groups = groupByStat(records);
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-5">
@@ -743,32 +774,46 @@ function StreakSection({ records }: { records: StreakRecord[] }) {
         <p className="text-sm text-gray-500">Not enough games yet.</p>
       ) : (
         <ul className="divide-y divide-gray-100 dark:divide-gray-900">
-          {groups.map((g) => (
-            <RecordHeaderRow key={g.stat} label={STAT_SHORT[g.stat]} value={g.rows[0].value}>
-              <CommaList
-                items={g.rows}
-                keyOf={(r) => `${r.player_id}-${r.start_time}`}
-                render={(r) => (
-                  <>
-                    <Link
-                      href={`/player?id=${r.player_id}`}
-                      className="text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
-                    >
-                      {r.player_name}
-                    </Link>
-                    {/* Range label, linked to the final game of the streak. */}
-                    <GameRef
-                      gameId={r.end_game_id}
-                      season={r.start_season}
-                      gameNumber={r.start_game_number}
-                      endGameNumber={r.end_game_number}
-                      endSeason={r.end_season}
-                    />
-                  </>
+          {groups.map((g) => {
+            const meHolds = me ? g.rows.some((r) => r.player_id === me.id) : false;
+            const mineValue = me && meStreaks
+              ? (g.stat === "win_streak" ? meStreaks.win : meStreaks.loss)
+              : 0;
+            return (
+              <RecordHeaderRow key={g.stat} label={STAT_SHORT[g.stat]} value={g.rows[0].value}>
+                <CommaList
+                  items={g.rows}
+                  keyOf={(r) => `${r.player_id}-${r.start_time}`}
+                  render={(r) => (
+                    <>
+                      <Link
+                        href={`/player?id=${r.player_id}`}
+                        className="text-base font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+                      >
+                        {r.player_name}
+                      </Link>
+                      {/* Range label, linked to the final game of the streak. */}
+                      <GameRef
+                        gameId={r.end_game_id}
+                        season={r.start_season}
+                        gameNumber={r.start_game_number}
+                        endGameNumber={r.end_game_number}
+                        endSeason={r.end_season}
+                      />
+                    </>
+                  )}
+                />
+                {!meHolds && me && mineValue > 0 && (
+                  <div className="mt-1 text-xs text-blue-500 dark:text-blue-400 flex items-baseline gap-2">
+                    <span className="font-display uppercase tracking-wider text-[10px]">
+                      Your best
+                    </span>
+                    <span className="font-bold tabular-nums">{mineValue}</span>
+                  </div>
                 )}
-              />
-            </RecordHeaderRow>
-          ))}
+              </RecordHeaderRow>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -906,6 +951,15 @@ export default function HomePage() {
   const [mvpVotingOpenSeason, setMvpVotingOpenSeason] = useState<number | null>(null);
   const [hotByPlayer, setHotByPlayer] = useState<Record<string, { last5_fpg: number; career_fpg: number; ratio: number }>>({});
 
+  // Picked player's personal bests. Computed client-side from the
+  // per-game stats endpoint so the Records section can show "your best"
+  // when you don't already hold the record outright.
+  interface MeBests {
+    singleGame: Record<string, { value: number; game_id: string; game_number: number; season: number; start_time: string } | undefined>;
+    streak: { win: number; loss: number };
+  }
+  const [meBests, setMeBests] = useState<MeBests | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -975,6 +1029,89 @@ export default function HomePage() {
       cancelled = true;
     };
   }, []);
+
+  // Personal bests for the picked player. Recomputed on selection change.
+  useEffect(() => {
+    if (!me) {
+      setMeBests(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`${API_BASE}/players/${me.id}/games`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: {
+        id: string;
+        start_time: string;
+        result: string;
+        points_scored: number;
+        assists: number;
+        steals: number;
+        blocks: number;
+        fantasy_points: number;
+        game_number: number;
+      }[]) => {
+        if (cancelled || !Array.isArray(rows) || rows.length === 0) {
+          setMeBests({ singleGame: {}, streak: { win: 0, loss: 0 } });
+          return;
+        }
+        // For each stat, find the player's best single-game value. Ties
+        // pick the most recent occurrence so "your best · S2 G14" shows
+        // their freshest peak.
+        const sorted = [...rows].sort((a, b) =>
+          b.start_time.localeCompare(a.start_time),
+        );
+        const bestOf = (key: keyof typeof sorted[0]) => {
+          let best: typeof sorted[0] | null = null;
+          for (const r of sorted) {
+            const v = Number(r[key]);
+            if (!best || v > Number(best[key])) best = r;
+          }
+          return best;
+        };
+        const seasonOf = (gameNumber: number) =>
+          gameNumber > 0 ? Math.ceil(gameNumber / 82) : 0;
+        const gameInSeason = (gameNumber: number) =>
+          gameNumber > 0 ? ((gameNumber - 1) % 82) + 1 : 0;
+        const toEntry = (key: keyof typeof sorted[0]) => {
+          const b = bestOf(key);
+          if (!b) return undefined;
+          return {
+            value: Number(b[key]),
+            game_id: b.id,
+            game_number: gameInSeason(Number(b.game_number)),
+            season: seasonOf(Number(b.game_number)),
+            start_time: b.start_time,
+          };
+        };
+
+        const singleGame = {
+          points: toEntry("points_scored"),
+          assists: toEntry("assists"),
+          steals: toEntry("steals"),
+          blocks: toEntry("blocks"),
+          fantasy_points: toEntry("fantasy_points"),
+        } as MeBests["singleGame"];
+
+        // Walk chronologically for longest W/L streaks.
+        const chrono = [...rows].sort((a, b) =>
+          a.start_time.localeCompare(b.start_time),
+        );
+        let curW = 0, curL = 0, longestWin = 0, longestLoss = 0;
+        for (const g of chrono) {
+          if (g.result === "W") {
+            curW += 1; curL = 0;
+            if (curW > longestWin) longestWin = curW;
+          } else {
+            curL += 1; curW = 0;
+            if (curL > longestLoss) longestLoss = curL;
+          }
+        }
+
+        setMeBests({ singleGame, streak: { win: longestWin, loss: longestLoss } });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [me]);
 
   if (loading || !meta) {
     return <div className="text-gray-500 text-center py-16">Loading...</div>;
@@ -1205,10 +1342,10 @@ export default function HomePage() {
         <>
           <h2 className="text-xl font-bold font-display uppercase tracking-wide pt-2">Records</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <SingleGameSection records={records.single_game} />
+            <SingleGameSection records={records.single_game} me={me} meBests={meBests?.singleGame} />
             <SeasonSection records={records.season} />
             <GameLevelSection records={records.game} />
-            <StreakSection records={records.streak} />
+            <StreakSection records={records.streak} me={me} meStreaks={meBests?.streak} />
           </div>
           <MilestoneWatchSection alerts={records.milestones} />
         </>

@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/components/AuthProvider";
 import HotBadge from "@/app/components/HotBadge";
 import { useMe } from "@/app/components/MeContext";
+import { formatSeasonGameCompact } from "@/lib/seasons";
 import {
   BarChart,
   Bar,
@@ -1134,7 +1135,7 @@ export default function Home() {
                       const date = chartData[index]?.date as string;
                       return (
                         <g transform={`translate(${x},${y})`}>
-                          <text x={0} y={0} dy={12} textAnchor="middle" fill="#9CA3AF" fontSize={11}>#{payload.value}</text>
+                          <text x={0} y={0} dy={12} textAnchor="middle" fill="#9CA3AF" fontSize={11}>{formatSeasonGameCompact(Number(payload.value))}</text>
                           {showDate && <text x={0} y={0} dy={26} textAnchor="middle" fill="#6B7280" fontSize={10}>{date}</text>}
                         </g>
                       );
@@ -1165,6 +1166,7 @@ export default function Home() {
                   <Tooltip
                     contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151", borderRadius: "8px", fontSize: "12px" }}
                     labelStyle={{ color: "#9CA3AF", fontWeight: "bold", marginBottom: "4px" }}
+                    labelFormatter={(v) => formatSeasonGameCompact(Number(v))}
                     itemSorter={(item) => -(item.value as number ?? 0)}
                   />
                   <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "12px" }} />
