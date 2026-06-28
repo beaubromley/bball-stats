@@ -33,6 +33,9 @@ export default function PlayersPage() {
   // GroupMe members (last 90 days of chat activity) who aren't yet
   // linked to any player. Drives the "Pick from GroupMe" dropdown.
   const [unlinkedMembers, setUnlinkedMembers] = useState<{ user_id: string; name: string }[]>([]);
+  // Status of the GroupMe fetch so the picker can show a useful message
+  // when there's nothing to list ("none unlinked" vs "couldn't load").
+  const [groupMeStatus, setGroupMeStatus] = useState<"loading" | "ok" | "error">("loading");
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -55,9 +58,13 @@ export default function PlayersPage() {
       // Recompute unlinked GroupMe members against the fresh player list.
       // 90-day window catches sometimes-posters; ?days= was added to the
       // members route so the default 14-day filter still applies elsewhere.
+      setGroupMeStatus("loading");
       try {
         const gmRes = await fetch(`${API_BASE}/groupme/members?days=90`);
-        if (gmRes.ok) {
+        if (!gmRes.ok) {
+          setGroupMeStatus("error");
+          setUnlinkedMembers([]);
+        } else {
           const members: { user_id: string; name: string }[] = await gmRes.json();
           const linked = new Set(
             list
@@ -73,9 +80,11 @@ export default function PlayersPage() {
           const arr = Array.from(dedup, ([user_id, name]) => ({ user_id, name }))
             .sort((a, b) => a.name.localeCompare(b.name));
           setUnlinkedMembers(arr);
+          setGroupMeStatus("ok");
         }
       } catch {
-        // No big deal — picker just stays empty.
+        setGroupMeStatus("error");
+        setUnlinkedMembers([]);
       }
     } catch {
       setError("Failed to load players");
@@ -230,25 +239,40 @@ export default function PlayersPage() {
               className="px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
             />
             <div className="flex flex-col gap-1">
-              {unlinkedMembers.length > 0 && (
-                <select
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      setAddForm({ ...addForm, groupme_user_id: e.target.value });
-                    }
-                  }}
-                  className="px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-                  title={`${unlinkedMembers.length} GroupMe member${unlinkedMembers.length === 1 ? "" : "s"} not linked to any player (last 90 days)`}
-                >
-                  <option value="">— Pick from GroupMe (unlinked) —</option>
-                  {unlinkedMembers.map((m) => (
-                    <option key={m.user_id} value={m.user_id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <select
+                value=""
+                disabled={groupMeStatus !== "ok" || unlinkedMembers.length === 0}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setAddForm({ ...addForm, groupme_user_id: e.target.value });
+                  }
+                }}
+                className="px-3 py-2 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500 disabled:opacity-60"
+                title={
+                  groupMeStatus === "loading"
+                    ? "Loading GroupMe members…"
+                    : groupMeStatus === "error"
+                      ? "Couldn't load GroupMe members — check the access token"
+                      : unlinkedMembers.length === 0
+                        ? "All recent GroupMe members are already linked to a player"
+                        : `${unlinkedMembers.length} unlinked GroupMe member${unlinkedMembers.length === 1 ? "" : "s"} (last 90 days)`
+                }
+              >
+                <option value="">
+                  {groupMeStatus === "loading"
+                    ? "Loading GroupMe…"
+                    : groupMeStatus === "error"
+                      ? "GroupMe lookup failed"
+                      : unlinkedMembers.length === 0
+                        ? "No unlinked GroupMe members"
+                        : "— Pick from GroupMe —"}
+                </option>
+                {unlinkedMembers.map((m) => (
+                  <option key={m.user_id} value={m.user_id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
               <input
                 type="text"
                 placeholder="GroupMe user_id (optional)"
@@ -330,25 +354,40 @@ export default function PlayersPage() {
                       </td>
                       <td className="py-2 pr-3">
                         <div className="flex flex-col gap-1">
-                          {unlinkedMembers.length > 0 && (
-                            <select
-                              value=""
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  setEditForm({ ...editForm, groupme_user_id: e.target.value });
-                                }
-                              }}
-                              className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
-                              title={`${unlinkedMembers.length} unlinked GroupMe member${unlinkedMembers.length === 1 ? "" : "s"} (last 90 days)`}
-                            >
-                              <option value="">— Pick from GroupMe —</option>
-                              {unlinkedMembers.map((m) => (
-                                <option key={m.user_id} value={m.user_id}>
-                                  {m.name}
-                                </option>
-                              ))}
-                            </select>
-                          )}
+                          <select
+                            value=""
+                            disabled={groupMeStatus !== "ok" || unlinkedMembers.length === 0}
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                setEditForm({ ...editForm, groupme_user_id: e.target.value });
+                              }
+                            }}
+                            className="w-full px-2 py-1 bg-transparent border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 disabled:opacity-60"
+                            title={
+                              groupMeStatus === "loading"
+                                ? "Loading GroupMe members…"
+                                : groupMeStatus === "error"
+                                  ? "Couldn't load GroupMe members — check the access token"
+                                  : unlinkedMembers.length === 0
+                                    ? "All recent GroupMe members are already linked"
+                                    : `${unlinkedMembers.length} unlinked (last 90 days)`
+                            }
+                          >
+                            <option value="">
+                              {groupMeStatus === "loading"
+                                ? "Loading GroupMe…"
+                                : groupMeStatus === "error"
+                                  ? "GroupMe lookup failed"
+                                  : unlinkedMembers.length === 0
+                                    ? "No unlinked GroupMe members"
+                                    : "— Pick from GroupMe —"}
+                            </option>
+                            {unlinkedMembers.map((m) => (
+                              <option key={m.user_id} value={m.user_id}>
+                                {m.name}
+                              </option>
+                            ))}
+                          </select>
                           <input
                             type="text"
                             value={editForm.groupme_user_id}
