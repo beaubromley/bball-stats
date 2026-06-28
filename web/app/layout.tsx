@@ -4,8 +4,10 @@ import { Analytics } from "@vercel/analytics/react";
 import SpaRedirect from "./spa-redirect";
 import RegisterSW from "./register-sw";
 import { AuthProvider } from "./components/AuthProvider";
+import { MeProvider } from "./components/MeContext";
 import ThemeProvider from "./components/ThemeProvider";
 import Nav from "./components/Nav";
+import July4Theme from "./components/July4Theme";
 import PullToRefresh from "./components/PullToRefresh";
 import "./globals.css";
 
@@ -55,12 +57,15 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <AuthProvider>
-            <PullToRefresh>
-              <Nav />
-              <SpaRedirect />
-              <RegisterSW />
-              <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
-            </PullToRefresh>
+            <MeProvider>
+              <PullToRefresh>
+                <Nav />
+                <July4Theme />
+                <SpaRedirect />
+                <RegisterSW />
+                <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
+              </PullToRefresh>
+            </MeProvider>
           </AuthProvider>
         </ThemeProvider>
         <Analytics />

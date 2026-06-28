@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/app/components/AuthProvider";
+import MePicker from "@/app/components/MePicker";
+import { useIndependenceWeek } from "@/lib/useIndependenceWeek";
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -42,6 +44,7 @@ export default function Nav() {
   const { isAdmin, isViewer, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
+  const july4 = useIndependenceWeek();
 
   const loggedIn = isAdmin || isViewer;
   const links = [
@@ -65,9 +68,16 @@ export default function Nav() {
   return (
     <nav className="border-b border-gray-200 dark:border-gray-800 px-4 md:px-6 py-3 md:py-4">
       <div className="max-w-5xl mx-auto flex items-center justify-between">
-        {/* Logo — always visible */}
+        {/* Logo — always visible. Swaps to the patriotic variant during
+            Independence Week, falling back to the default if it's missing. */}
         <Link href="/" onClick={() => setMenuOpen(false)}>
-          <img src="/logo.png" alt="YBA Stats" width={360} height={120} />
+          <img
+            src={july4 ? "/logo-july4.png" : "/logo.png"}
+            onError={july4 ? (e) => { e.currentTarget.src = "/logo.png"; } : undefined}
+            alt="YBA Stats"
+            width={360}
+            height={120}
+          />
         </Link>
 
         {/* Desktop nav */}
@@ -81,6 +91,7 @@ export default function Nav() {
               {link.label}
             </Link>
           ))}
+          <MePicker />
           <ThemeToggle />
           {loggedIn && (
             <button
@@ -129,6 +140,7 @@ export default function Nav() {
               {link.label}
             </Link>
           ))}
+          <div className="pt-1"><MePicker /></div>
           {loggedIn && (
             <button
               onClick={() => { logout(); setMenuOpen(false); }}

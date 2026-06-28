@@ -32,3 +32,90 @@ html.capacitor body {
 .font-display {
   font-family: var(--font-display), 'Bebas Neue', Impact, sans-serif;
 }
+
+/* ===== Independence Week theme (auto-enabled July 1–7 by July4Theme) ===== */
+.july4-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  padding: 0.55rem 1rem;
+  background-color: #1e2a5a; /* Old Glory blue, deepened for contrast */
+  background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1.4px);
+  background-size: 22px 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Animated red/white/blue stripe along the top edge. repeating-linear-gradient
+   tiles seamlessly, so shifting the position by exactly one tile loops cleanly. */
+.july4-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: repeating-linear-gradient(
+    90deg,
+    #b22234 0 24px,
+    #ffffff 24px 48px,
+    #3c3b6e 48px 72px
+  );
+  background-size: 72px 4px;
+  animation: july4-stripe 3s linear infinite;
+}
+
+@keyframes july4-stripe {
+  to {
+    background-position: 72px 0;
+  }
+}
+
+.july4-text {
+  color: #ffffff;
+  font-family: var(--font-display), 'Bebas Neue', Impact, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 1.05rem;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.july4-stars {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.july4-star {
+  width: 14px;
+  height: 14px;
+  color: #ffffff;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
+}
+.july4-star:nth-child(2) {
+  color: #cdd8ff;
+}
+.july4-star:nth-child(3) {
+  color: #ff9aa2;
+}
+
+/* Tricolor accent under the nav while the theme is active. */
+.july4 nav {
+  border-bottom: 3px solid transparent;
+  border-image: linear-gradient(90deg, #b22234, #ffffff, #3c3b6e) 1;
+}
+
+@media (max-width: 480px) {
+  .july4-stars {
+    display: none;
+  }
+  .july4-text {
+    font-size: 0.95rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .july4-banner::before {
+    animation: none;
+  }
+}

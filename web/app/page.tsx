@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { formatShortDateCT } from "@/lib/time";
 import { formatSeasonGame, gameNumberInSeason } from "@/lib/seasons";
 import HotBadge from "@/app/components/HotBadge";
+import { useMe } from "@/app/components/MeContext";
 
 const API_BASE = "/api";
 
@@ -327,12 +328,19 @@ function MiniLeaderCard({
   rows,
   valueKey,
   hotByPlayer,
+  meId,
+  meExtraRow,
 }: {
   title: string;
   unit: string;
   rows: PlayerRow[];
   valueKey: LeaderKey;
   hotByPlayer: Record<string, { last5_fpg: number; career_fpg: number; ratio: number }>;
+  meId: string | null;
+  /** If "me" isn't already in `rows`, this is appended at the bottom
+   *  with their actual rank ("#11"). Null when me is already in top-5
+   *  or no me is picked. */
+  meExtraRow: { player: PlayerRow; rank: number } | null;
 }) {
   // Recompute at 2dp from raw totals + effective_games — the leaderboard
   // API rounds ppg/fpg/etc. to 1dp, so reading p.ppg directly would only
@@ -361,7 +369,12 @@ function MiniLeaderCard({
       ) : (
         <ol className="space-y-2">
           {rows.map((p, i) => (
-            <li key={p.id} className="flex items-baseline gap-2 text-sm">
+            <li
+              key={p.id}
+              className={`flex items-baseline gap-2 text-sm ${
+                meId && p.id === meId ? "bg-blue-50 dark:bg-blue-900/20 -mx-2 px-2 py-1 rounded" : ""
+              }`}
+            >
               <span className="tabular-nums w-4 font-display font-bold text-xs text-gray-500 dark:text-gray-400">
                 {i + 1}
               </span>
@@ -377,6 +390,23 @@ function MiniLeaderCard({
               </span>
             </li>
           ))}
+          {meExtraRow && (
+            <li className="flex items-baseline gap-2 text-sm bg-blue-50 dark:bg-blue-900/20 -mx-2 px-2 py-1 rounded border-t border-blue-200 dark:border-blue-900/50 mt-2 pt-2">
+              <span className="tabular-nums w-6 font-display font-bold text-xs text-blue-500 dark:text-blue-400">
+                #{meExtraRow.rank}
+              </span>
+              <Link
+                href={`/player?id=${meExtraRow.player.id}`}
+                className="flex-1 truncate font-bold font-display text-gray-900 dark:text-white hover:text-blue-400 transition-colors"
+              >
+                {meExtraRow.player.name}
+                <HotBadge info={hotByPlayer[meExtraRow.player.id]} size="xs" />
+              </Link>
+              <span className="tabular-nums font-bold font-display text-gray-900 dark:text-white">
+                {format(meExtraRow.player)}
+              </span>
+            </li>
+          )}
         </ol>
       )}
     </div>
@@ -863,6 +893,7 @@ function MilestoneWatchSection({ alerts }: { alerts: MilestoneAlert[] }) {
 // =======================================================================
 
 export default function HomePage() {
+  const { me } = useMe();
   const [meta, setMeta] = useState<SeasonMeta | null>(null);
   const [games, setGames] = useState<GameRow[]>([]);
   const [seasonPlayers, setSeasonPlayers] = useState<PlayerRow[]>([]);
@@ -964,10 +995,28 @@ export default function HomePage() {
   const ppg2 = (p: PlayerRow) => p.total_points / (p.effective_games || 1);
   const fpg2 = (p: PlayerRow) => p.fantasy_points / (p.effective_games || 1);
   const def2 = (p: PlayerRow) => (p.steals + p.blocks) / (p.effective_games || 1);
-  const topPpg = [...eligible].sort((a, b) => ppg2(b) - ppg2(a)).slice(0, 5);
-  const topFpg = [...eligible].sort((a, b) => fpg2(b) - fpg2(a)).slice(0, 5);
-  const topDef = [...eligible].sort((a, b) => def2(b) - def2(a)).slice(0, 5);
-  const topWin = [...eligible].sort((a, b) => b.win_pct - a.win_pct).slice(0, 5);
+  // For each ranking, build the eligible-sorted list once and grab top-5
+  // plus, if "me" is eligible but not in the top-5, their rank+row to
+  // append on the card.
+  function topAndMe(
+    sorted: PlayerRow[],
+  ): { top5: PlayerRow[]; meExtra: { player: PlayerRow; rank: number } | null } {
+    const top5 = sorted.slice(0, 5);
+    if (!me) return { top5, meExtra: null };
+    const inTop5 = top5.some((p) => p.id === me.id);
+    if (inTop5) return { top5, meExtra: null };
+    const meIdx = sorted.findIndex((p) => p.id === me.id);
+    if (meIdx < 0) return { top5, meExtra: null };
+    return { top5, meExtra: { player: sorted[meIdx], rank: meIdx + 1 } };
+  }
+  const ppgSorted = [...eligible].sort((a, b) => ppg2(b) - ppg2(a));
+  const fpgSorted = [...eligible].sort((a, b) => fpg2(b) - fpg2(a));
+  const defSorted = [...eligible].sort((a, b) => def2(b) - def2(a));
+  const winSorted = [...eligible].sort((a, b) => b.win_pct - a.win_pct);
+  const { top5: topPpg, meExtra: ppgMeExtra } = topAndMe(ppgSorted);
+  const { top5: topFpg, meExtra: fpgMeExtra } = topAndMe(fpgSorted);
+  const { top5: topDef, meExtra: defMeExtra } = topAndMe(defSorted);
+  const { top5: topWin, meExtra: winMeExtra } = topAndMe(winSorted);
 
   return (
     <div className="space-y-4">
@@ -1002,6 +1051,55 @@ export default function HomePage() {
         </Link>
       )}
 
+      {/* Hot-streak banner when "you" are on one. Sits above the rest so
+          it's the first thing they see when popping in. */}
+      {me && hotByPlayer[me.id] && (
+        <Link
+          href={`/player?id=${me.id}`}
+          className="block rounded-lg border border-orange-400/60 dark:border-orange-500/40 bg-orange-50 dark:bg-orange-900/20 px-4 py-3 hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors"
+        >
+          <div className="text-xs font-display uppercase tracking-wider text-orange-600 dark:text-orange-300">
+            🔥 You're on a hot streak
+          </div>
+          <div className="text-sm text-gray-700 dark:text-gray-200 mt-0.5">
+            Last 5 averaging <span className="font-bold tabular-nums">{hotByPlayer[me.id].last5_fpg.toFixed(2)}</span> FPG
+            vs <span className="font-bold tabular-nums">{hotByPlayer[me.id].career_fpg.toFixed(2)}</span> career
+            ({Math.round((hotByPlayer[me.id].ratio - 1) * 100)}% above pace).
+          </div>
+        </Link>
+      )}
+
+      {/* Your line today */}
+      {me && today && today.games_today > 0 && (() => {
+        const mine = today.players.find((p) => p.id === me.id);
+        if (!mine) return null;
+        const fp = mine.fantasy_points;
+        const fpg = mine.fpg || 0;
+        const delta = fp - fpg;
+        const sign = delta >= 0 ? "+" : "";
+        return (
+          <Link
+            href={`/player?id=${me.id}`}
+            className="block rounded-lg border border-blue-400/60 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+          >
+            <div className="text-xs font-display uppercase tracking-wider text-blue-600 dark:text-blue-300">
+              Your line today
+            </div>
+            <div className="mt-1 flex items-baseline gap-3 flex-wrap text-sm">
+              <span className="font-bold text-gray-900 dark:text-white">
+                {mine.total_points} PTS · {mine.assists} AST · {mine.steals} STL · {mine.blocks} BLK
+              </span>
+              <span className="text-gray-600 dark:text-gray-300">
+                <span className="font-bold tabular-nums">{fp}</span> FP
+                <span className={`ml-1 tabular-nums ${delta > 0 ? "text-green-500" : delta < 0 ? "text-red-500" : "text-gray-500"}`}>
+                  ({sign}{delta.toFixed(1)} vs {fpg.toFixed(1)} FPG)
+                </span>
+              </span>
+            </div>
+          </Link>
+        );
+      })()}
+
       {liveGame && <LiveBanner game={liveGame} />}
       {latestFinished && <LatestGameHero game={latestFinished} />}
 
@@ -1026,11 +1124,73 @@ export default function HomePage() {
         </Link>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MiniLeaderCard title="Scoring (PPG)" unit="PPG" rows={topPpg} valueKey="ppg" hotByPlayer={hotByPlayer} />
-        <MiniLeaderCard title="Fantasy (FPG)" unit="FPG" rows={topFpg} valueKey="fpg" hotByPlayer={hotByPlayer} />
-        <MiniLeaderCard title="Defense (S+B)" unit="SPG+BPG" rows={topDef} valueKey="def" hotByPlayer={hotByPlayer} />
-        <MiniLeaderCard title="Winning" unit="WIN%" rows={topWin} valueKey="win_pct" hotByPlayer={hotByPlayer} />
+        <MiniLeaderCard title="Scoring (PPG)" unit="PPG" rows={topPpg} valueKey="ppg" hotByPlayer={hotByPlayer} meId={me?.id ?? null} meExtraRow={ppgMeExtra} />
+        <MiniLeaderCard title="Fantasy (FPG)" unit="FPG" rows={topFpg} valueKey="fpg" hotByPlayer={hotByPlayer} meId={me?.id ?? null} meExtraRow={fpgMeExtra} />
+        <MiniLeaderCard title="Defense (S+B)" unit="SPG+BPG" rows={topDef} valueKey="def" hotByPlayer={hotByPlayer} meId={me?.id ?? null} meExtraRow={defMeExtra} />
+        <MiniLeaderCard title="Winning" unit="WIN%" rows={topWin} valueKey="win_pct" hotByPlayer={hotByPlayer} meId={me?.id ?? null} meExtraRow={winMeExtra} />
       </div>
+
+      {/* My Records summary — records where the picked player holds #1
+          in any category. Quick "what do I hold?" view above the full
+          Records grid. */}
+      {records && me && (() => {
+        type Held = { label: string; value: string };
+        const held: Held[] = [];
+        // Single-game records: take the top row per stat group.
+        const sgGroups = new Map<string, SingleGameRecord[]>();
+        for (const r of records.single_game) {
+          if (!sgGroups.has(r.stat)) sgGroups.set(r.stat, []);
+          sgGroups.get(r.stat)!.push(r);
+        }
+        for (const [stat, rows] of sgGroups) {
+          if (rows.length === 0) continue;
+          const top = rows[0];
+          if (top.player_id === me.id) {
+            held.push({ label: `Single-game ${STAT_SHORT[stat] ?? stat}`, value: String(top.value) });
+          }
+        }
+        // Season records:
+        const seGroups = new Map<string, SeasonRecord[]>();
+        for (const r of records.season) {
+          if (!seGroups.has(r.stat)) seGroups.set(r.stat, []);
+          seGroups.get(r.stat)!.push(r);
+        }
+        for (const [stat, rows] of seGroups) {
+          if (rows.length === 0) continue;
+          const top = rows[0];
+          if (top.player_id === me.id) {
+            held.push({ label: `Season ${STAT_SHORT[stat] ?? stat}`, value: String(top.value) });
+          }
+        }
+        // Streaks:
+        const stGroups = new Map<string, StreakRecord[]>();
+        for (const r of records.streak) {
+          if (!stGroups.has(r.stat)) stGroups.set(r.stat, []);
+          stGroups.get(r.stat)!.push(r);
+        }
+        for (const [stat, rows] of stGroups) {
+          if (rows.length === 0) continue;
+          const top = rows[0];
+          if (top.player_id === me.id) {
+            held.push({ label: `Longest ${STAT_SHORT[stat] ?? stat}`, value: String(top.value) });
+          }
+        }
+        if (held.length === 0) return null;
+        return (
+          <div className="rounded-lg border border-blue-400/60 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-900/20 px-4 py-3">
+            <div className="text-xs font-display uppercase tracking-wider text-blue-600 dark:text-blue-300 mb-2">
+              Records you hold
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              {held.map((h) => (
+                <span key={h.label} className="text-gray-700 dark:text-gray-200">
+                  {h.label}: <span className="font-bold tabular-nums">{h.value}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {records && (
         <>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import MvpBanner from "./MvpBanner";
+import { useMe } from "./MeContext";
 
 interface BoxScorePlayer {
   player_id: string;
@@ -26,6 +27,7 @@ interface BoxScoreData {
 }
 
 export default function BoxScore({ gameId }: { gameId: string }) {
+  const { me } = useMe();
   const [data, setData] = useState<BoxScoreData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -82,7 +84,13 @@ export default function BoxScore({ gameId }: { gameId: string }) {
                 {players.map((p) => (
                   <tr
                     key={p.player_id}
-                    className={`border-b border-gray-100 dark:border-gray-900 ${p.is_mvp ? "bg-yellow-50 dark:bg-yellow-900/20" : ""}`}
+                    className={`border-b border-gray-100 dark:border-gray-900 ${
+                      p.is_mvp
+                        ? "bg-yellow-50 dark:bg-yellow-900/20"
+                        : me && p.player_id === me.id
+                          ? "bg-blue-50 dark:bg-blue-900/20"
+                          : ""
+                    }`}
                   >
                     <td className="py-2 pr-3">
                       {p.player_name}

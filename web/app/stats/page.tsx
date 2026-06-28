@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/components/AuthProvider";
 import HotBadge from "@/app/components/HotBadge";
 import DataZoom from "@/app/components/DataZoom";
+import { useMe } from "@/app/components/MeContext";
 import {
   BarChart,
   Bar,
@@ -200,6 +201,7 @@ function TabbedChart({ title, tabs, color }: { title: string; tabs: TabDef[]; co
 export default function Home() {
   const { isAdmin, isViewer } = useAuth();
   const showAdvanced = isAdmin || isViewer;
+  const { me } = useMe();
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   // All-time copies used by charts that should never be filtered by the season toggle
   // (Fantasy PPG vs Win%, Win Streaks). Loaded once on mount.
@@ -489,7 +491,7 @@ export default function Home() {
   // Scatter — always all-time, regardless of the season toggle
   const scatterData = allTimePlayers
     .filter((p) => p.games_played >= 1)
-    .map((p) => ({ name: p.name, fpg: p.fpg, winPct: p.win_pct }));
+    .map((p) => ({ id: p.id, name: p.name, fpg: p.fpg, winPct: p.win_pct }));
   const SCATTER_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#A855F7", "#EC4899", "#06B6D4", "#F97316", "#84CC16", "#6366F1"];
 
   // Win% vs SoS scatter — follows the active season toggle. Each player
@@ -500,10 +502,33 @@ export default function Home() {
   const sosScatterData = players
     .filter((p) => sosByPlayer[p.id] != null)
     .map((p) => ({
+      id: p.id,
       name: p.name,
       sos: sosByPlayer[p.id],
       winPct: p.win_pct,
     }));
+
+  // Recharts gives the shape callback `cx, cy, payload`. When the point
+  // is the picked "me" player, draw it bigger + outlined so it pops out
+  // of the cluster. Other points use the default 6-radius circle.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const meAwareShape = (props: any) => {
+    const { cx, cy, payload, fill } = props;
+    const isMe = me && payload && payload.id === me.id;
+    if (isMe) {
+      return (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={9}
+          fill="#3B82F6"
+          stroke="#fff"
+          strokeWidth={2}
+        />
+      );
+    }
+    return <circle cx={cx} cy={cy} r={6} fill={fill} fillOpacity={0.7} />;
+  };
 
   return (
     <div>
@@ -639,9 +664,23 @@ export default function Home() {
       </div>
 
       {/* Leaderboard Table */}
-      <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-4">
-        {viewMode === "season" ? `Season ${currentSeason} Leaderboard` : "All-Time Leaderboard"}
-      </h2>
+      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+        <h2 className="text-lg font-bold font-display uppercase tracking-wide text-gray-700 dark:text-gray-300">
+          {viewMode === "season" ? `Season ${currentSeason} Leaderboard` : "All-Time Leaderboard"}
+        </h2>
+        {me && players.some((p) => p.id === me.id) && (
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.getElementById(`lb-row-${me.id}`);
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+            className="text-xs font-display uppercase tracking-wider text-blue-500 hover:text-blue-400"
+          >
+            Jump to me →
+          </button>
+        )}
+      </div>
       <div className="overflow-x-auto mb-10">
         <table className="w-full text-left">
           <thead>
@@ -693,7 +732,10 @@ export default function Home() {
             {sortedPlayers.map((player, i) => (
               <tr
                 key={player.id}
-                className="border-b border-gray-100 dark:border-gray-900 hover:bg-gray-100 dark:hover:bg-gray-900/50 transition-colors"
+                id={`lb-row-${player.id}`}
+                className={`border-b border-gray-100 dark:border-gray-900 hover:bg-gray-100 dark:hover:bg-gray-900/50 transition-colors ${
+                  me && player.id === me.id ? "bg-blue-50 dark:bg-blue-900/20" : ""
+                }`}
               >
                 <td className="py-3 px-2 text-center text-gray-500">{i + 1}</td>
                 <td className="py-3 px-2">
@@ -994,11 +1036,33 @@ export default function Home() {
                           tickFormatter={(v) => `${v}%`}
                         />
                         <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: "3 3" }} />
-                        <Scatter data={scatterData}>
+                        <Scatter data={scatterData} shape={meAwareShape}>
                           {scatterData.map((_entry, index) => (
                             <Cell key={index} fill={SCATTER_COLORS[index % SCATTER_COLORS.length]} />
                           ))}
-                          <LabelList dataKey="name" position="top" fill="#9CA3AF" fontSize={10} />
+                          <LabelList
+                            dataKey="name"
+                            position="top"
+                            fontSize={10}
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            content={(props: any) => {
+                              const { x, y, value, index } = props;
+                              const datum = scatterData[index];
+                              const isMe = me && datum && datum.id === me.id;
+                              if (!isMe) {
+                                return (
+                                  <text x={x} y={y} dy={-6} fontSize={10} fill="#9CA3AF" textAnchor="middle">
+                                    {value}
+                                  </text>
+                                );
+                              }
+                              return (
+                                <text x={x} y={y} dy={-10} fontSize={11} fontWeight="bold" fill="#3B82F6" textAnchor="middle">
+                                  {value}
+                                </text>
+                              );
+                            }}
+                          />
                         </Scatter>
                       </ScatterChart>
                     </ResponsiveContainer>
@@ -1157,11 +1221,33 @@ export default function Home() {
                       strokeDasharray="6 3"
                       ifOverflow="extendDomain"
                     />
-                    <Scatter data={sosScatterData}>
+                    <Scatter data={sosScatterData} shape={meAwareShape}>
                       {sosScatterData.map((_entry, index) => (
                         <Cell key={index} fill={SCATTER_COLORS[index % SCATTER_COLORS.length]} />
                       ))}
-                      <LabelList dataKey="name" position="top" fill="#9CA3AF" fontSize={10} />
+                      <LabelList
+                        dataKey="name"
+                        position="top"
+                        fontSize={10}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        content={(props: any) => {
+                          const { x, y, value, index } = props;
+                          const datum = sosScatterData[index];
+                          const isMe = me && datum && datum.id === me.id;
+                          if (!isMe) {
+                            return (
+                              <text x={x} y={y} dy={-6} fontSize={10} fill="#9CA3AF" textAnchor="middle">
+                                {value}
+                              </text>
+                            );
+                          }
+                          return (
+                            <text x={x} y={y} dy={-10} fontSize={11} fontWeight="bold" fill="#3B82F6" textAnchor="middle">
+                              {value}
+                            </text>
+                          );
+                        }}
+                      />
                     </Scatter>
                   </ScatterChart>
                 </ResponsiveContainer>
